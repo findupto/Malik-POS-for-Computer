@@ -1,0 +1,36 @@
+name: Build Malik POS for Windows
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows-exe:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm install
+      - name: Build and package Windows installer
+        run: npm run build:win
+      - name: Verify installer exists
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem -Path release -Filter "*.exe" -Recurse | Select-Object -First 1
+          if (-not $installer) { throw "Windows installer was not generated." }
+          Write-Host "Verified installer: $($installer.FullName), $($installer.Length) bytes"
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Malik-POS-Windows-Installer
+          path: release/*.exe
+          if-no-files-found: error
+          retention-days: 30
