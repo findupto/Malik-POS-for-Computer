@@ -8,3 +8,21 @@
 
 /* Built-in business-type branding and developer credit */
 .business-brand-icon{font-size:22px;line-height:1;display:grid;place-items:center;background:linear-gradient(135deg,#187d62,#38a77c);color:#fff;box-shadow:0 5px 14px #187d6230}.app-footer{flex-wrap:wrap}.developer-credit{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.developer-credit>span{font-family:Georgia,serif;font-style:italic;color:#68778c;letter-spacing:.15px}.developer-credit b{font-family:Georgia,serif;font-weight:700;font-style:normal;color:#187d62;letter-spacing:.2px}.developer-credit a{font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:1.1px;color:#187d62;text-decoration:none;border:1px solid #d9eee4;border-radius:7px;padding:5px 9px;background:#f3faf6}.footer-software-name{letter-spacing:.4px;color:#187d62}
+
+/* Malik POS — premium finish */
+:root{--brand-ink:#152b23;--brand-gold:#b99a5b;--brand-emerald:#176b52}
+.luxury-wordmark{font-family:Georgia,'Times New Roman',serif!important;letter-spacing:1.5px!important;font-size:17px!important;color:#172b23!important}
+.luxury-wordmark span{color:var(--brand-gold)!important;font-weight:700}
+.brand small{letter-spacing:1.65px!important;font-size:8px!important;color:#a18b5f!important}
+.brand-mark.business-brand-icon{background:linear-gradient(145deg,#183c2e,#b99a5b)!important;box-shadow:0 6px 20px #173e2f26!important;border:1px solid #d5c08d}
+.desktop-sidebar-toggle{display:inline-flex!important}
+.sidebar-collapsed{width:82px!important;min-width:82px!important}
+.sidebar-collapsed .brand>div:nth-child(2),.sidebar-collapsed .store-info,.sidebar-collapsed .store-switch>svg,.sidebar-collapsed .nav-label,.sidebar-collapsed .nav-item span,.sidebar-collapsed .nav-item em,.sidebar-collapsed .plan-card,.sidebar-collapsed .profile-row>div:nth-child(2),.sidebar-collapsed .profile-row>svg{display:none!important}
+.sidebar-collapsed .brand,.sidebar-collapsed .store-switch,.sidebar-collapsed .nav-item,.sidebar-collapsed .profile-row{justify-content:center!important}
+.sidebar-collapsed .nav-item{padding:13px!important}
+.import-label{cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+.deal-apply{margin:10px 0}.deal-apply select{width:100%}
+.page-content{min-width:0}.responsive-table{max-width:100%;overflow:auto}.panel,.cart-panel,.catalog-panel{min-width:0}
+.app-shell{min-height:100vh}.main-area{min-width:0}
+@media(min-width:1100px){.desktop-sidebar-toggle{display:inline-flex!important}}
+@media(max-width:900px){.sidebar-collapsed{width:280px!important;min-width:280px!important}.sidebar-collapsed .brand>div:nth-child(2),.sidebar-collapsed .store-info,.sidebar-collapsed .nav-label,.sidebar-collapsed .nav-item span,.sidebar-collapsed .plan-card,.sidebar-collapsed .profile-row>div:nth-child(2){display:initial!important}.toolbar-right{flex-wrap:wrap}}
