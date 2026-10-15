@@ -33,11 +33,12 @@ ipcMain.handle('malik-pos:list-printers', async (event) => {
   const printers = await win.webContents.getPrintersAsync();
   return printers.map(p => ({ name: p.name, displayName: p.displayName, isDefault: p.isDefault, status: p.status }));
 });
+ipcMain.handle('malik-pos:open-printer-settings', async () => { try { await shell.openExternal('ms-settings:printers'); return { success: true }; } catch (error) { return { success: false, error: String(error && error.message || error) }; } });
 ipcMain.handle('malik-pos:print', async (event, options = {}) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) return { success: false, error: 'Window not available' };
   return new Promise(resolve => win.webContents.print({
-    silent: false,
+    silent: options.silent === true,
     printBackground: true,
     deviceName: typeof options.deviceName === 'string' && options.deviceName ? options.deviceName : undefined,
     pageSize: options.pageSize === '58mm' ? { width: 58000, height: 200000 } : options.pageSize === '80mm' ? { width: 80000, height: 200000 } : undefined
