@@ -1,4 +1,5 @@
 const { app, BrowserWindow, shell, ipcMain, dialog } = require('electron');
+const { execFile } = require('node:child_process');
 const path = require('node:path');
 const isDev = !app.isPackaged;
 function createWindow() {
@@ -34,6 +35,17 @@ ipcMain.handle('malik-pos:list-printers', async (event) => {
   return printers.map(p => ({ name: p.name, displayName: p.displayName, isDefault: p.isDefault, status: p.status }));
 });
 ipcMain.handle('malik-pos:open-printer-settings', async () => { try { await shell.openExternal('ms-settings:printers'); return { success: true }; } catch (error) { return { success: false, error: String(error && error.message || error) }; } });
+ipcMain.handle('malik-pos:print-escpos', async (_event, options = {}) => {
+  const port = String(options.port || '').trim().toUpperCase();
+  const baud = Number(options.baudRate) || 9600;
+  if (!/^COM[1-9][0-9]*$/.test(port)) return { success: false, error: 'Enter a valid Windows serial port such as COM3.' };
+  if (![9600, 19200, 38400, 57600, 115200].includes(baud)) return { success: false, error: 'Unsupported baud rate.' };
+  const text = String(options.text || '').slice(0, 30000).replace(/[^\x20-\x7E\r\n\t]/g, '');
+  if (!text.trim()) return { success: false, error: 'Receipt content is empty.' };
+  const payload = Buffer.concat([Buffer.from([0x1b, 0x40, 0x1b, 0x61, 0]), Buffer.from(text, 'ascii'), Buffer.from([0x0a, 0x0a, 0x0a, 0x1d, 0x56, 0x00])]).toString('base64');
+  const script = "$ErrorActionPreference='Stop';$portName='" + port + "';$bytes=[Convert]::FromBase64String('" + payload + "');$serial=[System.IO.Ports.SerialPort]::new($portName," + baud + ",'None',8,'One');$serial.WriteTimeout=5000;$serial.Open();try{$serial.Write($bytes,0,$bytes.Length)}finally{$serial.Close()}";
+  return await new Promise(resolve => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script], { windowsHide: true, timeout: 15000 }, (error, stdout, stderr) => resolve(error ? { success: false, error: String(stderr || error.message || error).trim().slice(0, 500) } : { success: true })));
+});
 ipcMain.handle('malik-pos:print', async (event, options = {}) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) return { success: false, error: 'Window not available' };
