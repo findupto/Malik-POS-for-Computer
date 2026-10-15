@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, ipcMain } = require('electron');
+const { app, BrowserWindow, shell, ipcMain, dialog } = require('electron');
 const path = require('node:path');
 const isDev = !app.isPackaged;
 function createWindow() {
@@ -8,8 +8,20 @@ function createWindow() {
     title: 'Malik POS',
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true }
   });
+  win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (!isMainFrame) return;
+    console.error('Malik POS failed to load:', { errorCode, errorDescription, validatedURL });
+    dialog.showMessageBox(win, { type: 'error', title: 'Malik POS could not start', message: 'Malik POS could not load its interface.', detail: 'Error ' + errorCode + ': ' + errorDescription + '\n\nLocation: ' + validatedURL + '\n\nPlease install the latest verified Windows installer.' });
+  });
+  win.webContents.on('render-process-gone', (_event, details) => {
+    console.error('Malik POS renderer stopped:', details);
+    dialog.showMessageBox(win, { type: 'error', title: 'Malik POS stopped unexpectedly', message: 'The POS interface stopped unexpectedly.', detail: 'Reason: ' + details.reason + '\nExit code: ' + details.exitCode });
+  });
   if (isDev) win.loadURL('http://127.0.0.1:5173');
-  else win.loadFile(path.join(__dirname, '../dist/index.html'));
+  else win.loadFile(path.join(__dirname, '../dist/index.html')).catch(error => {
+    console.error('Could not load packaged Malik POS HTML:', error);
+    dialog.showMessageBox({ type: 'error', title: 'Malik POS startup error', message: 'The installed interface files could not be found.', detail: String(error && (error.stack || error)) });
+  });
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('https://')) shell.openExternal(url);
     return { action: 'deny' };
