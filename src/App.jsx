@@ -17,17 +17,17 @@ const seedProducts = [
 ];
 const seedCustomers = [{id:1,name:'Walk-in Customer',phone:'—',spent:0,visits:0},{id:2,name:'Ayesha Khan',phone:'+92 300 1234567',spent:18500,visits:12},{id:3,name:'Usman Ali',phone:'+92 321 7654321',spent:12750,visits:8},{id:4,name:'Fatima Ahmed',phone:'+92 333 1122334',spent:9200,visits:6}];
 const money = n => 'Rs. ' + new Intl.NumberFormat('en-PK',{maximumFractionDigits:0}).format(Number(n)||0);
-const normalizeSearchText = value => String(value||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim().split(/\\s+/).filter(Boolean).map(w=>({'shwarma':'shawarma','shwarm':'shawarma','margrita':'margarita','margreta':'margarita','rashain':'russian','smothies':'smoothie','smoothies':'smoothie','deserts':'dessert','desert':'dessert','nugget':'nuggets','cofee':'coffee','coffe':'coffee','parata':'paratha'}[w]||w)).join(' ');
+const normalizeSearchText = value => String(value||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim().split(/\s+/).filter(Boolean).map(w=>({'shwarma':'shawarma','shwarm':'shawarma','margrita':'margarita','margreta':'margarita','rashain':'russian','smothies':'smoothie','smoothies':'smoothie','deserts':'dessert','desert':'dessert','nugget':'nuggets','cofee':'coffee','coffe':'coffee','parata':'paratha'}[w]||w)).join(' ');
 const iconSets = [
- [/\\b(zinger|crispy chicken|chicken burger|fried chicken)\\b/i,['🍔','🍗','🍟','🥪','🍔']], [/\\b(pizza|margherita)\\b/i,['🍕','🍕','🧀','🍕']], [/\\b(burger|hamburger|cheeseburger)\\b/i,['🍔','🍔','🍟','🥓']],
- [/\\b(wings?|nuggets?|tenders)\\b/i,['🍗','🍟','🔥','🍖']], [/\\b(fries|french fries|chips)\\b/i,['🍟','🍟','🥔']], [/\\b(shawarma|shwarma|wrap)\\b/i,['🌯','🥙','🌮','🌯']],
- [/\\b(paratha roll|roll paratha)\\b/i,['🌯','🥙','🫓']], [/\\b(paratha|roti|naan|chapati)\\b/i,['🫓','🫓','🥙','🍞']], [/\\b(pasta|spaghetti|macaroni|lasagna|alfredo)\\b/i,['🍝','🍝','🧀','🍜']],
- [/\\b(sandwich|panini|sub)\\b/i,['🥪','🥪','🥖','🥙']], [/\\b(cold coffee|iced coffee|frappe|frappuccino)\\b/i,['🧋','🧊','🥤','☕']], [/\\b(hot coffee|espresso|americano|latte|cappuccino|mocha|coffee)\\b/i,['☕','☕','🤎','🥛']],
- [/\\b(bubble tea|boba|tapioca tea)\\b/i,['🧋','🧋','🥤']], [/\\b(tea|chai|kahwa)\\b/i,['🍵','🫖','☕']], [/\\b(gelato shake|gelato|milkshake|milk shake|shakes?)\\b/i,['🥤','🍨','🍦','🧋','🥛']],
- [/\\b(ice cream|icecream|scoops?)\\b/i,['🍨','🍦','🍧','🍨']], [/\\b(smoothie|fruit shake|fruit shakes)\\b/i,['🥤','🍓','🍌','🫐','🥭']], [/\\b(colada|pina colada)\\b/i,['🍹','🥥','🍍']],
- [/\\b(margarita|mocktail|cocktail|mojito)\\b/i,['🍹','🍸','🍋']], [/\\b(juice|lemonade|slush)\\b/i,['🧃','🍊','🍋','🥤']], [/\\b(salad|russian salad|raita|coleslaw)\\b/i,['🥗','🥒','🥬']],
- [/\\b(dessert|sweet|cake|brownie|donut|doughnut|cookie|pudding|waffle|pancake|pastry)\\b/i,['🍰','🍪','🍩','🧁','🍮','🥞']], [/\\b(milk|doodh)\\b/i,['🥛','🥛','🐄']], [/\\b(rice|biryani|pulao)\\b/i,['🍚','🍛','🥘']],
- [/\\b(bread|toast|bakery)\\b/i,['🍞','🥖','🥐']], [/\\b(egg|eggs|omelette)\\b/i,['🥚','🍳']], [/\\b(chocolate)\\b/i,['🍫','🍩','🍪']], [/\\b(water|mineral water)\\b/i,['💧','🧊']]
+ [/\b(zinger|crispy chicken|chicken burger|fried chicken)\b/i,['🍔','🍗','🍟','🥪','🍔']], [/\b(pizza|margherita)\b/i,['🍕','🍕','🧀','🍕']], [/\b(burger|hamburger|cheeseburger)\b/i,['🍔','🍔','🍟','🥓']],
+ [/\b(wings?|nuggets?|tenders)\b/i,['🍗','🍟','🔥','🍖']], [/\b(fries|french fries|chips)\b/i,['🍟','🍟','🥔']], [/\b(shawarma|shwarma|wrap)\b/i,['🌯','🥙','🌮','🌯']],
+ [/\b(paratha roll|roll paratha)\b/i,['🌯','🥙','🫓']], [/\b(paratha|roti|naan|chapati)\b/i,['🫓','🫓','🥙','🍞']], [/\b(pasta|spaghetti|macaroni|lasagna|alfredo)\b/i,['🍝','🍝','🧀','🍜']],
+ [/\b(sandwich|panini|sub)\b/i,['🥪','🥪','🥖','🥙']], [/\b(cold coffee|iced coffee|frappe|frappuccino)\b/i,['🧋','🧊','🥤','☕']], [/\b(hot coffee|espresso|americano|latte|cappuccino|mocha|coffee)\b/i,['☕','☕','🤎','🥛']],
+ [/\b(bubble tea|boba|tapioca tea)\b/i,['🧋','🧋','🥤']], [/\b(tea|chai|kahwa)\b/i,['🍵','🫖','☕']], [/\b(gelato shake|gelato|milkshake|milk shake|shakes?)\b/i,['🥤','🍨','🍦','🧋','🥛']],
+ [/\b(ice cream|icecream|scoops?)\b/i,['🍨','🍦','🍧','🍨']], [/\b(smoothie|fruit shake|fruit shakes)\b/i,['🥤','🍓','🍌','🫐','🥭']], [/\b(colada|pina colada)\b/i,['🍹','🥥','🍍']],
+ [/\b(margarita|mocktail|cocktail|mojito)\b/i,['🍹','🍸','🍋']], [/\b(juice|lemonade|slush)\b/i,['🧃','🍊','🍋','🥤']], [/\b(salad|russian salad|raita|coleslaw)\b/i,['🥗','🥒','🥬']],
+ [/\b(dessert|sweet|cake|brownie|donut|doughnut|cookie|pudding|waffle|pancake|pastry)\b/i,['🍰','🍪','🍩','🧁','🍮','🥞']], [/\b(milk|doodh)\b/i,['🥛','🥛','🐄']], [/\b(rice|biryani|pulao)\b/i,['🍚','🍛','🥘']],
+ [/\b(bread|toast|bakery)\b/i,['🍞','🥖','🥐']], [/\b(egg|eggs|omelette)\b/i,['🥚','🍳']], [/\b(chocolate)\b/i,['🍫','🍩','🍪']], [/\b(water|mineral water)\b/i,['💧','🧊']]
 ];
 function iconForProduct(name,category='',variant=''){const text=String(name||'')+' '+String(variant||'');for(const [pattern,icons] of iconSets){if(pattern.test(text)){let h=0;for(const ch of text.toLowerCase())h=(h*31+ch.charCodeAt(0))>>>0;return icons[h%icons.length]}}const c=String(category||'').toLowerCase(),fallbacks=c.includes('beverage')?['🥤','🧃','🍵']:c.includes('dairy')?['🥛','🧀','🥚']:c.includes('bakery')?['🍞','🥐','🍰']:c.includes('produce')?['🍎','🥦','🥕']:c.includes('snack')?['🍿','🍪','🥨']:c.includes('medical')?['🩺','💊','🩹']:c.includes('home')?['🧼','🧽','🧴']:['📦','🛍️','🧺'];let h=0;for(const ch of String(name||'Product').toLowerCase())h=(h*31+ch.charCodeAt(0))>>>0;return fallbacks[h%fallbacks.length]}
 function getProductEmoji(p){return iconForProduct(p?.name,p?.category,p?.variant)||p?.emoji||'📦'}
