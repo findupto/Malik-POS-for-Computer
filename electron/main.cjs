@@ -53,8 +53,8 @@ ipcMain.handle('malik-pos:print-escpos', async (_event, options = {}) => {
   const text = String(options.text || '').slice(0, 30000).replace(/[^\x20-\x7E\r\n\t]/g, '');
   if (!text.trim()) return { success: false, error: 'Receipt content is empty.' };
   const payload = Buffer.concat([Buffer.from([0x1b, 0x40, 0x1b, 0x61, 0]), Buffer.from(text, 'ascii'), Buffer.from([0x0a, 0x0a, 0x0a, 0x1d, 0x56, 0x00])]).toString('base64');
-  const script = "$ErrorActionPreference='Stop';$portName='" + port + "';$bytes=[Convert]::FromBase64String('" + payload + "');$serial=[System.IO.Ports.SerialPort]::new($portName," + baud + ",'None',8,'One');$serial.WriteTimeout=5000;$serial.Open();try{$serial.Write($bytes,0,$bytes.Length)}finally{$serial.Close()}";
-  return await new Promise(resolve => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script], { windowsHide: true, timeout: 15000 }, (error, stdout, stderr) => resolve(error ? { success: false, error: String(stderr || error.message || error).trim().slice(0, 500) } : { success: true })));
+  const script = "$ErrorActionPreference='Stop';$portName='" + port + "';$bytes=[Convert]::FromBase64String('" + payload + "');$serial=[System.IO.Ports.SerialPort]::new($portName," + baud + ",'None',8,'One');$serial.WriteTimeout=2000;$serial.Open();try{$serial.Write($bytes,0,$bytes.Length)}finally{$serial.Close()}";
+  return await new Promise(resolve => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script], { windowsHide: true, timeout: 8000, maxBuffer: 4096 }, (error, stdout, stderr) => resolve(error ? { success: false, error: (String(stderr || error.message || error).split(/\r?\n/).find(line => /timed out|access denied|cannot open|exception calling/i.test(line)) || 'Printer connection timed out. Check the selected outgoing COM port, ensure no other app is using it, and verify the printer is awake and paired.').trim().slice(0, 240) } : { success: true })));
 });
 ipcMain.handle('malik-pos:print', async (event, options = {}) => {
   const win = BrowserWindow.fromWebContents(event.sender);
