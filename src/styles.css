@@ -26,3 +26,7 @@
 .app-shell{min-height:100vh}.main-area{min-width:0}
 @media(min-width:1100px){.desktop-sidebar-toggle{display:inline-flex!important}}
 @media(max-width:900px){.sidebar-collapsed{width:280px!important;min-width:280px!important}.sidebar-collapsed .brand>div:nth-child(2),.sidebar-collapsed .store-info,.sidebar-collapsed .nav-label,.sidebar-collapsed .nav-item span,.sidebar-collapsed .plan-card,.sidebar-collapsed .profile-row>div:nth-child(2){display:initial!important}.toolbar-right{flex-wrap:wrap}}
+
+/* Expand the workspace when the fixed sidebar is collapsed. */
+@media(min-width:901px){.main-area-sidebar-collapsed{margin-left:82px!important;width:calc(100% - 82px)!important}}
+@media(max-width:900px){.main-area-sidebar-collapsed{margin-left:0!important;width:100%!important}}
