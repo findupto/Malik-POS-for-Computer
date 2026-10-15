@@ -37,7 +37,7 @@ export default function App(){
  const [mobileNav,setMobileNav]=useState(false);
  const [modal,setModal]=useState('');
  const [newProduct,setNewProduct]=useState({name:'',sku:'',category:'Grocery',price:'',stock:''});
- const [storeName,setStoreName]=useState(()=>read('storeName','The Slice Of Heaven'));
+ const [storeName,setStoreName]=useState(()=>{const n=read('storeName','The Slice Of Heaven');return n==='Malik Mart'?'The Slice Of Heaven':n});
  const [storeAddress,setStoreAddress]=useState(()=>read('storeAddress','Old Utility Store Near Police Line, Khansar Road Bhakkar Punjab Pakistan'));
  const [storePhones,setStorePhones]=useState(()=>read('storePhones','0331872929, 0310 3685151'));
  const [businessType,setBusinessType]=useState(()=>read('businessType',''));
