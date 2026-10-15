@@ -27,7 +27,7 @@ ipcMain.handle('malik-pos:print', async (event, options = {}) => {
   return new Promise(resolve => win.webContents.print({
     silent: false,
     printBackground: true,
-    deviceName: typeof options.deviceName === 'string' ? options.deviceName : undefined,
+    deviceName: typeof options.deviceName === 'string' && options.deviceName ? options.deviceName : undefined,
     pageSize: options.pageSize === '58mm' ? { width: 58000, height: 200000 } : options.pageSize === '80mm' ? { width: 80000, height: 200000 } : undefined
   }, (success, failureReason) => resolve({ success, error: failureReason || '' })));
 });
