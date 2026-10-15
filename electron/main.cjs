@@ -35,6 +35,16 @@ ipcMain.handle('malik-pos:list-printers', async (event) => {
   return printers.map(p => ({ name: p.name, displayName: p.displayName, isDefault: p.isDefault, status: p.status }));
 });
 ipcMain.handle('malik-pos:open-printer-settings', async () => { try { await shell.openExternal('ms-settings:printers'); return { success: true }; } catch (error) { return { success: false, error: String(error && error.message || error) }; } });
+ipcMain.handle('malik-pos:open-bluetooth-settings', async () => { try { await shell.openExternal('ms-settings:bluetooth'); return { success: true }; } catch (error) { return { success: false, error: String(error && error.message || error) }; } });
+ipcMain.handle('malik-pos:discover-bluetooth', async () => {
+  if (process.platform !== 'win32') return { devices: [], ports: [], error: 'Bluetooth enumeration is currently supported on Windows only.' };
+  const script = "$ErrorActionPreference='SilentlyContinue';$bt=@(Get-PnpDevice -Class Bluetooth | Select-Object @{n='name';e={$_.FriendlyName}},@{n='id';e={$_.InstanceId}},@{n='status';e={$_.Status}});$ports=@(Get-CimInstance Win32_SerialPort | Select-Object @{n='port';e={$_.DeviceID}},@{n='name';e={$_.Name}},@{n='id';e={$_.PNPDeviceID}});[PSCustomObject]@{devices=$bt;ports=$ports}|ConvertTo-Json -Depth 4 -Compress";
+  return await new Promise(resolve => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script], { windowsHide: true, timeout: 12000, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
+    if (error) return resolve({ devices: [], ports: [], error: String(stderr || error.message || 'Windows Bluetooth discovery failed').trim().slice(0, 300) });
+    try { const data = JSON.parse(stdout.trim() || '{}'); const normalize = x => Array.isArray(x) ? x : x && typeof x === 'object' ? [x] : []; resolve({ devices: normalize(data.devices), ports: normalize(data.ports) }); }
+    catch { resolve({ devices: [], ports: [], error: 'Windows returned an unreadable device list.' }); }
+  }));
+});
 ipcMain.handle('malik-pos:print-escpos', async (_event, options = {}) => {
   const port = String(options.port || '').trim().toUpperCase();
   const baud = Number(options.baudRate) || 9600;
