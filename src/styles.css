@@ -35,3 +35,40 @@
 .sidebar{overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:#d7e2dc transparent}.sidebar nav{flex-shrink:0}.sidebar-bottom{margin-top:18px;flex-shrink:0}.sidebar .brand,.sidebar .store-switch{flex-shrink:0}.receipt-switch{display:flex;gap:8px;margin:0 0 15px}.receipt-switch .btn{flex:1;white-space:normal}.printer-device-list{border:1px solid #e6ecf1;border-radius:8px;overflow:hidden;margin:-7px 0 16px}.printer-device-row{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:10px;border:0;border-bottom:1px solid #edf0f4;background:#fff;text-align:left}.printer-device-row:last-child{border-bottom:0}.printer-device-row span{display:flex;align-items:center;gap:8px;min-width:0}.printer-device-row b{font-size:10px;color:#3d4d62;overflow-wrap:anywhere}.printer-device-row small{font-size:9px;color:#8c99aa;text-align:right}.printer-port-button:hover{background:#f2f8f4}.edit-order-modal{max-width:620px}.amend-product-list{max-height:190px;overflow:auto;border:1px solid #e9edf3;border-radius:8px;margin:-7px 0 16px}.amend-product-option{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;padding:10px 12px;background:#fff;border:0;border-bottom:1px solid #eef1f5;text-align:left;font-size:10px;color:#425169}.amend-product-option:last-child{border-bottom:0}.amend-product-option:hover{background:#f4faf6}.amend-product-option b{display:flex;align-items:center;gap:7px;color:#187d62;white-space:nowrap}.amend-items{display:flex;flex-direction:column;gap:0;border-top:1px solid #edf0f4}.amend-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid #edf0f4}.amend-item>div:first-child{min-width:0}.amend-item b{font-size:10px;color:#34445a}.amend-item small{display:block;font-size:9px;color:#8e9aab;margin-top:4px}.amend-qty{display:flex;align-items:center;gap:4px;flex-shrink:0}.amend-qty .icon-btn{padding:5px}.amend-remove{color:#c45c54}.amend-total{display:flex;justify-content:space-between;align-items:center;padding:15px 0 0;font-size:11px;color:#6c7a8e}.amend-total b{font-size:16px;color:#187d62}
 
 @media print{.receipt-switch{display:none!important}}
+
+
+/* Fast-food ingredient stock, recipe and purchasing workspace */
+.ff-stock{display:flex;flex-direction:column;gap:16px;min-width:0}
+.ff-stock-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.ff-stock-stat{background:#fff;border:1px solid #e8edf2;border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:7px;min-width:0}
+.ff-stock-stat span{font-size:10px;color:#8794a5}
+.ff-stock-stat b{font-family:Manrope,sans-serif;font-size:22px;letter-spacing:-.5px;color:#1d2b40;overflow-wrap:anywhere}
+.ff-stock-stat small{font-size:9px;line-height:1.5;color:#98a3b1}
+.ff-stock-stat.is-warning b{color:#bd7938}
+.ff-stock-tabs{display:flex;gap:7px;flex-wrap:wrap;padding:5px;background:#edf2ef;border-radius:10px;width:max-content;max-width:100%}
+.ff-stock-tabs button{display:inline-flex;align-items:center;gap:7px;border:0;border-radius:7px;padding:10px 12px;background:transparent;color:#718071;font-size:10px;font-weight:700;white-space:nowrap}
+.ff-stock-tabs button.active{background:#fff;color:#176b52;box-shadow:0 2px 7px #162a1c0b}
+.ff-stock .table-toolbar{padding:16px 18px}
+.ff-stock .table-toolbar>div:first-child{min-width:0}
+.ff-muted{font-size:9px;line-height:1.5;color:#95a1af;margin-top:4px;white-space:normal}
+.ff-recipe-lines{display:flex;flex-direction:column;gap:4px;white-space:normal;min-width:120px}
+.ff-recipe-lines span{font-size:9px;color:#65758a}
+.ff-alert{display:flex;gap:10px;align-items:flex-start;margin:15px 18px;padding:13px;border:1px solid #f2e3c9;background:#fff9ef;border-radius:9px;color:#b57b32}
+.ff-alert svg{flex-shrink:0;margin-top:2px}
+.ff-alert b{font-size:10px;color:#8e6229}
+.ff-alert p{font-size:10px;line-height:1.6;color:#9c8665;margin:4px 0 0}
+.ff-wide-modal{max-width:620px}
+.ff-recipe-editor{display:flex;flex-direction:column;gap:0;border:1px solid #e8edf2;border-radius:8px;margin-top:12px;overflow:hidden}
+.ff-recipe-editor:empty{display:none}
+.ff-recipe-editor>div{display:flex;align-items:center;gap:10px;padding:9px 11px;border-bottom:1px solid #eef1f4;font-size:10px;color:#526277}
+.ff-recipe-editor>div:last-child{border-bottom:0}
+.ff-recipe-editor>div span{flex:1}
+.ff-recipe-editor>div b{color:#176b52}
+.ff-purchase-preview{padding:12px;background:#f2f8f4;border:1px solid #e0eee5;border-radius:8px;margin-top:2px;font-size:10px;color:#617d6d;line-height:1.7}
+.ff-purchase-preview b{color:#176b52}
+.ff-positive{color:#187d62!important;font-weight:700}
+.ff-negative{color:#c45c54!important;font-weight:700}
+.ff-report-shortcuts{display:flex;gap:8px;flex-wrap:wrap;padding:14px 18px;border-top:1px solid #eef1f4}
+.ff-report-shortcuts button{display:inline-flex;align-items:center;gap:7px;border:1px solid #e3ebe5;border-radius:7px;padding:8px 10px;background:#f8fbf9;color:#386b56;font-size:10px;font-weight:700}
+@media(max-width:900px){.ff-stock-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.ff-stock .table-toolbar{align-items:stretch;flex-wrap:wrap}.ff-stock .toolbar-right{width:100%;justify-content:flex-end}}
+@media(max-width:640px){.ff-stock-tabs{width:100%}.ff-stock-tabs button{flex:1;justify-content:center;padding:9px 7px}.ff-stock-tabs button svg{display:none}.ff-stock-stat{padding:12px}.ff-stock-stat b{font-size:19px}.ff-stock .table-toolbar{padding:13px}.ff-stock .table-toolbar .search-box{max-width:none;width:100%}}
