@@ -120,7 +120,7 @@ export default function FastFoodStock({ notify }) {
     e.preventDefault();
     if (!recipeDraft.productName.trim() || !recipeDraft.ingredients.length) { notify('Choose a menu item and add at least one ingredient'); return; }
     const recipe = { ...recipeDraft, id: Date.now(), productId: recipeDraft.productId || '', ingredients: recipeDraft.ingredients.map(x => ({ ...x, qty: Number(x.qty) || 0 })) };
-    const next = [recipe, ...recipes.filter(r => !(String(r.productId || '') === String(recipe.productId) && recipe.productId) && !(r.productName.toLowerCase() === recipe.productName.toLowerCase() && r.variant === recipe.variant))];
+    const next = [recipe, ...recipes.filter(r => !(String(r.productId || '') === String(recipe.productId) && r.variant === recipe.variant) && !(r.productName.toLowerCase() === recipe.productName.toLowerCase() && r.variant === recipe.variant))];
     setRecipes(next); save('recipes', next); setRecipeDraft({ productId: '', productName: '', variant: '', ingredients: [] }); setShowRecipe(false); notify('Recipe saved');
   }
   function addRecipeLine() {
