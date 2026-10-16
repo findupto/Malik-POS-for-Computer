@@ -79,7 +79,7 @@ export function adjustRecipeIngredients(oldItems, nextItems, orderId) {
 }
 
 export default function FastFoodStock({ notify }) {
-  const [tab, setTab] = useState('ingredients');
+  const [tab, setTab] = useState(() => readStock('activeTab', 'ingredients'));
   const [ingredients, setIngredients] = useState(() => readStock('ingredients', []));
   const [recipes, setRecipes] = useState(() => readStock('recipes', []));
   const [purchases, setPurchases] = useState(() => readStock('purchases', []));
@@ -96,6 +96,7 @@ export default function FastFoodStock({ notify }) {
   const [purchaseDraft, setPurchaseDraft] = useState({ supplier: '', invoice: '', ingredientId: '', purchaseQty: '', purchaseUnit: 'carton', conversion: '1', unitCost: '', paid: '', notes: '' });
 
   const save = (key, value) => localStorage.setItem('malik-stock-' + key, JSON.stringify(value));
+  useEffect(() => { save('activeTab', tab); }, [tab]);
   useEffect(() => {
     const refresh = () => {
       setIngredients(readStock('ingredients', [])); setRecipes(readStock('recipes', []));
