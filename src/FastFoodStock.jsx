@@ -16,6 +16,28 @@ const tabs = [
   { id: 'waste', label: 'Waste log', icon: Trash2 }
 ];
 
+export function estimateOrderIngredientCost(items) {
+  try {
+    const ingredients = JSON.parse(localStorage.getItem('malik-stock-ingredients') || '[]');
+    const recipes = JSON.parse(localStorage.getItem('malik-stock-recipes') || '[]');
+    let cost = 0, coveredUnits = 0, uncoveredUnits = 0;
+    for (const sold of items || []) {
+      const recipe = recipes.find(r => String(r.productId || '') === String(sold.id) && (!r.variant || r.variant === (sold.variant || '')))
+        || recipes.find(r => r.productName?.trim().toLowerCase() === String(sold.name || '').trim().toLowerCase() && (!r.variant || r.variant === (sold.variant || '')));
+      if (!recipe || !(recipe.ingredients || []).length) { uncoveredUnits += Math.max(0, Number(sold.qty) || 0); continue; }
+      const lines = recipe.ingredients || [];
+      const missing = lines.some(line => !ingredients.some(x => String(x.id) === String(line.ingredientId)));
+      if (missing) { uncoveredUnits += Math.max(0, Number(sold.qty) || 0); continue; }
+      cost += lines.reduce((sum, line) => {
+        const ingredient = ingredients.find(x => String(x.id) === String(line.ingredientId));
+        return sum + Math.max(0, Number(line.qty) || 0) * Math.max(0, Number(sold.qty) || 0) * Math.max(0, Number(ingredient?.cost) || 0);
+      }, 0);
+      coveredUnits += Math.max(0, Number(sold.qty) || 0);
+    }
+    return { cost, coveredUnits, uncoveredUnits };
+  } catch { return { cost: 0, coveredUnits: 0, uncoveredUnits: (items || []).reduce((n, i) => n + Math.max(0, Number(i.qty) || 0), 0) }; }
+}
+
 export function consumeRecipeIngredients(items, orderId) {
   try {
     const ingredients = JSON.parse(localStorage.getItem('malik-stock-ingredients') || '[]');
