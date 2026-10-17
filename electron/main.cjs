@@ -50,9 +50,29 @@ ipcMain.handle('malik-pos:print-escpos', async (_event, options = {}) => {
   const baud = Number(options.baudRate) || 9600;
   if (!/^COM[1-9][0-9]*$/.test(port)) return { success: false, error: 'Enter a valid Windows serial port such as COM3.' };
   if (![9600, 19200, 38400, 57600, 115200].includes(baud)) return { success: false, error: 'Unsupported baud rate.' };
-  const text = String(options.text || '').slice(0, 30000).replace(/[^\x20-\x7E\r\n\t]/g, '');
-  if (!text.trim()) return { success: false, error: 'Receipt content is empty.' };
-  const payload = Buffer.concat([Buffer.from([0x1b, 0x40, 0x1b, 0x61, 0]), Buffer.from(text, 'ascii'), Buffer.from([0x0a, 0x0a, 0x0a, 0x1d, 0x56, 0x00])]).toString('base64');
+  const text = String(options.text || '').slice(0, 30000);
+  if (!text.replace(/\[[A-Z_]+\]/g, '').trim()) return { success: false, error: 'Receipt content is empty.' };
+  // Render only known formatting tokens into ESC/POS commands; all receipt data remains plain printable ASCII.
+  const commands = {
+    '[CENTER]': [0x1b, 0x61, 0x01],
+    '[LEFT]': [0x1b, 0x61, 0x00],
+    '[RIGHT]': [0x1b, 0x61, 0x02],
+    '[BOLD_ON]': [0x1b, 0x45, 0x01],
+    '[BOLD_OFF]': [0x1b, 0x45, 0x00],
+    '[DOUBLE_ON]': [0x1d, 0x21, 0x11],
+    '[DOUBLE_OFF]': [0x1d, 0x21, 0x00]
+  };
+  const chunks = text.split(/(\[(?:CENTER|LEFT|RIGHT|BOLD_ON|BOLD_OFF|DOUBLE_ON|DOUBLE_OFF)\])/g);
+  const buffers = [Buffer.from([0x1b, 0x40, 0x1b, 0x61, 0x00])];
+  for (const chunk of chunks) {
+    if (commands[chunk]) buffers.push(Buffer.from(commands[chunk]));
+    else {
+      const safe = chunk.replace(/[^\x20-\x7E\r\n\t]/g, '');
+      if (safe) buffers.push(Buffer.from(safe, 'ascii'));
+    }
+  }
+  buffers.push(Buffer.from([0x0a, 0x0a, 0x0a, 0x1d, 0x56, 0x00]));
+  const payload = Buffer.concat(buffers).toString('base64');
   const script = "$ErrorActionPreference='Stop';$portName='" + port + "';$bytes=[Convert]::FromBase64String('" + payload + "');$serial=[System.IO.Ports.SerialPort]::new($portName," + baud + ",'None',8,'One');$serial.WriteTimeout=2000;$serial.Open();try{$serial.Write($bytes,0,$bytes.Length)}finally{$serial.Close()}";
   return await new Promise(resolve => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script], { windowsHide: true, timeout: 8000, maxBuffer: 4096 }, (error, stdout, stderr) => resolve(error ? { success: false, error: (String(stderr || error.message || error).split(/\r?\n/).find(line => /timed out|access denied|cannot open|exception calling/i.test(line)) || 'Printer connection timed out. Check the selected outgoing COM port, ensure no other app is using it, and verify the printer is awake and paired.').trim().slice(0, 240) } : { success: true })));
 });
