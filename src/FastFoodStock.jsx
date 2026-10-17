@@ -140,6 +140,8 @@ export default function FastFoodStock({ notify }) {
 
   function savePurchase(e) {
     e.preventDefault();
+    const supplierRecords = (() => { try { return JSON.parse(localStorage.getItem('malik-suppliers') || '[]'); } catch { return []; } })();
+    if (supplierRecords.some(x => x.blocked && String(x.name || '').trim().toLowerCase() === String(purchaseDraft.supplier || '').trim().toLowerCase())) { notify('This supplier is blocked. An administrator must unblock the supplier before recording a purchase.'); return; }
     const ingredient = ingredients.find(x => String(x.id) === String(purchaseDraft.ingredientId));
     const qty = Number(purchaseDraft.purchaseQty), conversion = Number(purchaseDraft.conversion), unitCost = Number(purchaseDraft.unitCost);
     if (!ingredient || qty <= 0 || conversion <= 0 || unitCost < 0 || !purchaseDraft.supplier.trim()) { notify('Enter supplier, ingredient, quantity, conversion and cost'); return; }
