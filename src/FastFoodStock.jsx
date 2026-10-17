@@ -33,7 +33,8 @@ export function consumeRecipeIngredients(items, orderId) {
         const amount = Math.max(0, Number(line.qty) || 0) * Math.max(0, Number(sold.qty) || 0);
         ingredient.stock = Number(ingredient.stock || 0) - amount;
         let remainingToConsume = amount;
-        const fifo = batches.filter(b => String(b.ingredientId) === String(ingredient.id) && Number(b.remainingQty) > 0).sort((a,b) => String(a.receivedAt || a.date).localeCompare(String(b.receivedAt || b.date)));
+        const today = new Date().toISOString().slice(0,10);
+        const fifo = batches.filter(b => String(b.ingredientId) === String(ingredient.id) && Number(b.remainingQty) > 0 && (!b.expiryDate || b.expiryDate >= today)).sort((a,b) => String(a.receivedAt || a.date).localeCompare(String(b.receivedAt || b.date)));
         for (const batch of fifo) { if (remainingToConsume <= 0) break; const used = Math.min(Number(batch.remainingQty) || 0, remainingToConsume); batch.remainingQty = Number(batch.remainingQty) - used; remainingToConsume -= used; }
         newMovements.push({ id: Date.now() + Math.random(), date: new Date().toISOString(), ingredientId: ingredient.id, ingredientName: ingredient.name, type: 'sale', qty: -amount, unit: ingredient.unit, reference: orderId || 'Sale', note: (sold.name || recipe.productName) + ' × ' + sold.qty + (amount > 0 ? ' · FIFO batch consumption' : '') });
       }
