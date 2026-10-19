@@ -72,8 +72,8 @@ export default function App(){
  const width=printerWidth==='58'?32:48;
  const rule='='.repeat(width);
  const t={center:'[CENTER]',left:'[LEFT]',boldOn:'[BOLD_ON]',boldOff:'[BOLD_OFF]',doubleOn:'[DOUBLE_ON]',doubleOff:'[DOUBLE_OFF]'};
- const clean=s=>String(s??'').replace(/[\\r\\n]+/g,' ').trim();
- const wrap=s=>{const words=clean(s).split(/\\s+/).filter(Boolean),out=[];let line='';for(let word of words){while(word.length>width){if(line){out.push(line);line=''}out.push(word.slice(0,width));word=word.slice(width)}if(!word)continue;if((line?line.length+1:0)+word.length>width){if(line)out.push(line);line=word}else line+=(line?' ':'')+word}if(line)out.push(line);return out};
+ const clean=s=>String(s??'').replace(/[\r\n]+/g,' ').trim();
+ const wrap=s=>{const words=clean(s).split(/\s+/).filter(Boolean),out=[];let line='';for(let word of words){while(word.length>width){if(line){out.push(line);line=''}out.push(word.slice(0,width));word=word.slice(width)}if(!word)continue;if((line?line.length+1:0)+word.length>width){if(line)out.push(line);line=word}else line+=(line?' ':'')+word}if(line)out.push(line);return out};
  const center=s=>{const line=clean(s).slice(0,width);return ' '.repeat(Math.max(0,Math.floor((width-line.length)/2)))+line};
  const columns=(values,widths)=>{let out=values.map((v,i)=>clean(v).slice(0,widths[i]));return out.map((v,i)=>i===0?v.padEnd(widths[i]):i===2?v.padStart(widths[i]):v.padStart(widths[i])).join(' ').slice(0,width)};
  const pair=(left,right)=>{const r=clean(right).slice(0,Math.floor(width*.42));const l=clean(left).slice(0,width-r.length-1);return l.padEnd(width-r.length-1)+' '+r};
@@ -95,7 +95,7 @@ export default function App(){
    lines.push('-'.repeat(width));
   }
   lines.push(rule,t.center,t.boldOn,...wrap('KITCHEN RECEIPT - NO PRICES'),t.boldOff,t.left);
-  return lines.join('\\n')+'\\n\\n\\n';
+  return lines.join('\n')+'\n\n\n';
  }
  const store=[...wrap(storeName).map(center),...wrap(storeAddress).map(center),...wrap(storePhones).map(center)];
  lines.push(t.center,t.boldOn,...store,t.boldOff,t.left,rule);
@@ -116,7 +116,7 @@ export default function App(){
   if(item.note||item.notes)lines.push(...wrap('  NOTE: '+(item.note||item.notes)));
  }
  lines.push(rule,pair('Subtotal',money(order.subtotal)),pair('Discount',money(order.discount)),pair('GST',money(order.tax)),pair('Service',money(order.serviceCharges||0)),rule,t.boldOn,pair('Total',money(order.total)),t.boldOff,pair('Payment',order.payment||'-'),rule,t.center,t.boldOn,...wrap('Thank You For Your Visit!'),t.boldOff,t.left);
- return lines.join('\\n')+'\\n\\n\\n';
+ return lines.join('\n')+'\n\n\n';
 }
 function shareReceiptWhatsApp(type=receiptType){
  const order=orders.find(o=>o.id===String(modal).slice(8));
