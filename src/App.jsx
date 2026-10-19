@@ -93,82 +93,135 @@ function shareReceiptWhatsApp(type=receiptType){
  if(kitchenOnly&&type!=='kitchen'){notify('Kitchen staff can share kitchen receipts only');return}
  const isKitchen=type==='kitchen';
  const customer=customers.find(c=>c.name===order.customer);
- const phoneRaw=isKitchen?'':String(order.deliveryPhone||customer?.phone||'').replace(/\D/g,'');
+ const phoneRaw=isKitchen?'':String(order.deliveryPhone||customer?.phone||'').replace(/\\D/g,'');
  const phone=phoneRaw?(phoneRaw.startsWith('0')?'92'+phoneRaw.slice(1):phoneRaw):'';
- const lines=[];
- const add=(text,style='normal',align='left')=>lines.push({text:String(text??''),style,align});
- const rule='='.repeat(42),thin='-'.repeat(42);
+ const width=760,pad=30,contentWidth=width-pad*2;
+ const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');
+ if(!ctx){notify('Receipt image canvas is unavailable');return}
+ const date=new Date(order.date);
+ const rows=[];
+ const add=(text,style='normal',align='left')=>rows.push({text:String(text??''),style,align});
+ const rule=(kind='solid')=>rows.push({rule:kind});
  if(isKitchen){
-  add('KITCHEN RECEIPT','title','center');add(rule,'bold','center');
-  add('ORDER: '+order.id,'bold');add('DATE: '+new Date(order.date).toLocaleString());
+  add('KITCHEN RECEIPT','title','center');
+  rule('double');
+  add('ORDER: '+order.id,'bold');
+  add('DATE: '+date.toLocaleString());
   add('ORDER TYPE: '+(order.serviceType||'Dine-in'),'bold');
   if(order.serviceType==='Dine-in'&&order.tableNumber)add('TABLE: '+order.tableNumber,'bold');
   if(order.serviceType==='Delivery'){add('PHONE: '+(order.deliveryPhone||'—'));add('ADDRESS: '+(order.deliveryAddress||'—'))}
-  add(thin,'bold');
-  for(const item of order.items||[]){add(String(item.qty)+' × '+item.name+(item.variant?' ('+item.variant+')':''),'item');if(item.modifiers)add('   '+(Array.isArray(item.modifiers)?item.modifiers.join(', '):item.modifiers));if(item.note||item.notes)add('   NOTE: '+(item.note||item.notes),'bold')}
-  if(order.orderNote){add(thin);add('ORDER NOTE: '+order.orderNote,'bold')}
-  add(rule,'bold');add('KITCHEN COPY — NO PRICES','bold','center');
+  if(order.orderNote)add('ORDER NOTE: '+order.orderNote,'bold');
+  rule('solid');
+  add('QTY','column');add('ITEMS','column');
+  rule('solid');
+  for(const item of order.items||[]){
+   add(String(item.qty)+' ×','itemQty');
+   add(item.name+(item.variant?' ('+item.variant+')':''),'item');
+   if(item.modifiers)add('   '+(Array.isArray(item.modifiers)?item.modifiers.join(', '):item.modifiers),'note');
+   if(item.note||item.notes)add('   NOTE: '+(item.note||item.notes),'bold');
+  }
+  rule('double');
+  add('KITCHEN RECEIPT — NO PRICES','bold','center');
  }else{
   add(storeName,'title','center');
-  add('Address: '+storeAddress);add('Phone: '+storePhones,'bold');
-  add(rule,'bold','center');
-  add('Order: '+order.id+'     DATE: '+new Date(order.date).toLocaleString());
-  add('TYPE: '+(order.serviceType||'Dine-in')+(order.serviceType==='Dine-in'&&order.tableNumber?'   TABLE: '+order.tableNumber:''),'bold');
+  add('Address: '+storeAddress,'normal');
+  add('Phone: '+storePhones,'bold');
+  rule('double');
+  add('Order: '+order.id+'     DATE: '+date.toLocaleString(),'normal');
+  add('TYPE: '+(order.serviceType||'Dine-in'),'bold');
+  if(order.serviceType==='Dine-in'&&order.tableNumber)add('TABLE: '+order.tableNumber,'bold');
   add('CUSTOMER NAME: '+(order.customer||'Walk-in Customer'));
-  if(customer?.phone||order.deliveryPhone)add('Phone: '+(order.deliveryPhone||customer?.phone||''));
-  if(order.deliveryAddress||customer?.address||customer?.customerAddress)add('Address: '+(order.deliveryAddress||customer?.address||customer?.customerAddress));
+  if(order.deliveryPhone||customer?.phone)add('Phone: '+(order.deliveryPhone||customer?.phone||''));
+  const customerAddress=order.deliveryAddress||customer?.address||customer?.customerAddress;
+  if(customerAddress)add('Address: '+customerAddress);
   if(order.orderNote)add('Note: '+order.orderNote);
-  add(thin,'bold');add('ITEMS                              PRICE   QTY    TOTAL','bold');
-  add(thin,'bold');
+  rule('double');
+  rows.push({columns:['ITEMS','Price','QTY','Total'],style:'header'});
+  rule('solid');
   for(const item of order.items||[]){
-   add(item.name,'bold');
-   add('  '+money(item.price)+' × '+item.qty+' = '+money(Number(item.price||0)*Number(item.qty||0)));
-   if(item.variant)add('  Variant: '+item.variant);
+   rows.push({columns:[item.name+(item.variant?' ('+item.variant+')':''),money(item.price),String(item.qty),money(Number(item.price||0)*Number(item.qty||0))],style:'itemRow'});
   }
-  add(rule,'bold');
-  add('Subtotal: '+money(order.subtotal));add('Discount: '+money(order.discount));add('GST: '+money(order.tax));add('Service: '+money(order.serviceCharges||0));
-  add(rule,'bold');add('TOTAL: '+money(order.total),'total');add('Payment: '+(order.payment||'—'),'bold');
-  add(thin,'bold');add('Thank You For Your Visit!','thanks','center');
+  rule('double');
+  add('Subtotal', 'normal');add(money(order.subtotal),'right');
+  add('Discount','normal');add(money(order.discount),'right');
+  add('GST','normal');add(money(order.tax),'right');
+  add('Service','normal');add(money(order.serviceCharges||0),'right');
+  rule('double');
+  add('Total','total');add(money(order.total),'totalRight');
+  add('Payment','bold');add(order.payment||'—','right');
+  rule('dashed');
+  add('Thank You For Your Visit!','thanks','center');
+ }
+ const fontFor=style=>({
+  title:'bold 52px Arial',total:'bold 30px Arial',totalRight:'bold 30px Arial',
+  thanks:'bold 29px Arial',bold:'bold 23px Arial',item:'bold 24px Arial',
+  itemQty:'bold 24px Arial',column:'bold 22px Arial',header:'bold 23px Arial',
+  itemRow:'22px Arial',right:'22px Arial',note:'20px Arial',normal:'22px Arial'
+ }[style]||'22px Arial');
+ const lineHeight=36,topPad=26,bottomPad=30;
+ ctx.font='22px Arial';
+ const prepared=[];
+ for(const row of rows){
+  if(row.rule){prepared.push(row);continue}
+  if(row.columns){
+   const cells=row.columns;
+   ctx.font=fontFor(row.style);
+   const widths=[contentWidth*.43,contentWidth*.19,contentWidth*.12,contentWidth*.26];
+   const wrappedCells=cells.map((cell,i)=>{
+    const out=[];let remain=String(cell);
+    while(remain&&ctx.measureText(remain).width>widths[i]-8){
+     let cut=remain.length;while(cut>1&&ctx.measureText(remain.slice(0,cut)).width>widths[i]-8)cut--;
+     const space=remain.lastIndexOf(' ',cut);if(space>0)cut=space;
+     out.push(remain.slice(0,cut).trimEnd());remain=remain.slice(cut).trimStart();
+    }
+    if(remain)out.push(remain);return out.length?out:[''];
+   });
+   const count=Math.max(...wrappedCells.map(c=>c.length));
+   for(let j=0;j<count;j++)prepared.push({cells:wrappedCells.map(c=>c[j]||''),style:row.style});
+   continue;
+  }
+  ctx.font=fontFor(row.style);
+  const maxWidth=contentWidth-(row.align==='center'?0:0);let remain=row.text;
+  if(!remain){prepared.push(row);continue}
+  while(ctx.measureText(remain).width>maxWidth){
+   let cut=remain.length;while(cut>1&&ctx.measureText(remain.slice(0,cut)).width>maxWidth)cut--;
+   const space=remain.lastIndexOf(' ',cut);if(space>0)cut=space;
+   prepared.push({...row,text:remain.slice(0,cut).trimEnd()});remain=remain.slice(cut).trimStart();
+  }
+  prepared.push({...row,text:remain});
+ }
+ const height=topPad+prepared.reduce((sum,row)=>sum+(row.rule?24:lineHeight),0)+bottomPad;
+ canvas.width=width;canvas.height=height;
+ ctx.fillStyle='#fff';ctx.fillRect(0,0,width,height);ctx.fillStyle='#000';ctx.textBaseline='top';
+ let y=topPad;
+ for(const row of prepared){
+  if(row.rule){
+   ctx.beginPath();ctx.lineWidth=row.rule==='double'?3:1.5;
+   ctx.setLineDash(row.rule==='dashed'?[5,5]:[]);
+   ctx.moveTo(pad,y+8);ctx.lineTo(width-pad,y+8);ctx.stroke();ctx.setLineDash([]);
+   if(row.rule==='double'){ctx.beginPath();ctx.lineWidth=1.5;ctx.moveTo(pad,y+14);ctx.lineTo(width-pad,y+14);ctx.stroke()}
+   y+=24;continue;
+  }
+  ctx.font=fontFor(row.style);
+  if(row.cells){
+   const widths=[contentWidth*.43,contentWidth*.19,contentWidth*.12,contentWidth*.26];
+   let x=pad;
+   row.cells.forEach((cell,i)=>{ctx.textAlign=i===2?'center':i===3?'right':'left';const xx=i===2?x+widths[i]/2:i===3?x+widths[i]-4:x+4;ctx.fillText(cell,xx,y);x+=widths[i]});
+  }else{
+   ctx.textAlign=row.align==='center'?'center':row.style==='right'||row.style==='totalRight'?'right':'left';
+   const x=ctx.textAlign==='center'?width/2:ctx.textAlign==='right'?width-pad:pad;
+   ctx.fillText(row.text,x,y);
+  }
+  y+=lineHeight;
  }
  try{
-  const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');
-  if(!ctx)throw new Error('Receipt image canvas is unavailable');
-  const width=760,pad=32,lineHeight=35;
-  const measureFont=style=>style==='title'?'bold 38px Arial':style==='total'?'bold 31px Arial':style==='thanks'?'bold 25px Arial':style==='item'?'bold 25px Arial':style==='bold'?'bold 22px Arial':'21px Arial';
-  ctx.font='21px Arial';
-  const wrapped=[];
-  for(const line of lines){
-   ctx.font=measureFont(line.style);
-   const maxWidth=width-pad*2;let remaining=line.text;
-   if(!remaining){wrapped.push({...line,text:''});continue}
-   while(ctx.measureText(remaining).width>maxWidth){
-    let cut=remaining.length;
-    while(cut>1&&ctx.measureText(remaining.slice(0,cut)).width>maxWidth)cut--;
-    const space=remaining.lastIndexOf(' ',cut);
-    if(space>0)cut=space;
-    wrapped.push({...line,text:remaining.slice(0,cut).trimEnd()});
-    remaining=remaining.slice(cut).trimStart();
-   }
-   wrapped.push({...line,text:remaining});
-  }
-  const height=pad*2+wrapped.length*lineHeight+16;
-  canvas.width=width;canvas.height=height;
-  ctx.fillStyle='#fff';ctx.fillRect(0,0,width,height);ctx.fillStyle='#000';ctx.textBaseline='top';
-  let y=pad;
-  for(const line of wrapped){
-   ctx.font=measureFont(line.style);
-   ctx.textAlign=line.align==='center'?'center':'left';
-   const x=line.align==='center'?width/2:pad;
-   ctx.fillText(line.text,x,y);
-   y+=lineHeight;
-  }
   canvas.toBlob(blob=>{
    if(!blob){notify('Could not create receipt image');return}
    const url=URL.createObjectURL(blob),a=document.createElement('a');
    a.href=url;a.download=(isKitchen?'Kitchen-Receipt-':'Customer-Receipt-')+order.id+'.png';
    document.body.appendChild(a);a.click();a.remove();
    setTimeout(()=>URL.revokeObjectURL(url),60000);
-   const message=isKitchen?'Kitchen receipt for order '+order.id+' (image downloaded; attach it to this chat).':'Receipt for order '+order.id+' (image downloaded; attach it to this chat).';
+   const message=isKitchen?'Kitchen receipt for order '+order.id+' (image downloaded; attach the PNG to WhatsApp).':'Receipt for order '+order.id+' (image downloaded; attach the PNG to WhatsApp).';
    const waUrl='https://wa.me/'+(phone||'')+'?text='+encodeURIComponent(message);
    if(whatsAppWindow&&!whatsAppWindow.closed)whatsAppWindow.location.href=waUrl;
    else window.open(waUrl,'_blank','noopener,noreferrer');
