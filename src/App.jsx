@@ -142,13 +142,13 @@ function shareReceiptWhatsApp(type=receiptType){
    rows.push({columns:[item.name+(item.variant?' ('+item.variant+')':''),money(item.price),String(item.qty),money(Number(item.price||0)*Number(item.qty||0))],style:'itemRow'});
   }
   rule('double');
-  add('Subtotal', 'normal');add(money(order.subtotal),'right');
-  add('Discount','normal');add(money(order.discount),'right');
-  add('GST','normal');add(money(order.tax),'right');
-  add('Service','normal');add(money(order.serviceCharges||0),'right');
+  rows.push({pair:['Subtotal',money(order.subtotal)],style:'normal'});
+  rows.push({pair:['Discount',money(order.discount)],style:'normal'});
+  rows.push({pair:['GST',money(order.tax)],style:'normal'});
+  rows.push({pair:['Service',money(order.serviceCharges||0)],style:'normal'});
   rule('double');
-  add('Total','total');add(money(order.total),'totalRight');
-  add('Payment','bold');add(order.payment||'—','right');
+  rows.push({pair:['Total',money(order.total)],style:'total'});
+  rows.push({pair:['Payment',order.payment||'—'],style:'bold'});
   rule('dashed');
   add('Thank You For Your Visit!','thanks','center');
  }
@@ -163,6 +163,7 @@ function shareReceiptWhatsApp(type=receiptType){
  const prepared=[];
  for(const row of rows){
   if(row.rule){prepared.push(row);continue}
+  if(row.pair){prepared.push(row);continue}
   if(row.columns){
    const cells=row.columns;
    ctx.font=fontFor(row.style);
@@ -203,7 +204,8 @@ function shareReceiptWhatsApp(type=receiptType){
    y+=24;continue;
   }
   ctx.font=fontFor(row.style);
-  if(row.cells){
+  if(row.pair){ctx.textAlign='left';ctx.fillText(row.pair[0],pad,y);ctx.textAlign='right';ctx.fillText(row.pair[1],width-pad,y);
+  }else if(row.cells){
    const widths=[contentWidth*.43,contentWidth*.19,contentWidth*.12,contentWidth*.26];
    let x=pad;
    row.cells.forEach((cell,i)=>{ctx.textAlign=i===2?'center':i===3?'right':'left';const xx=i===2?x+widths[i]/2:i===3?x+widths[i]-4:x+4;ctx.fillText(cell,xx,y);x+=widths[i]});
