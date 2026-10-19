@@ -69,23 +69,55 @@ export default function App(){
  useEffect(()=>{if(window.malikPOS?.listPrinters)window.malikPOS.listPrinters().then(found=>{setPrinterList(found);if(!selectedPrinter&&found.length){const p=found.find(x=>x.isDefault)||found[0];setSelectedPrinter(p.name);setPrinterStatus('Default printer: '+p.name)}}).catch(()=>{})},[]);
  async function discoverBluetoothPrinter(){setPrinterStatus('Searching installed printers and paired Bluetooth devices…');try{const found=window.malikPOS?.listPrinters?await window.malikPOS.listPrinters():[];setPrinterList(found);const scan=window.malikPOS?.discoverBluetooth?await window.malikPOS.discoverBluetooth():{devices:[],ports:[],error:'Bluetooth discovery unavailable'};setBluetoothDevices(scan.devices||[]);setSerialPorts(scan.ports||[]);if(found.length){const preferred=found.find(p=>p.name===selectedPrinter)||found.find(p=>p.isDefault)||found[0];setSelectedPrinter(preferred.name);localStorage.setItem('malik-selectedPrinter',JSON.stringify(preferred.name))}setPrinterStatus('Discovery finished: '+found.length+' printer queue(s), '+(scan.devices||[]).length+' Bluetooth device(s), '+(scan.ports||[]).length+' COM port(s). '+(scan.error||''));notify('Printer discovery finished')}catch(e){setPrinterStatus('Printer discovery failed: '+(e?.message||'unknown error'));notify('Printer discovery failed')}} async function testBluetoothPrint(){const width=printerWidth==='58'?32:48;const rule='-'.repeat(width);const wrap=s=>{const words=String(s||'').replace(/[\r\n]+/g,' ').split(/\s+/).filter(Boolean);const out=[];let line='';for(const word of words){if((line?line.length+1:0)+word.length>width){if(line)out.push(line);line=word.slice(0,width)}else line+=(line?' ':'')+word}if(line)out.push(line);return out};const pair=(l,r)=>String(l).slice(0,Math.max(1,width-String(r).length-1)).padEnd(Math.max(1,width-String(r).length-1))+' '+r;const ruler=Array.from({length:width},(_,i)=>String((i+1)%10)).join('');const text=[...wrap(storeName),...wrap('MALIK POS PRINTER CALIBRATION'),rule,'PAPER WIDTH: '+printerWidth+' MM',ruler,rule,'CUSTOMER RECEIPT SAMPLE',...wrap('Chicken Burger x 2'),pair('Subtotal','Rs 1,000.00'),pair('Discount','Rs 100.00'),pair('TOTAL','Rs 900.00'),rule,'KITCHEN TICKET SAMPLE',...wrap('2 x CHICKEN BURGER'),...wrap('No onion, extra sauce'),rule,'CHARACTER TEST: ABC xyz 0123456789',...wrap('Long text wrap: CUSTOMER ADDRESS AND ORDER NOTE SHOULD WRAP WITHOUT CUTTING WORDS.'),rule,'END OF TEST','\n','\n'].join('\n');setPrinterStatus('Sending '+printerWidth+' mm calibration ticket to '+printerPort+'…');try{const r=await window.malikPOS?.printEscpos?.({port:printerPort,baudRate:Number(printerBaudRate)||9600,text});setPrinterStatus(r?.success?'Calibration ticket sent. Check line width, wrapping, alignment and paper cut.':'Test failed: '+(r?.error||'No response from printer'));notify(r?.success?'Calibration ticket sent':'Printer test failed')}catch(e){setPrinterStatus('Test failed: '+(e?.message||'unknown error'))}}
  function buildEscposReceipt(order,type='customer'){
- const width=printerWidth==='58'?32:48,rule='-'.repeat(width);
- const t={center:'[CENTER]',left:'[LEFT]',right:'[RIGHT]',boldOn:'[BOLD_ON]',boldOff:'[BOLD_OFF]',doubleOn:'[DOUBLE_ON]',doubleOff:'[DOUBLE_OFF]'};
- const fit=s=>String(s??'').replace(/[\r\n]+/g,' ').trim().slice(0,width);
- const wrap=s=>{const words=String(s??'').replace(/[\r\n]+/g,' ').split(/\s+/).filter(Boolean),out=[];let line='';for(const word of words){if(word.length>width){if(line)out.push(line);for(let i=0;i<word.length;i+=width)out.push(word.slice(i,i+width));line='';continue}if((line?line.length+1:0)+word.length>width){if(line)out.push(line);line=word}else line+=(line?' ':'')+word}if(line)out.push(line);return out};
- const center=s=>{const x=fit(s);return ' '.repeat(Math.max(0,Math.floor((width-x.length)/2)))+x};
- const pair=(l,r)=>{const right=String(r??'').slice(0,width-2),left=String(l??'');return left.slice(0,Math.max(1,width-right.length-1)).padEnd(Math.max(1,width-right.length-1))+' '+right};
- const store=[...wrap(storeName).map(center),...wrap(storeAddress).map(center),...wrap(storePhones).map(center)];
+ const width=printerWidth==='58'?32:48;
+ const rule='='.repeat(width);
+ const t={center:'[CENTER]',left:'[LEFT]',boldOn:'[BOLD_ON]',boldOff:'[BOLD_OFF]',doubleOn:'[DOUBLE_ON]',doubleOff:'[DOUBLE_OFF]'};
+ const clean=s=>String(s??'').replace(/[\\r\\n]+/g,' ').trim();
+ const wrap=s=>{const words=clean(s).split(/\\s+/).filter(Boolean),out=[];let line='';for(let word of words){while(word.length>width){if(line){out.push(line);line=''}out.push(word.slice(0,width));word=word.slice(width)}if(!word)continue;if((line?line.length+1:0)+word.length>width){if(line)out.push(line);line=word}else line+=(line?' ':'')+word}if(line)out.push(line);return out};
+ const center=s=>{const line=clean(s).slice(0,width);return ' '.repeat(Math.max(0,Math.floor((width-line.length)/2)))+line};
+ const columns=(values,widths)=>{let out=values.map((v,i)=>clean(v).slice(0,widths[i]));return out.map((v,i)=>i===0?v.padEnd(widths[i]):i===2?v.padStart(widths[i]):v.padStart(widths[i])).join(' ').slice(0,width)};
+ const pair=(left,right)=>{const r=clean(right).slice(0,Math.floor(width*.42));const l=clean(left).slice(0,width-r.length-1);return l.padEnd(width-r.length-1)+' '+r};
+ const date=new Date(order.date);
+ const lines=[];
  if(type==='kitchen'){
-  const lines=[t.center,t.doubleOn,t.boldOn,...wrap('KITCHEN RECEIPT'),t.boldOff,t.doubleOff,rule,t.boldOn,'ORDER: '+order.id,t.boldOff,'DATE: '+new Date(order.date).toLocaleString(),'TIME: '+new Date(order.date).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),'ORDER TYPE: '+(order.serviceType||'Dine-in'),...(order.serviceType==='Dine-in'&&order.tableNumber?['TABLE: '+order.tableNumber]:[]),...(order.serviceType==='Delivery'?wrap('DELIVERY ADDRESS: '+(order.deliveryAddress||'-')):[]),...(order.serviceType==='Delivery'?['PHONE: '+(order.deliveryPhone||'-')]:[]),...(order.orderNote?wrap('ORDER NOTE: '+order.orderNote):[]),rule,t.boldOn,'QTY  ITEM / MODIFIERS',t.boldOff,rule];
-  for(const item of order.items||[]){lines.push(t.boldOn,...wrap(String(item.qty)+' x '+item.name+(item.variant?' ('+item.variant+')':'')),t.boldOff);if(item.modifiers)lines.push(...wrap('   '+(Array.isArray(item.modifiers)?item.modifiers.join(', '):item.modifiers)));if(item.note||item.notes)lines.push(...wrap('   NOTE: '+(item.note||item.notes)))}
-  lines.push(rule,...wrap('KITCHEN RECEIPT - NO PRICES'),t.left);return lines.join('\n')+'\n\n\n';
+  lines.push(t.center,t.doubleOn,t.boldOn,...wrap('KITCHEN RECEIPT'),t.boldOff,t.doubleOff,rule,t.left);
+  lines.push(t.boldOn,...wrap('ORDER: '+order.id),t.boldOff,...wrap('DATE: '+date.toLocaleString()),...wrap('TYPE: '+(order.serviceType||'Dine-in')));
+  if(order.serviceType==='Dine-in'&&order.tableNumber)lines.push(...wrap('TABLE: '+order.tableNumber));
+  if(order.serviceType==='Delivery'){lines.push(...wrap('PHONE: '+(order.deliveryPhone||'-')),...wrap('ADDRESS: '+(order.deliveryAddress||'-')))}
+  if(order.orderNote)lines.push(...wrap('ORDER NOTE: '+order.orderNote));
+  lines.push(rule,t.boldOn,columns(['QTY','ITEMS'],[7,width-8]),t.boldOff,rule);
+  for(const item of order.items||[]){
+   const name=(item.name||'')+(item.variant?' ('+item.variant+')':'');
+   const nameLines=wrap(name);
+   lines.push(t.boldOn,columns([String(item.qty)+' x',nameLines.shift()||''],[7,width-8]),...nameLines,t.boldOff);
+   if(item.modifiers)lines.push(...wrap('  '+(Array.isArray(item.modifiers)?item.modifiers.join(', '):item.modifiers)));
+   if(item.note||item.notes)lines.push(...wrap('  NOTE: '+(item.note||item.notes)));
+   lines.push('-'.repeat(width));
+  }
+  lines.push(rule,t.center,t.boldOn,...wrap('KITCHEN RECEIPT - NO PRICES'),t.boldOff,t.left);
+  return lines.join('\\n')+'\\n\\n\\n';
  }
- const lines=[t.center,t.boldOn,...store,t.boldOff,t.left,rule,'ORDER: '+order.id,'DATE: '+new Date(order.date).toLocaleString(),'TYPE: '+(order.serviceType||'Dine-in'),...(order.serviceType==='Dine-in'&&order.tableNumber?['TABLE: '+order.tableNumber]:[]),'CUSTOMER: '+(order.customer||'Walk-in Customer'),...(order.serviceType==='Delivery'?['PHONE: '+(order.deliveryPhone||'-'),...wrap('ADDRESS: '+(order.deliveryAddress||'-'))]:[]),...(order.orderNote?wrap('NOTE: '+order.orderNote):[]),'COUNTER: '+(order.counterPerson||order.shiftPerson||'Administrator'),rule,t.boldOn,'ITEMS',t.boldOff,rule];
- for(const item of order.items||[]){lines.push(t.boldOn,...wrap(item.name+(item.variant?' ('+item.variant+')':'')),t.boldOff,pair('  '+item.qty+' x '+money(item.price),money(item.price*item.qty)));if(item.modifiers)lines.push(...wrap('   '+(Array.isArray(item.modifiers)?item.modifiers.join(', '):item.modifiers)));if(item.note||item.notes)lines.push(...wrap('   Note: '+(item.note||item.notes)))}
- lines.push(rule,pair('Subtotal',money(order.subtotal)),pair('Discount','-'+money(order.discount)),pair('GST',money(order.tax)),pair('Service',money(order.serviceCharges||0)),rule,t.boldOn,pair('TOTAL',money(order.total)),t.boldOff,pair('Payment',order.payment),rule,t.center,t.boldOn,'Thank you for your visit!',t.boldOff,t.left);
- return lines.join('\n')+'\n\n\n';
+ const store=[...wrap(storeName).map(center),...wrap(storeAddress).map(center),...wrap(storePhones).map(center)];
+ lines.push(t.center,t.boldOn,...store,t.boldOff,t.left,rule);
+ lines.push(...wrap('ORDER: '+order.id),...wrap('DATE: '+date.toLocaleString()),...wrap('TYPE: '+(order.serviceType||'Dine-in')));
+ if(order.serviceType==='Dine-in'&&order.tableNumber)lines.push(...wrap('TABLE: '+order.tableNumber));
+ lines.push(...wrap('CUSTOMER NAME: '+(order.customer||'Walk-in Customer')));
+ if(order.deliveryPhone||order.serviceType==='Delivery')lines.push(...wrap('PHONE: '+(order.deliveryPhone||'-')));
+ if(order.deliveryAddress||order.serviceType==='Delivery')lines.push(...wrap('ADDRESS: '+(order.deliveryAddress||'-')));
+ if(order.orderNote)lines.push(...wrap('NOTE: '+order.orderNote));
+ lines.push(rule,t.boldOn,columns(['ITEMS','PRICE','QTY','TOTAL'],[21,9,5,10]),t.boldOff,rule);
+ const widths=[21,9,5,10];
+ for(const item of order.items||[]){
+  const name=(item.name||'')+(item.variant?' ('+item.variant+')':'');
+  const names=wrap(name);
+  lines.push(columns([names.shift()||'',money(item.price),String(item.qty),money(Number(item.price||0)*Number(item.qty||0))],widths));
+  while(names.length)lines.push(columns([names.shift(),'','',''],widths));
+  if(item.modifiers)lines.push(...wrap('  '+(Array.isArray(item.modifiers)?item.modifiers.join(', '):item.modifiers)));
+  if(item.note||item.notes)lines.push(...wrap('  NOTE: '+(item.note||item.notes)));
  }
+ lines.push(rule,pair('Subtotal',money(order.subtotal)),pair('Discount',money(order.discount)),pair('GST',money(order.tax)),pair('Service',money(order.serviceCharges||0)),rule,t.boldOn,pair('Total',money(order.total)),t.boldOff,pair('Payment',order.payment||'-'),rule,t.center,t.boldOn,...wrap('Thank You For Your Visit!'),t.boldOff,t.left);
+ return lines.join('\\n')+'\\n\\n\\n';
+}
 function shareReceiptWhatsApp(type=receiptType){
  const order=orders.find(o=>o.id===String(modal).slice(8));
  if(!order){notify('Open a receipt first');return}
