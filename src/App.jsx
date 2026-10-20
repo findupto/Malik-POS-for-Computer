@@ -76,13 +76,13 @@ export default function App(){
  const clean=s=>String(s??'').replace(/[\r\n]+/g,' ').trim();
  const wrap=s=>{const words=clean(s).split(/\s+/).filter(Boolean),out=[];let line='';for(let word of words){while(word.length>width){if(line){out.push(line);line=''}out.push(word.slice(0,width));word=word.slice(width)}if(!word)continue;if((line?line.length+1:0)+word.length>width){if(line)out.push(line);line=word}else line+=(line?' ':'')+word}if(line)out.push(line);return out};
  const center=s=>{const line=clean(s).slice(0,width);return ' '.repeat(Math.max(0,Math.floor((width-line.length)/2)))+line};
- const titleWidth=Math.max(12,Math.floor(width/2)); const wrapTitle=s=>{const words=clean(s).split(/\s+/).filter(Boolean),out=[];let line='';for(let word of words){while(word.length>titleWidth){if(line){out.push(line);line=''}out.push(word.slice(0,titleWidth));word=word.slice(titleWidth)}if(!word)continue;if((line?line.length+1:0)+word.length>titleWidth){if(line)out.push(line);line=word}else line+=(line?' ':'')+word}if(line)out.push(line);return out}; const alignCommand=a=>a==='left'?t.left:a==='right'?'[RIGHT]':t.center; const alignedLines=(value,alignment)=>[alignCommand(alignment),...wrap(value)]; const gapLines=Array.from({length:Math.max(0,Math.min(2,Number(headerGap)||0))},()=> '');
+ const titleWidth=width; const wrapTitle=s=>{const words=clean(s).split(/\s+/).filter(Boolean),out=[];let line='';for(let word of words){while(word.length>titleWidth){if(line){out.push(line);line=''}out.push(word.slice(0,titleWidth));word=word.slice(titleWidth)}if(!word)continue;if((line?line.length+1:0)+word.length>titleWidth){if(line)out.push(line);line=word}else line+=(line?' ':'')+word}if(line)out.push(line);return out}; const alignCommand=a=>a==='left'?t.left:a==='right'?'[RIGHT]':t.center; const alignedLines=(value,alignment)=>[alignCommand(alignment),...wrap(value)]; const gapLines=Array.from({length:Math.max(0,Math.min(2,Number(headerGap)||0))},()=> '');
  const columns=(values,widths)=>{let out=values.map((v,i)=>clean(v).slice(0,widths[i]));return out.map((v,i)=>i===0?v.padEnd(widths[i]):i===2?v.padStart(widths[i]):v.padStart(widths[i])).join(' ').slice(0,width)};
  const pair=(left,right)=>{const r=clean(right).slice(0,Math.floor(width*.42));const l=clean(left).slice(0,width-r.length-1);return l.padEnd(width-r.length-1)+' '+r};
  const date=new Date(order.date);
  const lines=[];
  if(type==='kitchen'){
-  lines.push(t.center,t.boldOn,...wrap('KITCHEN RECEIPT').map(center),t.boldOff,t.left,rule);
+  lines.push(t.center,t.boldOn,...wrap('KITCHEN RECEIPT'),t.boldOff,t.left,rule);
   lines.push(...wrap('Order:- '+order.id),...wrap('Date:- '+date.toLocaleString()),...wrap('Type:- '+(order.serviceType||'Dine-in')));
   if(order.serviceType==='Dine-in'&&order.tableNumber)lines.push(...wrap('Table:- '+order.tableNumber));
   if(order.serviceType==='Delivery'){lines.push(...wrap('Phone:- '+(order.deliveryPhone||'-')),...wrap('Address:- '+(order.deliveryAddress||'-')))}
@@ -97,7 +97,7 @@ export default function App(){
   if(order.orderNote)lines.push(...wrap('ORDER NOTE: '+order.orderNote)); if(order.kitchenNote)lines.push(...wrap('KITCHEN NOTE: '+order.kitchenNote)); else if(!order.orderNote)lines.push(...wrap('Kitchen note: 20 Minutes to Ready Order')); lines.push(rule);
   return lines.join('\n')+'\n';
  }
- lines.push(receiptAlignment==='left'?t.left:t.center,t.boldOn,t.doubleOn,...wrapTitle(storeName),t.doubleOff,t.boldOff,t.left);
+ lines.push(receiptAlignment==='left'?t.left:receiptAlignment==='right'?'[RIGHT]':t.center,t.boldOn,...wrapTitle(storeName),t.boldOff,t.left);
  lines.push(...gapLines,...alignedLines(storeAddress,addressAlignment),...gapLines,...alignedLines(storePhones,phoneAlignment),t.left);
  if(showHeaderDivider)lines.push(rule);
  lines.push(...wrap('ORDER: '+order.id),...wrap('DATE: '+date.toLocaleString()),...wrap('TYPE: '+(order.serviceType||'Dine-in')));
