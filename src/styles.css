@@ -232,3 +232,15 @@
  .receipt-full-layout .receipt-layout-part{print-color-adjust:exact;-webkit-print-color-adjust:exact}
  .receipt-full-designer{display:none!important}
 }
+
+
+/* Reliable receipt printing: print every receipt section in normal document flow. The editor remains draggable, but print output must not clip content to the design canvas percentages. */
+@media print {
+ .receipt-modal-freeform,.receipt-modal .receipt-full-layout { width:var(--paper-width,80mm)!important; max-width:var(--paper-width,80mm)!important; height:auto!important; min-height:0!important; overflow:visible!important; box-sizing:border-box!important; margin:0!important; padding:1mm!important; }
+ .receipt-modal .receipt-layout-part { position:relative!important; inset:auto!important; left:auto!important; top:auto!important; width:100%!important; height:auto!important; min-height:0!important; max-height:none!important; max-width:100%!important; overflow:visible!important; display:block!important; box-sizing:border-box!important; margin:0!important; padding:1mm 0!important; break-inside:avoid!important; }
+ .receipt-modal .receipt-layout-header .receipt-business-details,.receipt-modal .receipt-layout-header .receipt-free-print-canvas { position:relative!important; width:100%!important; height:auto!important; min-height:0!important; overflow:visible!important; margin:0!important; padding:0!important; }
+ .receipt-modal .receipt-free-item { position:relative!important; inset:auto!important; left:auto!important; top:auto!important; width:100%!important; height:auto!important; min-height:0!important; max-height:none!important; overflow:visible!important; box-sizing:border-box!important; margin:0!important; padding:0!important; }
+ .receipt-modal .receipt-free-item img { max-width:100%!important; height:auto!important; object-fit:contain!important; }
+ .receipt-modal .receipt-layout-items .receipt-items { height:auto!important; overflow:visible!important; }
+ .receipt-modal .receipt-layout-meta .receipt-meta,.receipt-modal .receipt-layout-totals .receipt-totals { height:auto!important; overflow:visible!important; }
+}
