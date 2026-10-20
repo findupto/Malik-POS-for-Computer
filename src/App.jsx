@@ -97,8 +97,9 @@ export default function App(){
   lines.push(rule,t.center,t.boldOn,...wrap('KITCHEN RECEIPT - NO PRICES'),t.boldOff,t.left);
   return lines.join('\n')+'\n\n\n';
  }
- const store=[...wrap(storeName).map(center),...wrap(storeAddress).map(center),...wrap(storePhones).map(center)];
- lines.push(t.center,t.boldOn,...store,t.boldOff,t.left,rule);
+ lines.push(t.center,t.boldOn,t.doubleOn,...wrap(storeName).map(center),t.doubleOff,t.boldOff,t.left);
+ lines.push(...wrap(storeAddress).map(center));
+ lines.push(t.center,t.boldOn,...wrap(storePhones).map(center),t.boldOff,t.left,rule);
  lines.push(...wrap('ORDER: '+order.id),...wrap('DATE: '+date.toLocaleString()),...wrap('TYPE: '+(order.serviceType||'Dine-in')));
  if(order.serviceType==='Dine-in'&&order.tableNumber)lines.push(...wrap('TABLE: '+order.tableNumber));
  lines.push(...wrap('CUSTOMER NAME: '+(order.customer||'Walk-in Customer')));
