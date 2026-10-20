@@ -50,6 +50,19 @@ ipcMain.handle('malik-pos:print-escpos', async (_event, options = {}) => {
   const baud = Number(options.baudRate) || 9600;
   if (!/^COM[1-9][0-9]*$/.test(port)) return { success: false, error: 'Enter a valid Windows serial port such as COM3.' };
   if (![9600, 19200, 38400, 57600, 115200].includes(baud)) return { success: false, error: 'Unsupported baud rate.' };
+  if (options.rasterBase64) {
+    const widthBytes = Number(options.rasterWidthBytes);
+    const height = Number(options.rasterHeight);
+    if (!Number.isInteger(widthBytes) || widthBytes < 1 || widthBytes > 100 || !Number.isInteger(height) || height < 1 || height > 12000) return { success: false, error: 'Invalid receipt image dimensions.' };
+    let raster;
+    try { raster = Buffer.from(String(options.rasterBase64), 'base64'); } catch { return { success: false, error: 'Receipt image data is invalid.' }; }
+    if (raster.length !== widthBytes * height || raster.length > 1200000) return { success: false, error: 'Receipt image is too large or incomplete.' };
+    const xL = widthBytes & 0xff, xH = (widthBytes >> 8) & 0xff, yL = height & 0xff, yH = (height >> 8) & 0xff;
+    const header = Buffer.from([0x1b,0x40,0x1b,0x61,0x00,0x1d,0x76,0x30,0x00,xL,xH,yL,yH]);
+    const payload = Buffer.concat([header,raster,Buffer.from([0x0a,0x0a,0x1d,0x56,0x00])]).toString('base64');
+    const script = "$ErrorActionPreference='Stop';$portName='" + port + "';$bytes=[Convert]::FromBase64String('" + payload + "');$serial=[System.IO.Ports.SerialPort]::new($portName," + baud + ",'None',8,'One');$serial.WriteTimeout=5000;$serial.Open();try{$serial.Write($bytes,0,$bytes.Length)}finally{$serial.Close()}";
+    return await new Promise(resolve => execFile('powershell.exe', ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command',script], { windowsHide:true, timeout:30000, maxBuffer:4096 }, (error,stdout,stderr) => resolve(error ? { success:false, error:(String(stderr||error.message||error).split(/\\r?\\n/).find(line=>/timed out|access denied|cannot open|exception calling/i.test(line))||'Image printing failed. Check the selected outgoing COM port and printer compatibility.').trim().slice(0,240) } : { success:true })));
+  }
   const text = String(options.text || '').slice(0, 30000);
   if (!text.replace(/\[[A-Z_]+\]/g, '').trim()) return { success: false, error: 'Receipt content is empty.' };
   // Render only known formatting tokens into ESC/POS commands; all receipt data remains plain printable ASCII.
