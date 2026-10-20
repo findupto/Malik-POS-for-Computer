@@ -277,6 +277,9 @@ async function makeReceiptRasterPayload(){
  set(clone,{width:'100%', 'max-width':'none',height:'auto','min-height':'0',margin:'0',padding:'1mm','box-shadow':'none',border:'0','border-radius':'0',position:'relative',overflow:'visible',background:'#fff','box-sizing':'border-box'});
  clone.querySelectorAll('.receipt-layout-part').forEach(node=>set(node,{position:'relative',inset:'auto',left:'auto',top:'auto',width:'100%',height:'auto','min-height':'0','max-height':'none','max-width':'100%',overflow:'visible',display:'block',margin:'0',padding:'1mm 0','box-sizing':'border-box','break-inside':'avoid'}));
  clone.querySelectorAll('.receipt-layout-header .receipt-business-details,.receipt-layout-header .receipt-free-print-canvas').forEach(node=>set(node,{position:'relative',height:'auto','min-height':'0',width:'100%',overflow:'visible',margin:'0',padding:'0'}));
+ clone.querySelectorAll('.receipt-layout-items .receipt-items,.receipt-layout-meta .receipt-meta,.receipt-layout-totals .receipt-totals').forEach(node=>set(node,{height:'auto','min-height':'0','max-height':'none',overflow:'visible',margin:'0',padding:'1mm 0'}));
+ clone.querySelectorAll('.receipt-items>div,.receipt-totals>div').forEach(node=>set(node,{overflow:'visible','min-width':'0','max-width':'100%','white-space':'normal','overflow-wrap':'anywhere','box-sizing':'border-box'}));
+ clone.querySelectorAll('.receipt-items>div>b,.receipt-totals>div>b').forEach(node=>set(node,{'min-width':'0','max-width':'45%','white-space':'normal','overflow-wrap':'anywhere','flex-shrink':'1'}));
  clone.querySelectorAll('.receipt-free-item').forEach(node=>set(node,{position:'relative',left:'auto',top:'auto',width:'100%',height:'auto','min-height':'0','max-height':'none',overflow:'visible','font-size':'inherit','text-align':'center','margin':'0','padding':'0'}));
  const widthDots=printerWidth==='58'?384:576;
  const sourceWidth=widthDots;
