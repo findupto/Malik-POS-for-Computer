@@ -276,10 +276,11 @@ async function makeReceiptRasterPayload(){
  inlineTree(source,clone);
  clone.style.width=printerWidth==='58'?'58mm':'80mm';clone.style.maxWidth='none';clone.style.height='auto';clone.style.margin='0';clone.style.boxShadow='none';clone.style.border='0';clone.style.borderRadius='0';clone.style.position='static';clone.style.overflow='visible';clone.style.background='#fff';
  const widthDots=printerWidth==='58'?384:576;
- const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+widthDots+'" viewBox="0 0 '+Math.max(1,source.getBoundingClientRect().width)+' '+Math.max(1,source.getBoundingClientRect().height)+'"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml">'+new XMLSerializer().serializeToString(clone)+'</div></foreignObject></svg>';
+ const sourceRect=source.getBoundingClientRect(),sourceWidth=Math.max(1,sourceRect.width),sourceHeight=Math.max(1,sourceRect.height),targetHeight=Math.max(1,Math.round(sourceHeight*widthDots/sourceWidth));
+ const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+widthDots+'" height="'+targetHeight+'" viewBox="0 0 '+sourceWidth+' '+sourceHeight+'"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml">'+new XMLSerializer().serializeToString(clone)+'</div></foreignObject></svg>';
  const image=new Image();image.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
  await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error('Could not render the receipt preview as a printer image.'))});
- const height=Math.max(1,Math.min(12000,Math.round(image.height*widthDots/Math.max(1,image.width))));
+ const height=Math.max(1,Math.min(12000,image.naturalHeight||image.height));
  const canvas=document.createElement('canvas');canvas.width=widthDots;canvas.height=height;
  const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.fillStyle='#fff';ctx.fillRect(0,0,widthDots,height);ctx.drawImage(image,0,0,widthDots,height);
  const pixels=ctx.getImageData(0,0,widthDots,height).data,bytesPerRow=Math.ceil(widthDots/8),raster=new Uint8Array(bytesPerRow*height);
