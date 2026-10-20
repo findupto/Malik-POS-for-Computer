@@ -181,9 +181,9 @@
 .order-filter-row{margin:12px 0;align-items:end}
 .order-filter-row .field-label{display:block;margin-bottom:6px}
 @media print{
- .receipt-modal .receipt-top h2{font-size:var(--receipt-title-size,15pt)!important;line-height:1.08!important;margin:0!important;letter-spacing:0!important;white-space:normal!important;overflow-wrap:anywhere!important;word-break:break-word!important}
+ .receipt-modal .receipt-top{gap:0!important;row-gap:0!important;column-gap:0!important}.receipt-modal .receipt-top h2{font-size:clamp(10pt,var(--receipt-title-size,15pt),24pt)!important;line-height:1!important;margin:0!important;padding:0!important;letter-spacing:0!important;white-space:normal!important;overflow-wrap:anywhere!important;word-break:break-word!important}
  .receipt-modal .receipt-rule{margin:2px 0!important;border-top-width:1px!important}
- .receipt-modal .receipt-business-details{gap:var(--header-gap,0mm)!important;line-height:1.12!important;margin:0!important;padding:0!important}
+ .receipt-modal .receipt-business-details{gap:0!important;row-gap:0!important;column-gap:0!important;line-height:1!important;margin:0!important;padding:0!important}
  .receipt-modal .receipt-address-line{text-align:var(--address-alignment,center)!important}
  .receipt-modal .receipt-phone-line{text-align:var(--phone-alignment,center)!important}
 }
