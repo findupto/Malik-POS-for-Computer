@@ -80,22 +80,20 @@ export default function App(){
  const date=new Date(order.date);
  const lines=[];
  if(type==='kitchen'){
-  lines.push(t.center,t.doubleOn,t.boldOn,...wrap('KITCHEN RECEIPT'),t.boldOff,t.doubleOff,rule,t.left);
-  lines.push(t.boldOn,...wrap('ORDER: '+order.id),t.boldOff,...wrap('DATE: '+date.toLocaleString()),...wrap('TYPE: '+(order.serviceType||'Dine-in')));
-  if(order.serviceType==='Dine-in'&&order.tableNumber)lines.push(...wrap('TABLE: '+order.tableNumber));
-  if(order.serviceType==='Delivery'){lines.push(...wrap('PHONE: '+(order.deliveryPhone||'-')),...wrap('ADDRESS: '+(order.deliveryAddress||'-')))}
-  if(order.orderNote)lines.push(...wrap('ORDER NOTE: '+order.orderNote));
-  lines.push(rule,t.boldOn,columns(['QTY','ITEMS'],[7,width-8]),t.boldOff,rule);
+  lines.push(t.center,t.boldOn,...wrap('Kitchen Order').map(center),t.boldOff,t.left,rule);
+  lines.push(...wrap('Order:- '+order.id),...wrap('Date:- '+date.toLocaleString()),...wrap('Type:- '+(order.serviceType||'Dine-in')));
+  if(order.serviceType==='Dine-in'&&order.tableNumber)lines.push(...wrap('Table:- '+order.tableNumber));
+  if(order.serviceType==='Delivery'){lines.push(...wrap('Phone:- '+(order.deliveryPhone||'-')),...wrap('Address:- '+(order.deliveryAddress||'-')))}
+  lines.push(rule,t.boldOn,columns(['Item','QTY'],[width-7,6]),t.boldOff,'-'.repeat(width));
   for(const item of order.items||[]){
    const name=(item.name||'')+(item.variant?' ('+item.variant+')':'');
    const nameLines=wrap(name);
-   lines.push(t.boldOn,columns([String(item.qty)+' x',nameLines.shift()||''],[7,width-8]),...nameLines,t.boldOff);
+   lines.push(columns([nameLines.shift()||'',String(item.qty)],[width-7,6]),...nameLines);
    if(item.modifiers)lines.push(...wrap('  '+(Array.isArray(item.modifiers)?item.modifiers.join(', '):item.modifiers)));
    if(item.note||item.notes)lines.push(...wrap('  NOTE: '+(item.note||item.notes)));
-   lines.push('-'.repeat(width));
   }
-  lines.push(rule,t.center,t.boldOn,...wrap('KITCHEN RECEIPT - NO PRICES'),t.boldOff,t.left);
-  return lines.join('\n')+'\n\n\n';
+  lines.push(rule,...wrap('Note:- '+(order.orderNote||'20 Minutes to Ready Order')));
+  return lines.join('\\n')+'\\n\\n\\n';
  }
  lines.push(t.center,t.boldOn,t.doubleOn,...wrap(storeName).map(center),t.doubleOff,t.boldOff,t.left);
  lines.push(...wrap(storeAddress).map(center));
