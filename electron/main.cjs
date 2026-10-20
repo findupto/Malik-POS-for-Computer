@@ -60,9 +60,11 @@ ipcMain.handle('malik-pos:print-escpos', async (_event, options = {}) => {
     '[BOLD_ON]': [0x1b, 0x45, 0x01],
     '[BOLD_OFF]': [0x1b, 0x45, 0x00],
     '[DOUBLE_ON]': [0x1d, 0x21, 0x11],
-    '[DOUBLE_OFF]': [0x1d, 0x21, 0x00]
+    '[DOUBLE_OFF]': [0x1d, 0x21, 0x00],
+    '[TALL_ON]': [0x1d, 0x21, 0x01],
+    '[TALL_OFF]': [0x1d, 0x21, 0x00]
   };
-  const chunks = text.split(/(\[(?:CENTER|LEFT|RIGHT|BOLD_ON|BOLD_OFF|DOUBLE_ON|DOUBLE_OFF)\])/g);
+  const chunks = text.split(/(\[(?:CENTER|LEFT|RIGHT|BOLD_ON|BOLD_OFF|DOUBLE_ON|DOUBLE_OFF|TALL_ON|TALL_OFF)\])/g);
   const buffers = [Buffer.from([0x1b, 0x40, 0x1b, 0x61, 0x00])];
   for (const chunk of chunks) {
     if (commands[chunk]) buffers.push(Buffer.from(commands[chunk]));
@@ -83,7 +85,7 @@ ipcMain.handle('malik-pos:print', async (event, options = {}) => {
     silent: options.silent === true,
     printBackground: true,
     deviceName: typeof options.deviceName === 'string' && options.deviceName ? options.deviceName : undefined,
-    pageSize: options.pageSize === '58mm' ? { width: 58000, height: 200000 } : options.pageSize === '80mm' ? { width: 80000, height: 200000 } : undefined
+    pageSize: options.pageSize === '58mm' ? { width: 58000, height: Math.max(45000, Math.min(300000, Number(options.pageHeightMicrons) || 100000)) } : options.pageSize === '80mm' ? { width: 80000, height: Math.max(45000, Math.min(300000, Number(options.pageHeightMicrons) || 100000)) } : undefined
   }, (success, failureReason) => resolve({ success, error: failureReason || '' })));
 });
 app.whenReady().then(() => {
