@@ -97,8 +97,10 @@ export default function App(){
   if(order.orderNote)lines.push(...wrap('ORDER NOTE: '+order.orderNote)); if(order.kitchenNote)lines.push(...wrap('KITCHEN NOTE: '+order.kitchenNote)); else if(!order.orderNote)lines.push(...wrap('Kitchen note: 20 Minutes to Ready Order')); lines.push(rule);
   return lines.join('\n')+'\n';
  }
- receiptHeaderOrder.forEach(item=>{if(item==='title'){lines.push(receiptAlignment==='left'?t.left:receiptAlignment==='right'?'[RIGHT]':t.center,t.boldOn,...(Number(receiptTitleSize)>=20?[t.tallOn,...wrapTitle(storeName),t.tallOff]:wrapTitle(storeName)),t.boldOff,t.left);if(showHeaderDivider)lines.push(rule)}else if(item==='address')lines.push(...alignedLines(storeAddress,addressAlignment));else lines.push(...alignedLines(storePhones,phoneAlignment))});
- lines.push(t.left);
+ const headerItems=[{key:'title',text:storeName,alignment:receiptAlignment},{key:'address',text:storeAddress,alignment:addressAlignment},{key:'phone',text:storePhones,alignment:phoneAlignment}].sort((a,b)=>receiptHeaderLayout[a.key].y-receiptHeaderLayout[b.key].y);
+ let cursorLine=0;const headerLineCount=13;
+ for(const item of headerItems){const p=receiptHeaderLayout[item.key];const targetLine=Math.max(cursorLine,Math.min(headerLineCount-1,Math.round(p.y/100*headerLineCount)));while(cursorLine<targetLine){lines.push('');cursorLine++}const xChars=Math.max(0,Math.min(width-1,Math.round(p.x/100*width)));const maxChars=Math.max(1,Math.min(width-xChars,Math.round(p.w/100*width)));const itemLines=(item.key==='title'?wrapTitle(item.text):wrap(item.text)).map(line=>line.slice(0,maxChars));lines.push(item.key==='title'?(receiptAlignment==='left'?t.left:receiptAlignment==='right'?'[RIGHT]':t.center):alignCommand(item.alignment),...(item.key==='title'&&Number(receiptTitleSize)>=20?[t.tallOn]:[]),...itemLines.map(line=>' '.repeat(xChars)+line),...(item.key==='title'&&Number(receiptTitleSize)>=20?[t.tallOff]:[]),t.left);cursorLine=targetLine+Math.max(1,Math.min(5,Math.round(p.h/100*headerLineCount)))}
+ while(cursorLine<headerLineCount){lines.push('');cursorLine++}lines.push(t.left);
  if(showHeaderDivider)lines.push(rule);
  lines.push(...wrap('ORDER: '+order.id),...wrap('DATE: '+date.toLocaleString()),...wrap('TYPE: '+(order.serviceType||'Dine-in')));
  if(order.serviceType==='Dine-in'&&order.tableNumber)lines.push(...wrap('TABLE: '+order.tableNumber));
