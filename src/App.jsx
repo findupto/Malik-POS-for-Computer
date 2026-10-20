@@ -274,13 +274,13 @@ async function makeReceiptRasterPayload(){
  const inlineTree=(original,copied)=>{if(original.nodeType!==1||copied.nodeType!==1)return;const computed=getComputedStyle(original);let css='';for(let i=0;i<computed.length;i++){const key=computed[i];css+=key+':'+computed.getPropertyValue(key)+';'}copied.setAttribute('style',(copied.getAttribute('style')||'')+';'+css);const os=original.children,cs=copied.children;for(let i=0;i<Math.min(os.length,cs.length);i++)inlineTree(os[i],cs[i])};
  inlineTree(source,clone);
  const set=(node,styles)=>Object.entries(styles).forEach(([key,value])=>node.style.setProperty(key,value,'important'));
- set(clone,{width:printerWidth==='58'?'58mm':'80mm', 'max-width':'none',height:'auto','min-height':'0',margin:'0',padding:'1mm','box-shadow':'none',border:'0','border-radius':'0',position:'relative',overflow:'visible',background:'#fff','box-sizing':'border-box'});
+ set(clone,{width:'100%', 'max-width':'none',height:'auto','min-height':'0',margin:'0',padding:'1mm','box-shadow':'none',border:'0','border-radius':'0',position:'relative',overflow:'visible',background:'#fff','box-sizing':'border-box'});
  clone.querySelectorAll('.receipt-layout-part').forEach(node=>set(node,{position:'relative',inset:'auto',left:'auto',top:'auto',width:'100%',height:'auto','min-height':'0','max-height':'none','max-width':'100%',overflow:'visible',display:'block',margin:'0',padding:'1mm 0','box-sizing':'border-box','break-inside':'avoid'}));
  clone.querySelectorAll('.receipt-layout-header .receipt-business-details,.receipt-layout-header .receipt-free-print-canvas').forEach(node=>set(node,{position:'relative',height:'auto','min-height':'0',width:'100%',overflow:'visible',margin:'0',padding:'0'}));
  clone.querySelectorAll('.receipt-free-item').forEach(node=>set(node,{position:'relative',left:'auto',top:'auto',width:'100%',height:'auto','min-height':'0','max-height':'none',overflow:'visible','font-size':'inherit','text-align':'center','margin':'0','padding':'0'}));
  const widthDots=printerWidth==='58'?384:576;
- const sourceWidth=widthDots, cssWidth=printerWidth==='58'?58:80;
- const measure=document.createElement('div');measure.style.cssText='position:fixed;left:-10000px;top:0;width:'+cssWidth+'mm;box-sizing:border-box;background:#fff;';measure.appendChild(clone);document.body.appendChild(measure);
+ const sourceWidth=widthDots;
+ const measure=document.createElement('div');measure.style.cssText='position:fixed;left:-10000px;top:0;width:'+widthDots+'px;box-sizing:border-box;background:#fff;';measure.appendChild(clone);document.body.appendChild(measure);
  const measuredHeight=Math.max(1,Math.ceil(clone.scrollHeight||measure.scrollHeight||400));
  const sourceHeight=Math.min(12000,Math.max(measuredHeight,Math.ceil(measure.getBoundingClientRect().height)));
  const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+sourceWidth+'" height="'+sourceHeight+'" viewBox="0 0 '+sourceWidth+' '+sourceHeight+'"><foreignObject width="'+sourceWidth+'" height="'+sourceHeight+'"><div xmlns="http://www.w3.org/1999/xhtml" style="width:'+sourceWidth+'px;overflow:visible;background:#fff">'+new XMLSerializer().serializeToString(clone)+'</div></foreignObject></svg>';
