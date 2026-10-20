@@ -321,7 +321,7 @@ async function printReceipt(type=receiptType){
  useEffect(()=>localStorage.setItem('malik-storeName',JSON.stringify(storeName)),[storeName]);
  useEffect(()=>localStorage.setItem('malik-receiptHeaderOrder',JSON.stringify(receiptHeaderOrder)),[receiptHeaderOrder]);
  useEffect(()=>localStorage.setItem('malik-receiptHeaderLayout',JSON.stringify(receiptHeaderLayout)),[receiptHeaderLayout]);
- useEffect(()=>localStorage.setItem('receiptFullLayout',JSON.stringify(receiptFullLayout)),[receiptFullLayout]); useEffect(()=>localStorage.setItem('savedReceiptTemplates',JSON.stringify(savedReceiptTemplates)),[savedReceiptTemplates]); useEffect(()=>localStorage.setItem('receiptPaperHeight',JSON.stringify(receiptPaperHeight)),[receiptPaperHeight]);
+ useEffect(()=>localStorage.setItem('malik-receiptFullLayout',JSON.stringify(receiptFullLayout)),[receiptFullLayout]); useEffect(()=>localStorage.setItem('malik-savedReceiptTemplates',JSON.stringify(savedReceiptTemplates)),[savedReceiptTemplates]); useEffect(()=>localStorage.setItem('malik-receiptPaperHeight',JSON.stringify(receiptPaperHeight)),[receiptPaperHeight]);
  function receiptHeaderKeys(){return ['title','address','phone',...Object.keys(receiptHeaderLayout).filter(k=>k.startsWith('custom-'))]}
  function addReceiptCustomText(){const id='custom-'+Date.now();setReceiptHeaderLayout(old=>({...old,[id]:{x:8,y:68,w:65,h:12,text:'Your text',fontSize:12,bold:false}}))}
  function resetReceiptHeaderLayout(){setReceiptHeaderLayout(old=>({...Object.fromEntries(Object.entries(old).filter(([k])=>k.startsWith('custom-'))),title:{x:5,y:4,w:90,h:18},address:{x:5,y:29,w:90,h:14},phone:{x:5,y:48,w:90,h:12}}))}
