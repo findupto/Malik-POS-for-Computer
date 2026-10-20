@@ -72,21 +72,21 @@ export default function App(){
  function buildEscposReceipt(order,type='customer'){
  const width=printerWidth==='58'?32:48;
  const rule='='.repeat(width);
- const t={center:'[CENTER]',left:'[LEFT]',boldOn:'[BOLD_ON]',boldOff:'[BOLD_OFF]',doubleOn:'[DOUBLE_ON]',doubleOff:'[DOUBLE_OFF]',tallOn:'[TALL_ON]',tallOff:'[TALL_OFF]'};
+ const escposTokens={center:'[CENTER]',left:'[LEFT]',boldOn:'[BOLD_ON]',boldOff:'[BOLD_OFF]',doubleOn:'[DOUBLE_ON]',doubleOff:'[DOUBLE_OFF]',tallOn:'[TALL_ON]',tallOff:'[TALL_OFF]'};
  const clean=s=>String(s??'').replace(/[\r\n]+/g,' ').trim();
  const wrap=s=>{const words=clean(s).split(/\s+/).filter(Boolean),out=[];let line='';for(let word of words){while(word.length>width){if(line){out.push(line);line=''}out.push(word.slice(0,width));word=word.slice(width)}if(!word)continue;if((line?line.length+1:0)+word.length>width){if(line)out.push(line);line=word}else line+=(line?' ':'')+word}if(line)out.push(line);return out};
  const center=s=>{const line=clean(s).slice(0,width);return ' '.repeat(Math.max(0,Math.floor((width-line.length)/2)))+line};
- const titleWidth=width; const wrapTitle=s=>{const words=clean(s).split(/\s+/).filter(Boolean),out=[];let line='';for(let word of words){while(word.length>titleWidth){if(line){out.push(line);line=''}out.push(word.slice(0,titleWidth));word=word.slice(titleWidth)}if(!word)continue;if((line?line.length+1:0)+word.length>titleWidth){if(line)out.push(line);line=word}else line+=(line?' ':'')+word}if(line)out.push(line);return out}; const alignCommand=a=>a==='left'?t.left:a==='right'?'[RIGHT]':t.center; const alignedLines=(value,alignment)=>[alignCommand(alignment),...wrap(value)];
+ const titleWidth=width; const wrapTitle=s=>{const words=clean(s).split(/\s+/).filter(Boolean),out=[];let line='';for(let word of words){while(word.length>titleWidth){if(line){out.push(line);line=''}out.push(word.slice(0,titleWidth));word=word.slice(titleWidth)}if(!word)continue;if((line?line.length+1:0)+word.length>titleWidth){if(line)out.push(line);line=word}else line+=(line?' ':'')+word}if(line)out.push(line);return out}; const alignCommand=a=>a==='left'?escposTokens.left:a==='right'?'[RIGHT]':escposTokens.center; const alignedLines=(value,alignment)=>[alignCommand(alignment),...wrap(value)];
  const columns=(values,widths)=>{let out=values.map((v,i)=>clean(v).slice(0,widths[i]));return out.map((v,i)=>i===0?v.padEnd(widths[i]):i===2?v.padStart(widths[i]):v.padStart(widths[i])).join(' ').slice(0,width)};
  const pair=(left,right)=>{const r=clean(right).slice(0,Math.floor(width*.42));const l=clean(left).slice(0,width-r.length-1);return l.padEnd(width-r.length-1)+' '+r};
  const date=new Date(order.date);
  const lines=[];
  if(type==='kitchen'){
-  lines.push(t.center,t.boldOn,...wrap('KITCHEN RECEIPT'),t.boldOff,t.left,rule);
+  lines.push(escposTokens.center,escposTokens.boldOn,...wrap('KITCHEN RECEIPT'),escposTokens.boldOff,escposTokens.left,rule);
   lines.push(...wrap('Order:- '+order.id),...wrap('Date:- '+date.toLocaleString()),...wrap('Type:- '+(order.serviceType||'Dine-in')));
   if(order.serviceType==='Dine-in'&&order.tableNumber)lines.push(...wrap('Table:- '+order.tableNumber));
   if(order.serviceType==='Delivery'){lines.push(...wrap('Phone:- '+(order.deliveryPhone||'-')),...wrap('Address:- '+(order.deliveryAddress||'-')))}
-  lines.push(rule,t.boldOn,columns(['Item','QTY'],[width-7,6]),t.boldOff,'-'.repeat(width));
+  lines.push(rule,escposTokens.boldOn,columns(['Item','QTY'],[width-7,6]),escposTokens.boldOff,'-'.repeat(width));
   for(const item of order.items||[]){
    const name=(item.name||'')+(item.variant?' ('+item.variant+')':'');
    const nameLines=wrap(name);
@@ -99,8 +99,8 @@ export default function App(){
  }
  const headerItems=[{key:'title',text:storeName,alignment:receiptAlignment},{key:'address',text:storeAddress,alignment:addressAlignment},{key:'phone',text:storePhones,alignment:phoneAlignment}].sort((a,b)=>receiptHeaderLayout[a.key].y-receiptHeaderLayout[b.key].y);
  let cursorLine=0;const headerLineCount=13;
- for(const item of headerItems){const p=receiptHeaderLayout[item.key];const targetLine=Math.max(cursorLine,Math.min(headerLineCount-1,Math.round(p.y/100*headerLineCount)));while(cursorLine<targetLine){lines.push('');cursorLine++}const xChars=Math.max(0,Math.min(width-1,Math.round(p.x/100*width)));const maxChars=Math.max(1,Math.min(width-xChars,Math.round(p.w/100*width)));const itemLines=(item.key==='title'?wrapTitle(item.text):wrap(item.text)).map(line=>line.slice(0,maxChars));lines.push(t.left,...(item.key==='title'&&Number(receiptTitleSize)>=20?[t.tallOn]:[]),...itemLines.map(line=>' '.repeat(xChars)+line),...(item.key==='title'&&Number(receiptTitleSize)>=20?[t.tallOff]:[]),t.left);cursorLine=Math.min(headerLineCount,targetLine+Math.max(1,Math.min(5,Math.round(p.h/100*headerLineCount))))}
- while(cursorLine<headerLineCount){lines.push('');cursorLine++}lines.push(t.left);
+ for(const item of headerItems){const p=receiptHeaderLayout[item.key];const targetLine=Math.max(cursorLine,Math.min(headerLineCount-1,Math.round(p.y/100*headerLineCount)));while(cursorLine<targetLine){lines.push('');cursorLine++}const xChars=Math.max(0,Math.min(width-1,Math.round(p.x/100*width)));const maxChars=Math.max(1,Math.min(width-xChars,Math.round(p.w/100*width)));const itemLines=(item.key==='title'?wrapTitle(item.text):wrap(item.text)).map(line=>line.slice(0,maxChars));lines.push(escposTokens.left,...(item.key==='title'&&Number(receiptTitleSize)>=20?[escposTokens.tallOn]:[]),...itemLines.map(line=>' '.repeat(xChars)+line),...(item.key==='title'&&Number(receiptTitleSize)>=20?[escposTokens.tallOff]:[]),escposTokens.left);cursorLine=Math.min(headerLineCount,targetLine+Math.max(1,Math.min(5,Math.round(p.h/100*headerLineCount))))}
+ while(cursorLine<headerLineCount){lines.push('');cursorLine++}lines.push(escposTokens.left);
  if(showHeaderDivider)lines.push(rule);
  lines.push(...wrap('ORDER: '+order.id),...wrap('DATE: '+date.toLocaleString()),...wrap('TYPE: '+(order.serviceType||'Dine-in')));
  if(order.serviceType==='Dine-in'&&order.tableNumber)lines.push(...wrap('TABLE: '+order.tableNumber));
@@ -108,7 +108,7 @@ export default function App(){
  if(order.deliveryPhone||order.serviceType==='Delivery')lines.push(...wrap('PHONE: '+(order.deliveryPhone||'-')));
  if(order.deliveryAddress||order.serviceType==='Delivery')lines.push(...wrap('ADDRESS: '+(order.deliveryAddress||'-')));
  if(order.orderNote)lines.push(...wrap('NOTE: '+order.orderNote));
- lines.push(rule,t.boldOn,columns(['ITEMS','PRICE','QTY','TOTAL'],[21,9,5,10]),t.boldOff,rule);
+ lines.push(rule,escposTokens.boldOn,columns(['ITEMS','PRICE','QTY','TOTAL'],[21,9,5,10]),escposTokens.boldOff,rule);
  const widths=[21,9,5,10];
  for(const item of order.items||[]){
   const name=(item.name||'')+(item.variant?' ('+item.variant+')':'');
@@ -118,7 +118,7 @@ export default function App(){
   if(item.modifiers)lines.push(...wrap('  '+(Array.isArray(item.modifiers)?item.modifiers.join(', '):item.modifiers)));
   if(item.note||item.notes)lines.push(...wrap('  NOTE: '+(item.note||item.notes)));
  }
- lines.push(rule,pair('Subtotal',money(order.subtotal)),pair('Discount',money(order.discount)),pair('GST',money(order.tax)),pair('Service',money(order.serviceCharges||0)),rule,t.boldOn,pair('Total',money(order.total)),t.boldOff,pair('Payment',order.payment||'-'),rule,t.center,t.boldOn,...wrap('Thank You For Your Visit!'),t.boldOff,t.left);
+ lines.push(rule,pair('Subtotal',money(order.subtotal)),pair('Discount',money(order.discount)),pair('GST',money(order.tax)),pair('Service',money(order.serviceCharges||0)),rule,escposTokens.boldOn,pair('Total',money(order.total)),escposTokens.boldOff,pair('Payment',order.payment||'-'),rule,escposTokens.center,escposTokens.boldOn,...wrap('Thank You For Your Visit!'),escposTokens.boldOff,escposTokens.left);
  return lines.join('\n')+'\n';
 }
 function shareReceiptWhatsApp(type=receiptType){
@@ -289,8 +289,19 @@ async function makeReceiptRasterPayload(){
  return {rasterBase64:btoa(binary),rasterWidthBytes:bytesPerRow,rasterHeight:height};
 }
 
-async function printReceipt(type=receiptType){try{const kitchenOnly=['kitchen staff','kitchen_staff','chef'].some(role=>String(signedInStaff?.role||'').toLowerCase().includes(role));if(kitchenOnly&&type!=='kitchen'){notify('Kitchen staff can print kitchen receipts only');return}const order=orders.find(o=>o.id===String(modal).slice(8));if(!order){notify('Open a receipt before printing');return}if(printerMethod==='bluetooth'){if(!window.malikPOS?.printEscpos){notify('Direct Bluetooth printing is available in the installed Windows app only');return}const raster=await makeReceiptRasterPayload();const r=await window.malikPOS.printEscpos({port:printerPort,baudRate:Number(printerBaudRate)||9600,...r});if(!r.success)notify('Bluetooth print failed: '+(r.error||'unknown error'));else notify((type==='kitchen'?'Kitchen':'Customer')+' receipt image sent to Bluetooth/COM printer');return}if(window.malikPOS?.print){const chars=printerWidth==='58'?30:42;const wrapped=value=>Math.max(1,Math.ceil(String(value||'').length/chars));const itemLines=(order.items||[]).reduce((n,item)=>n+1+wrapped((item.name||'')+(item.variant?' ('+item.variant+')':''))+((item.note||item.notes||item.modifiers)?1:0),0);const contentLines=18+wrapped(storeName)+wrapped(storeAddress)+wrapped(storePhones)+wrapped(new Date(order.date).toLocaleString())+wrapped(order.customer||'Walk-in Customer')+wrapped(order.deliveryAddress||'')+wrapped(order.orderNote||'')+itemLines+(type==='customer'?7:3);const pageHeight=Math.max(55000,Math.min(300000,Math.ceil(contentLines*2800+10000)));const r=await window.malikPOS.print({deviceName:printerMethod==='direct'?selectedPrinter:'',pageSize:printerWidth+'mm',pageHeightMicrons:pageHeight,silent:printerMethod==='direct'});if(!r.success)notify('Print cancelled or failed: '+(r.error||'unknown error'));else notify((type==='kitchen'?'Kitchen':'Customer')+' receipt sent to printer')}else window.print()}catch(e){notify('Printing failed: '+(e?.message||'unknown error'))}}
-
+async function printReceipt(type=receiptType){
+ const kitchenOnly=['kitchen staff','kitchen_staff','chef'].some(role=>String(signedInStaff?.role||'').toLowerCase().includes(role));
+ if(kitchenOnly&&type!=='kitchen'){notify('Kitchen staff can print kitchen receipts only');return}
+ const order=orders.find(o=>o.id===String(modal).slice(8));
+ if(!order){notify('Open a receipt before printing');return}
+ const failures=[];
+ const attemptNative=async()=>{if(!window.malikPOS?.print)throw new Error('Windows printer bridge is unavailable');const chars=printerWidth==='58'?30:42;const wrapped=value=>Math.max(1,Math.ceil(String(value||'').length/chars));const itemLines=(order.items||[]).reduce((n,item)=>n+1+wrapped((item.name||'')+(item.variant?' ('+item.variant+')':''))+((item.note||item.notes||item.modifiers)?1:0),0);const contentLines=18+wrapped(storeName)+wrapped(storeAddress)+wrapped(storePhones)+wrapped(new Date(order.date).toLocaleString())+wrapped(order.customer||'Walk-in Customer')+wrapped(order.deliveryAddress||'')+wrapped(order.orderNote||'')+itemLines+(type==='customer'?7:3);const pageHeight=Math.max(55000,Math.min(300000,Math.ceil(contentLines*2800+10000)));const result=await window.malikPOS.print({deviceName:printerMethod==='direct'?selectedPrinter:'',pageSize:printerWidth+'mm',pageHeightMicrons:pageHeight,silent:printerMethod==='direct'});if(!result?.success)throw new Error(result?.error||'Windows printer rejected the job');return true};
+ if(printerMethod==='bluetooth'){
+  try{if(!window.malikPOS?.printEscpos)throw new Error('Direct COM printing is available in the installed Windows app only');const raster=await makeReceiptRasterPayload();const result=await window.malikPOS.printEscpos({port:printerPort,baudRate:Number(printerBaudRate)||9600,...raster});if(!result?.success)throw new Error(result?.error||'COM printer rejected the image');notify((type==='kitchen'?'Kitchen':'Customer')+' receipt printed using direct COM image mode');return}catch(error){failures.push('Direct COM: '+(error?.message||'failed'))}
+ }
+ try{await attemptNative();notify((type==='kitchen'?'Kitchen':'Customer')+' receipt printed using Windows printer fallback'+(failures.length?' (direct method failed)':''));return}catch(error){failures.push('Windows printer: '+(error?.message||'failed'))}
+ try{window.print();notify('Opened the system print dialog as the final fallback. Earlier attempt: '+failures.join('; ').slice(0,180))}catch(error){notify('All print methods failed: '+[...failures,error?.message||'system print dialog failed'].join('; ').slice(0,260))}
+}
  useEffect(()=>{if(!printerAutoConnect)return;let active=true;let busy=false;const checkSavedPrinter=async()=>{if(busy||!active)return;busy=true;try{if(navigator.bluetooth?.getDevices){const devices=await navigator.bluetooth.getDevices();const saved=localStorage.getItem('malik-printerDeviceId');const device=devices.find(d=>d.id===saved);if(device?.gatt&&!device.gatt.connected){await device.gatt.connect();if(active)setPrinterStatus('Bluetooth printer connected: '+(device.name||'Saved printer'))}}if(window.malikPOS?.discoverBluetooth&&printerMethod==='bluetooth'){const scan=await window.malikPOS.discoverBluetooth();if(!active)return;const ports=scan.ports||[];const available=ports.some(p=>String(p.port||'').toUpperCase()===String(printerPort||'').toUpperCase());if(available)setPrinterStatus('Saved printer port '+printerPort+' is available. Malik POS will reopen it automatically for each print.');else setPrinterStatus('Waiting for saved printer on '+printerPort+'… Turn the printer on and keep it paired in Windows Bluetooth settings.')}}catch{}finally{busy=false}};checkSavedPrinter();const timer=setInterval(checkSavedPrinter,10000);return()=>{active=false;clearInterval(timer)}},[printerAutoConnect,printerMethod,printerPort]);
  const [currency,setCurrency]=useState('PKR');
  useEffect(()=>{if(['kitchen staff','kitchen_staff','chef'].some(role=>String(signedInStaff?.role||'').toLowerCase().includes(role))&&modal.startsWith('receipt:'))setReceiptType('kitchen')},[signedInStaff?.role,modal]);
