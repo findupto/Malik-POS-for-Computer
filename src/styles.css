@@ -166,3 +166,24 @@
  .receipt-align-left .receipt-business-details{align-items:flex-start!important}
  .receipt-editor-preview{display:none!important}
 }
+
+
+/* Receipt designer: compact header with independent address/phone alignment */
+.receipt-modal .receipt-rule{margin:2px 0!important;border-top-width:1px!important}
+.receipt-modal .receipt-top h2{font-size:var(--receipt-title-size,15pt)!important;line-height:1.08!important;margin:0!important;letter-spacing:0!important;white-space:normal!important;overflow-wrap:anywhere!important;word-break:break-word!important}
+.receipt-modal .receipt-business-details{gap:var(--header-gap,0mm)!important;line-height:1.12!important;margin:0!important;padding:0!important}
+.receipt-modal .receipt-address-line{text-align:var(--address-alignment,center)!important;width:100%!important;display:block!important}
+.receipt-modal .receipt-phone-line{text-align:var(--phone-alignment,center)!important;width:100%!important;display:block!important}
+.receipt-modal .receipt-order-badge{margin-top:2px!important}
+.receipt-editor-preview{gap:var(--header-gap,0mm)!important}
+.receipt-editor-preview .preview-address{text-align:var(--address-alignment,center)!important}
+.receipt-editor-preview .preview-phone{text-align:var(--phone-alignment,center)!important}
+.order-filter-row{margin:12px 0;align-items:end}
+.order-filter-row .field-label{display:block;margin-bottom:6px}
+@media print{
+ .receipt-modal .receipt-top h2{font-size:var(--receipt-title-size,15pt)!important;line-height:1.08!important;margin:0!important;letter-spacing:0!important;white-space:normal!important;overflow-wrap:anywhere!important;word-break:break-word!important}
+ .receipt-modal .receipt-rule{margin:2px 0!important;border-top-width:1px!important}
+ .receipt-modal .receipt-business-details{gap:var(--header-gap,0mm)!important;line-height:1.12!important;margin:0!important;padding:0!important}
+ .receipt-modal .receipt-address-line{text-align:var(--address-alignment,center)!important}
+ .receipt-modal .receipt-phone-line{text-align:var(--phone-alignment,center)!important}
+}
