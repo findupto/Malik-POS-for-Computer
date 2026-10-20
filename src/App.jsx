@@ -93,7 +93,7 @@ export default function App(){
    if(item.note||item.notes)lines.push(...wrap('  NOTE: '+(item.note||item.notes)));
   }
   lines.push(rule,...wrap('Note:- '+(order.orderNote||'20 Minutes to Ready Order')));
-  return lines.join('\\n')+'\\n\\n\\n';
+  return lines.join('\n')+'\n\n\n';
  }
  lines.push(t.center,t.boldOn,t.doubleOn,...wrap(storeName).map(center),t.doubleOff,t.boldOff,t.left);
  lines.push(...wrap(storeAddress).map(center));
