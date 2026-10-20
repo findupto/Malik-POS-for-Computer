@@ -1,5 +1,6 @@
 const { app, BrowserWindow, shell, ipcMain, dialog } = require('electron');
 const { execFile } = require('node:child_process');
+const fs = require('node:fs/promises');
 const path = require('node:path');
 const isDev = !app.isPackaged;
 function createWindow() {
@@ -59,9 +60,12 @@ ipcMain.handle('malik-pos:print-escpos', async (_event, options = {}) => {
     if (raster.length !== widthBytes * height || raster.length > 1200000) return { success: false, error: 'Receipt image is too large or incomplete.' };
     const xL = widthBytes & 0xff, xH = (widthBytes >> 8) & 0xff, yL = height & 0xff, yH = (height >> 8) & 0xff;
     const header = Buffer.from([0x1b,0x40,0x1b,0x61,0x00,0x1d,0x76,0x30,0x00,xL,xH,yL,yH]);
-    const payload = Buffer.concat([header,raster,Buffer.from([0x0a,0x0a,0x1d,0x56,0x00])]).toString('base64');
-    const script = "$ErrorActionPreference='Stop';$portName='" + port + "';$bytes=[Convert]::FromBase64String('" + payload + "');$serial=[System.IO.Ports.SerialPort]::new($portName," + baud + ",'None',8,'One');$serial.WriteTimeout=10000;$serial.Open();try{for($i=0;$i -lt $bytes.Length;$i+=2048){$count=[Math]::Min(2048,$bytes.Length-$i);$serial.Write($bytes,$i,$count)}}finally{$serial.Close()}";
-    return await new Promise(resolve => execFile('powershell.exe', ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command',script], { windowsHide:true, timeout:180000, maxBuffer:4096 }, (error,stdout,stderr) => resolve(error ? { success:false, error:(String(stderr||error.message||error) .split(/\r?\n/).find(line=>/timed out|access denied|cannot open|exception calling/i.test(line))||'Image printing failed. Check the selected outgoing COM port and printer compatibility.').trim().slice(0,240) } : { success:true })));
+    const payload = Buffer.concat([header,raster,Buffer.from([0x0a,0x0a,0x1d,0x56,0x00])]);
+    const payloadFile = path.join(app.getPath('temp'), 'malik-pos-print-' + process.pid + '-' + Date.now() + '.bin');
+    try { await fs.writeFile(payloadFile, payload); } catch (error) { return { success:false, error:'Could not prepare receipt data: ' + String(error && error.message || error).slice(0,180) }; }
+    const safeFile = payloadFile.replace(/'/g, "''");
+    const script = "$ErrorActionPreference='Stop';$portName='" + port + "';$bytes=[System.IO.File]::ReadAllBytes('" + safeFile + "');$serial=[System.IO.Ports.SerialPort]::new($portName," + baud + ",'None',8,'One');$serial.WriteTimeout=10000;$serial.Open();try{for($i=0;$i -lt $bytes.Length;$i+=2048){$count=[Math]::Min(2048,$bytes.Length-$i);$serial.Write($bytes,$i,$count)}}finally{$serial.Close()}";
+    return await new Promise(resolve => execFile('powershell.exe', ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command',script], { windowsHide:true, timeout:180000, maxBuffer:4096 }, async (error,stdout,stderr) => { try { await fs.unlink(payloadFile); } catch {} resolve(error ? { success:false, error:(String(stderr||error.message||error).split(/\r?\n/).find(line=>/timed out|access denied|cannot open|exception calling/i.test(line))||'Image printing failed. Check the selected outgoing COM port and printer compatibility.').trim().slice(0,240) } : { success:true }); }));
   }
   const text = String(options.text || '').slice(0, 30000);
   if (!text.replace(/\[[A-Z_]+\]/g, '').trim()) return { success: false, error: 'Receipt content is empty.' };
@@ -87,9 +91,12 @@ ipcMain.handle('malik-pos:print-escpos', async (_event, options = {}) => {
     }
   }
   buffers.push(Buffer.from([0x0a, 0x1d, 0x56, 0x00]));
-  const payload = Buffer.concat(buffers).toString('base64');
-  const script = "$ErrorActionPreference='Stop';$portName='" + port + "';$bytes=[Convert]::FromBase64String('" + payload + "');$serial=[System.IO.Ports.SerialPort]::new($portName," + baud + ",'None',8,'One');$serial.WriteTimeout=2000;$serial.Open();try{$serial.Write($bytes,0,$bytes.Length)}finally{$serial.Close()}";
-  return await new Promise(resolve => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script], { windowsHide: true, timeout: 8000, maxBuffer: 4096 }, (error, stdout, stderr) => resolve(error ? { success: false, error: (String(stderr || error.message || error).split(/\r?\n/).find(line => /timed out|access denied|cannot open|exception calling/i.test(line)) || 'Printer connection timed out. Check the selected outgoing COM port, ensure no other app is using it, and verify the printer is awake and paired.').trim().slice(0, 240) } : { success: true })));
+  const payload = Buffer.concat(buffers);
+  const payloadFile = path.join(app.getPath('temp'), 'malik-pos-print-' + process.pid + '-' + Date.now() + '.bin');
+  try { await fs.writeFile(payloadFile, payload); } catch (error) { return { success:false, error:'Could not prepare receipt data: ' + String(error && error.message || error).slice(0,180) }; }
+  const safeFile = payloadFile.replace(/'/g, "''");
+  const script = "$ErrorActionPreference='Stop';$portName='" + port + "';$bytes=[System.IO.File]::ReadAllBytes('" + safeFile + "');$serial=[System.IO.Ports.SerialPort]::new($portName," + baud + ",'None',8,'One');$serial.WriteTimeout=2000;$serial.Open();try{$serial.Write($bytes,0,$bytes.Length)}finally{$serial.Close()}";
+  return await new Promise(resolve => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script], { windowsHide: true, timeout: 8000, maxBuffer: 4096 }, async (error, stdout, stderr) => { try { await fs.unlink(payloadFile); } catch {} resolve(error ? { success: false, error: (String(stderr || error.message || error).split(/\r?\n/).find(line => /timed out|access denied|cannot open|exception calling/i.test(line)) || 'Printer connection timed out. Check the selected outgoing COM port, ensure no other app is using it, and verify the printer is awake and paired.').trim().slice(0, 240) } : { success: true }); }));
 });
 ipcMain.handle('malik-pos:print', async (event, options = {}) => {
   const win = BrowserWindow.fromWebContents(event.sender);
