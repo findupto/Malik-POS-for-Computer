@@ -268,18 +268,25 @@ function shareReceiptWhatsApp(type=receiptType){
  var whatsAppWindow=window.open('about:blank','_blank');
 }
 async function makeReceiptRasterPayload(){
- const source=document.querySelector('.receipt-modal');
+ const source=document.querySelector('.receipt-modal .receipt-full-layout');
  if(!source)throw new Error('Open the receipt preview before printing.');
  const clone=source.cloneNode(true);
- clone.querySelectorAll('.receipt-switch,.receipt-share-actions,.modal-actions').forEach(node=>node.remove());
  const inlineTree=(original,copied)=>{if(original.nodeType!==1||copied.nodeType!==1)return;const computed=getComputedStyle(original);let css='';for(let i=0;i<computed.length;i++){const key=computed[i];css+=key+':'+computed.getPropertyValue(key)+';'}copied.setAttribute('style',(copied.getAttribute('style')||'')+';'+css);const os=original.children,cs=copied.children;for(let i=0;i<Math.min(os.length,cs.length);i++)inlineTree(os[i],cs[i])};
  inlineTree(source,clone);
- clone.style.width=printerWidth==='58'?'58mm':'80mm';clone.style.maxWidth='none';clone.style.height='auto';clone.style.margin='0';clone.style.boxShadow='none';clone.style.border='0';clone.style.borderRadius='0';clone.style.position='static';clone.style.overflow='visible';clone.style.background='#fff';
+ const set=(node,styles)=>Object.entries(styles).forEach(([key,value])=>node.style.setProperty(key,value,'important'));
+ set(clone,{width:printerWidth==='58'?'58mm':'80mm', 'max-width':'none',height:'auto','min-height':'0',margin:'0',padding:'1mm','box-shadow':'none',border:'0','border-radius':'0',position:'relative',overflow:'visible',background:'#fff','box-sizing':'border-box'});
+ clone.querySelectorAll('.receipt-layout-part').forEach(node=>set(node,{position:'relative',inset:'auto',left:'auto',top:'auto',width:'100%',height:'auto','min-height':'0','max-height':'none','max-width':'100%',overflow:'visible',display:'block',margin:'0',padding:'1mm 0','box-sizing':'border-box','break-inside':'avoid'}));
+ clone.querySelectorAll('.receipt-layout-header .receipt-business-details,.receipt-layout-header .receipt-free-print-canvas').forEach(node=>set(node,{position:'relative',height:'auto','min-height':'0',width:'100%',overflow:'visible',margin:'0',padding:'0'}));
+ clone.querySelectorAll('.receipt-free-item').forEach(node=>set(node,{position:'relative',left:'auto',top:'auto',width:'100%',height:'auto','min-height':'0','max-height':'none',overflow:'visible','font-size':'inherit','text-align':'center','margin':'0','padding':'0'}));
  const widthDots=printerWidth==='58'?384:576;
- const sourceRect=source.getBoundingClientRect(),sourceWidth=Math.max(1,sourceRect.width),sourceHeight=Math.max(1,sourceRect.height),targetHeight=Math.max(1,Math.round(sourceHeight*widthDots/sourceWidth));
- const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+widthDots+'" height="'+targetHeight+'" viewBox="0 0 '+sourceWidth+' '+sourceHeight+'"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml">'+new XMLSerializer().serializeToString(clone)+'</div></foreignObject></svg>';
+ const sourceWidth=widthDots, cssWidth=printerWidth==='58'?58:80;
+ const measure=document.createElement('div');measure.style.cssText='position:fixed;left:-10000px;top:0;width:'+cssWidth+'mm;box-sizing:border-box;background:#fff;';measure.appendChild(clone);document.body.appendChild(measure);
+ const measuredHeight=Math.max(1,Math.ceil(clone.scrollHeight||measure.scrollHeight||400));
+ const sourceHeight=Math.min(12000,Math.max(measuredHeight,Math.ceil(measure.getBoundingClientRect().height)));
+ const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+sourceWidth+'" height="'+sourceHeight+'" viewBox="0 0 '+sourceWidth+' '+sourceHeight+'"><foreignObject width="'+sourceWidth+'" height="'+sourceHeight+'"><div xmlns="http://www.w3.org/1999/xhtml" style="width:'+sourceWidth+'px;overflow:visible;background:#fff">'+new XMLSerializer().serializeToString(clone)+'</div></foreignObject></svg>';
+ document.body.removeChild(measure);
  const image=new Image();image.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
- await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error('Could not render the receipt preview as a printer image.'))});
+ await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error('Could not render the receipt content as a printer image.'))});
  const height=Math.max(1,Math.min(12000,image.naturalHeight||image.height));
  const canvas=document.createElement('canvas');canvas.width=widthDots;canvas.height=height;
  const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.fillStyle='#fff';ctx.fillRect(0,0,widthDots,height);ctx.drawImage(image,0,0,widthDots,height);
@@ -328,7 +335,7 @@ async function printReceipt(type=receiptType){
  function beginHeaderDrag(e,item,mode='move'){e.preventDefault();e.stopPropagation();const canvas=e.currentTarget.closest('.header-free-canvas');if(!canvas)return;const rect=canvas.getBoundingClientRect();e.currentTarget.setPointerCapture?.(e.pointerId);setHeaderDrag({item,mode,startX:e.clientX,startY:e.clientY,rectW:rect.width,rectH:rect.height,original:{...receiptHeaderLayout[item]}})}
  function updateHeaderDrag(e){if(!headerDrag)return;const dx=(e.clientX-headerDrag.startX)/headerDrag.rectW*100,dy=(e.clientY-headerDrag.startY)/headerDrag.rectH*100;setReceiptHeaderLayout(old=>{const p=headerDrag.original;const next=headerDrag.mode==='resize'?{...p,w:Math.max(8,Math.min(100-p.x,p.w+dx)),h:Math.max(5,Math.min(100-p.y,p.h+dy))}:{...p,x:Math.max(0,Math.min(100-p.w,p.x+dx)),y:Math.max(0,Math.min(100-p.h,p.y+dy))};return {...old,[headerDrag.item]:next}})}
  function headerItemStyle(item){const p=receiptHeaderLayout[item];return {left:p.x+'%',top:p.y+'%',width:p.w+'%',height:p.h+'%',fontSize:(p.fontSize|| (item==='title'?Math.max(8,Math.min(34,p.h*1.2)):Math.max(7,Math.min(20,p.h*.62))))+'px',fontWeight:p.bold?'700':undefined,textAlign:item==='title'?receiptAlignment:item==='address'?addressAlignment:item==='phone'?phoneAlignment:'left'}}
- function renderFreeHeaderItem(item,preview=false){const p=receiptHeaderLayout[item]||{};return <div key={item} className={'receipt-free-item receipt-free-'+item+(preview?' receipt-free-preview':'')} style={headerItemStyle(item)}>{item==='logo'?(receiptLogo?<img src={receiptLogo} alt="Receipt logo" style={{display:'block',width:'100%',height:'100%',objectFit:'contain'}}/>:<span style={{fontSize:10,opacity:.6,textAlign:'center',display:'block'}}>ADD LOGO</span>):item.startsWith('custom-')?<span style={{fontWeight:p.bold?'700':'400',fontSize:(Number(p.fontSize)||12)+'px',whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{p.text||''}</span>:renderReceiptHeaderItem(item,preview)}</div>}
+ function renderFreeHeaderItem(item,preview=false){const p=receiptHeaderLayout[item]||{};if(item==='logo'&&!receiptLogo)return null;return <div key={item} className={'receipt-free-item receipt-free-'+item+(preview?' receipt-free-preview':'')} style={headerItemStyle(item)}>{item==='logo'?<img src={receiptLogo} alt="Receipt logo" style={{display:'block',width:'100%',height:'100%',objectFit:'contain'}}/>:item.startsWith('custom-')?<span style={{fontWeight:p.bold?'700':'400',fontSize:(Number(p.fontSize)||12)+'px',whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{p.text||''}</span>:renderReceiptHeaderItem(item,preview)}</div>}
 
  function receiptPartKeys(){return ['header','order','meta','itemHeading','items','totals','footer',...Object.keys(receiptFullLayout).filter(k=>k.startsWith('custom-'))]}
  function receiptPartLabel(key){return ({header:'STORE HEADER',order:'ORDER NUMBER',meta:'ORDER DETAILS',itemHeading:'ITEM COLUMN HEADERS',items:'ITEM LIST',totals:'TOTALS & PAYMENT',footer:'FOOTER'})[key]||(receiptFullLayout[key]?.text?'CUSTOM TEXT':'CUSTOM TEXT')}
