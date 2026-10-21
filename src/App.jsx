@@ -267,7 +267,7 @@ function shareReceiptWhatsApp(type=receiptType){
  }catch(error){if(whatsAppWindow&&!whatsAppWindow.closed)whatsAppWindow.close();notify('Receipt image failed: '+(error?.message||'unknown error'))}
  var whatsAppWindow=window.open('about:blank','_blank');
 }
-async async function makeReceiptRasterPayload(order,type='customer'){
+async function makeReceiptRasterPayload(order,type='customer'){
  if(!order)throw new Error('Receipt order is missing.');
  const widthDots=printerWidth==='58'?384:576;
  const html=buildReferenceReceiptHtml(order,type);
