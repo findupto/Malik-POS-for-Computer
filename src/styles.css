@@ -168,6 +168,28 @@
 }
 
 
+/* Thermal printer final sizing and visible header safeguards. */
+@media print{
+ @page{size:80mm auto;margin:0!important}
+ html,body,#root,.app-shell,.modal-backdrop,.receipt-modal{width:80mm!important;min-width:80mm!important;max-width:80mm!important;margin:0!important;padding:0!important;overflow:visible!important;background:#fff!important}
+ .modal-backdrop{display:block!important;position:static!important}
+ .receipt-modal{width:80mm!important;min-width:80mm!important;max-width:80mm!important;box-sizing:border-box!important;padding:2mm 3mm!important;transform:none!important;zoom:1!important}
+ .receipt-full-layout{display:flex!important;flex-direction:column!important;width:100%!important;min-width:0!important;max-width:100%!important;overflow:visible!important;transform:none!important;zoom:1!important}
+ .receipt-layout-header{display:block!important;visibility:visible!important;opacity:1!important;order:0!important;width:100%!important}
+ .receipt-layout-header .receipt-top,.receipt-layout-header .receipt-business-details,.receipt-layout-header .receipt-free-print-canvas{display:block!important;visibility:visible!important;opacity:1!important;width:100%!important;height:auto!important;min-height:0!important;overflow:visible!important}
+ .receipt-layout-header .receipt-free-print-canvas{display:flex!important;flex-direction:column!important;align-items:stretch!important;gap:1mm!important}
+ .receipt-layout-header .receipt-free-item{display:block!important;visibility:visible!important;opacity:1!important;position:static!important;inset:auto!important;width:100%!important;height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;box-sizing:border-box!important}
+ .receipt-layout-header .receipt-free-title{font-size:26pt!important;line-height:1.05!important;text-align:center!important;font-weight:800!important;white-space:normal!important;overflow-wrap:anywhere!important}
+ .receipt-layout-header .receipt-free-title h2,.receipt-layout-header .receipt-top h2{display:block!important;visibility:visible!important;font-size:26pt!important;line-height:1.05!important;text-align:center!important;font-weight:800!important;margin:0 0 2mm!important}
+ .receipt-layout-header .receipt-free-address,.receipt-layout-header .receipt-free-phone{font-size:10pt!important;line-height:1.35!important;text-align:left!important;white-space:normal!important;overflow-wrap:anywhere!important}
+ .receipt-layout-header .receipt-free-logo{display:none!important}
+ .receipt-layout-part{float:none!important;clear:both!important;break-inside:auto!important;page-break-inside:auto!important}
+ .receipt-layout-items,.receipt-layout-totals,.receipt-layout-meta,.receipt-layout-order,.receipt-layout-item-heading,.receipt-layout-footer{width:100%!important;max-width:100%!important;min-width:0!important;overflow:visible!important}
+ .receipt-meta{grid-template-columns:minmax(0,1fr) minmax(0,2fr)!important}
+ .receipt-item-heading,.receipt-customer-row{grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,.65fr) minmax(0,1fr)!important;width:100%!important}
+ .receipt-customer-row>*{min-width:0!important;white-space:normal!important;overflow-wrap:anywhere!important}
+}
+
 /* Reference receipt style: fixed, predictable layout; no designer coordinates in print. */
 @media print{
  .receipt-modal{width:calc(var(--paper-width,80mm) - 2mm)!important;max-width:calc(var(--paper-width,80mm) - 2mm)!important;padding:2mm!important;font-family:Arial,sans-serif!important;color:#000!important}
