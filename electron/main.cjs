@@ -98,6 +98,23 @@ ipcMain.handle('malik-pos:print-escpos', async (_event, options = {}) => {
   const script = "$ErrorActionPreference='Stop';$portName='" + port + "';$bytes=[System.IO.File]::ReadAllBytes('" + safeFile + "');$serial=[System.IO.Ports.SerialPort]::new($portName," + baud + ",'None',8,'One');$serial.WriteTimeout=2000;$serial.Open();try{$serial.Write($bytes,0,$bytes.Length)}finally{$serial.Close()}";
   return await new Promise(resolve => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script], { windowsHide: true, timeout: 8000, maxBuffer: 4096 }, async (error, stdout, stderr) => { try { await fs.unlink(payloadFile); } catch {} resolve(error ? { success: false, error: (String(stderr || error.message || error).split(/\r?\n/).find(line => /timed out|access denied|cannot open|exception calling/i.test(line)) || 'Printer connection timed out. Check the selected outgoing COM port, ensure no other app is using it, and verify the printer is awake and paired.').trim().slice(0, 240) } : { success: true }); }));
 });
+ipcMain.handle('malik-pos:print-html', async (event, options = {}) => {
+  const { BrowserWindow } = require('electron');
+  if (typeof options.html !== 'string' || !options.html.includes('<body>')) return { success: false, error: 'Receipt HTML is missing' };
+  const width = options.pageSize === '58mm' ? 58000 : 80000;
+  const height = Math.max(45000, Math.min(300000, Number(options.pageHeightMicrons) || 180000));
+  const printWin = new BrowserWindow({ show: false, width: Math.round(width / 264.583), height: 1200, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false } });
+  try {
+    await printWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(options.html));
+    await new Promise(resolve => setTimeout(resolve, 250));
+    return await new Promise(resolve => printWin.webContents.print({
+      silent: options.silent === true, printBackground: true,
+      deviceName: typeof options.deviceName === 'string' && options.deviceName ? options.deviceName : undefined,
+      pageSize: { width, height }
+    }, (success, failureReason) => resolve({ success, error: failureReason || '' })));
+  } catch (error) { return { success: false, error: error?.message || 'Receipt print failed' }; }
+  finally { if (!printWin.isDestroyed()) printWin.close(); }
+});
 ipcMain.handle('malik-pos:print', async (event, options = {}) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) return { success: false, error: 'Window not available' };
