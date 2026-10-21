@@ -284,7 +284,7 @@ async async function makeReceiptRasterPayload(order,type='customer'){
   body.style.width=widthDots+'px';body.style.minWidth=widthDots+'px';body.style.maxWidth=widthDots+'px';body.style.margin='0';body.style.padding='8px';body.style.boxSizing='border-box';
   const height=Math.max(1,Math.min(12000,Math.ceil(body.scrollHeight+2)));
   const css=Array.from(doc.querySelectorAll('style')).map(node=>node.textContent).join('\n');
-  const content=body.innerHTML;
+  const content=new XMLSerializer().serializeToString(body);
   const svg='<svg xmlns="http://www.w3.org/2000/svg" xmlns:xhtml="http://www.w3.org/1999/xhtml" width="'+widthDots+'" height="'+height+'" viewBox="0 0 '+widthDots+' '+height+'"><foreignObject x="0" y="0" width="'+widthDots+'" height="'+height+'"><xhtml:div style="width:'+widthDots+'px;height:'+height+'px;overflow:hidden;background:#fff;color:#000"><xhtml:style>'+css.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</xhtml:style>'+content+'</xhtml:div></foreignObject></svg>';
   const image=new Image();image.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
   await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error('Could not rasterize the new reference receipt.'))});
