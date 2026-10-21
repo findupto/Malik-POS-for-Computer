@@ -5,5 +5,6 @@ contextBridge.exposeInMainWorld('malikPOS', Object.freeze({
   openBluetoothSettings: () => ipcRenderer.invoke('malik-pos:open-bluetooth-settings'),
   discoverBluetooth: () => ipcRenderer.invoke('malik-pos:discover-bluetooth'),
   printEscpos: (options) => ipcRenderer.invoke('malik-pos:print-escpos', options || {}),
-  print: (options) => ipcRenderer.invoke('malik-pos:print', options || {})
+  print: (options) => ipcRenderer.invoke('malik-pos:print', options || {}),
+  printHtml: (options) => ipcRenderer.invoke('malik-pos:print-html', options || {})
 }));
