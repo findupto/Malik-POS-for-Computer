@@ -267,38 +267,36 @@ function shareReceiptWhatsApp(type=receiptType){
  }catch(error){if(whatsAppWindow&&!whatsAppWindow.closed)whatsAppWindow.close();notify('Receipt image failed: '+(error?.message||'unknown error'))}
  var whatsAppWindow=window.open('about:blank','_blank');
 }
-async function makeReceiptRasterPayload(){
- const source=document.querySelector('.receipt-modal .receipt-full-layout');
- if(!source)throw new Error('Open the receipt preview before printing.');
- const clone=source.cloneNode(true);
- const inlineTree=(original,copied)=>{if(original.nodeType!==1||copied.nodeType!==1)return;const computed=getComputedStyle(original);let css='';for(let i=0;i<computed.length;i++){const key=computed[i];css+=key+':'+computed.getPropertyValue(key)+';'}copied.setAttribute('style',(copied.getAttribute('style')||'')+';'+css);const os=original.children,cs=copied.children;for(let i=0;i<Math.min(os.length,cs.length);i++)inlineTree(os[i],cs[i])};
- inlineTree(source,clone);
- const set=(node,styles)=>Object.entries(styles).forEach(([key,value])=>node.style.setProperty(key,value,'important'));
- set(clone,{width:'100%', 'max-width':'none',height:'auto','min-height':'0',margin:'0',padding:'1mm','box-shadow':'none',border:'0','border-radius':'0',position:'relative',overflow:'visible',background:'#fff','box-sizing':'border-box'});
- clone.querySelectorAll('.receipt-layout-part').forEach(node=>set(node,{position:'relative',inset:'auto',left:'auto',top:'auto',width:'100%',height:'auto','min-height':'0','max-height':'none','max-width':'100%',overflow:'visible',display:'block',margin:'0',padding:'1mm 0','box-sizing':'border-box','break-inside':'avoid'}));
- clone.querySelectorAll('.receipt-layout-header .receipt-business-details,.receipt-layout-header .receipt-free-print-canvas').forEach(node=>set(node,{position:'relative',height:'auto','min-height':'0',width:'100%',overflow:'visible',margin:'0',padding:'0'}));
- clone.querySelectorAll('.receipt-layout-items .receipt-items,.receipt-layout-meta .receipt-meta,.receipt-layout-totals .receipt-totals').forEach(node=>set(node,{height:'auto','min-height':'0','max-height':'none',overflow:'visible',margin:'0',padding:'1mm 0'}));
- clone.querySelectorAll('.receipt-items>div,.receipt-totals>div').forEach(node=>set(node,{overflow:'visible','min-width':'0','max-width':'100%','white-space':'normal','overflow-wrap':'anywhere','box-sizing':'border-box'}));
- clone.querySelectorAll('.receipt-items>div>b,.receipt-totals>div>b').forEach(node=>set(node,{'min-width':'0','max-width':'45%','white-space':'normal','overflow-wrap':'anywhere','flex-shrink':'1'}));
- clone.querySelectorAll('.receipt-free-item').forEach(node=>set(node,{position:'relative',left:'auto',top:'auto',width:'100%',height:'auto','min-height':'0','max-height':'none',overflow:'visible','font-size':'inherit','text-align':'center','margin':'0','padding':'0'}));
+async async function makeReceiptRasterPayload(order,type='customer'){
+ if(!order)throw new Error('Receipt order is missing.');
  const widthDots=printerWidth==='58'?384:576;
- const sourceWidth=widthDots;
- const measure=document.createElement('div');measure.style.cssText='position:fixed;left:-10000px;top:0;width:'+widthDots+'px;box-sizing:border-box;background:#fff;';measure.appendChild(clone);document.body.appendChild(measure);
- const measuredHeight=Math.max(1,Math.ceil(clone.scrollHeight||measure.scrollHeight||400));
- const sourceHeight=Math.min(12000,Math.max(measuredHeight,Math.ceil(measure.getBoundingClientRect().height)));
- const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+sourceWidth+'" height="'+sourceHeight+'" viewBox="0 0 '+sourceWidth+' '+sourceHeight+'"><foreignObject width="'+sourceWidth+'" height="'+sourceHeight+'"><div xmlns="http://www.w3.org/1999/xhtml" style="width:'+sourceWidth+'px;overflow:visible;background:#fff">'+new XMLSerializer().serializeToString(clone)+'</div></foreignObject></svg>';
- document.body.removeChild(measure);
- const image=new Image();image.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
- await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error('Could not render the receipt content as a printer image.'))});
- const height=Math.max(1,Math.min(12000,image.naturalHeight||image.height));
- const canvas=document.createElement('canvas');canvas.width=widthDots;canvas.height=height;
- const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.fillStyle='#fff';ctx.fillRect(0,0,widthDots,height);ctx.drawImage(image,0,0,widthDots,height);
- const pixels=ctx.getImageData(0,0,widthDots,height).data,bytesPerRow=Math.ceil(widthDots/8),raster=new Uint8Array(bytesPerRow*height);
- for(let y=0;y<height;y++)for(let x=0;x<widthDots;x++){const i=(y*widthDots+x)*4,gray=(pixels[i]*299+pixels[i+1]*587+pixels[i+2]*114)/1000;if(gray<160)raster[y*bytesPerRow+(x>>3)]|=0x80>>(x&7)}
- let binary='';const chunk=0x8000;for(let i=0;i<raster.length;i+=chunk)binary+=String.fromCharCode(...raster.subarray(i,Math.min(i+chunk,raster.length)));
- return {rasterBase64:btoa(binary),rasterWidthBytes:bytesPerRow,rasterHeight:height};
+ const html=buildReferenceReceiptHtml(order,type);
+ const frame=document.createElement('iframe');
+ frame.setAttribute('aria-hidden','true');
+ frame.style.cssText='position:fixed;left:-10000px;top:0;width:'+widthDots+'px;height:100px;border:0;visibility:hidden;';
+ document.body.appendChild(frame);
+ try{
+  const doc=frame.contentDocument;
+  doc.open();doc.write(html);doc.close();
+  await new Promise((resolve,reject)=>{if(doc.readyState==='complete')resolve();else{frame.onload=resolve;setTimeout(()=>reject(new Error('Timed out rendering the receipt image.')),5000)}});
+  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+  const body=doc.body;
+  body.style.width=widthDots+'px';body.style.minWidth=widthDots+'px';body.style.maxWidth=widthDots+'px';body.style.margin='0';body.style.padding='8px';body.style.boxSizing='border-box';
+  const height=Math.max(1,Math.min(12000,Math.ceil(body.scrollHeight+2)));
+  const css=Array.from(doc.querySelectorAll('style')).map(node=>node.textContent).join('\n');
+  const content=body.innerHTML;
+  const svg='<svg xmlns="http://www.w3.org/2000/svg" xmlns:xhtml="http://www.w3.org/1999/xhtml" width="'+widthDots+'" height="'+height+'" viewBox="0 0 '+widthDots+' '+height+'"><foreignObject x="0" y="0" width="'+widthDots+'" height="'+height+'"><xhtml:div style="width:'+widthDots+'px;height:'+height+'px;overflow:hidden;background:#fff;color:#000"><xhtml:style>'+css.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</xhtml:style>'+content+'</xhtml:div></foreignObject></svg>';
+  const image=new Image();image.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
+  await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error('Could not rasterize the new reference receipt.'))});
+  const canvas=document.createElement('canvas');canvas.width=widthDots;canvas.height=height;
+  const ctx=canvas.getContext('2d',{willReadFrequently:true});if(!ctx)throw new Error('Could not create receipt raster canvas.');
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,widthDots,height);ctx.drawImage(image,0,0,widthDots,height);
+  const pixels=ctx.getImageData(0,0,widthDots,height).data,bytesPerRow=Math.ceil(widthDots/8),raster=new Uint8Array(bytesPerRow*height);
+  for(let y=0;y<height;y++)for(let x=0;x<widthDots;x++){const i=(y*widthDots+x)*4,gray=(pixels[i]*299+pixels[i+1]*587+pixels[i+2]*114)/1000;if(gray<160)raster[y*bytesPerRow+(x>>3)]|=0x80>>(x&7)}
+  let binary='';const chunk=0x8000;for(let i=0;i<raster.length;i+=chunk)binary+=String.fromCharCode(...raster.subarray(i,Math.min(i+chunk,raster.length)));
+  return {rasterBase64:btoa(binary),rasterWidthBytes:bytesPerRow,rasterHeight:height};
+ }finally{frame.remove()}
 }
-
 function escapeReceiptHtml(value){return String(value??'').replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]))}
 function buildReferenceReceiptHtml(order,type='customer'){
  const moneyText=value=>money(Number(value)||0);
@@ -320,7 +318,7 @@ async function printReceipt(type=receiptType){
  const failures=[];
  const label=type==='kitchen'?'Kitchen':'Customer';
  const attemptNative=async()=>{if(!window.malikPOS?.print)throw new Error('Windows printer bridge is unavailable');const chars=printerWidth==='58'?30:42;const wrapped=value=>Math.max(1,Math.ceil(String(value||'').length/chars));const itemLines=(order.items||[]).reduce((n,item)=>n+1+wrapped((item.name||'')+(item.variant?' ('+item.variant+')':''))+((item.note||item.notes||item.modifiers)?1:0),0);const contentLines=18+wrapped(storeName)+wrapped(storeAddress)+wrapped(storePhones)+wrapped(new Date(order.date).toLocaleString())+wrapped(order.customer||'Walk-in Customer')+wrapped(order.deliveryAddress||'')+wrapped(order.orderNote||'')+itemLines+(type==='customer'?7:3);const pageHeight=Math.max(55000,Math.min(300000,Math.ceil(contentLines*2800+10000)));const html=buildReferenceReceiptHtml(order,type);const result=await window.malikPOS.printHtml({html,deviceName:printerMethod==='direct'&&printerList.some(p=>p.name===selectedPrinter)?selectedPrinter:'',pageSize:'80mm',pageHeightMicrons:pageHeight,silent:printerMethod==='direct'});if(!result?.success)throw new Error(result?.error||'Windows printer rejected the job');return true};
- const attemptRasterCom=async()=>{if(!window.malikPOS?.printEscpos)throw new Error('Direct COM printing is available in the installed Windows app only');const raster=await makeReceiptRasterPayload();const result=await window.malikPOS.printEscpos({port:printerPort,baudRate:Number(printerBaudRate)||9600,...raster});if(!result?.success)throw new Error(result?.error||'COM printer rejected the image');return true};
+ const attemptRasterCom=async()=>{if(!window.malikPOS?.printEscpos)throw new Error('Direct COM printing is available in the installed Windows app only');const raster=await makeReceiptRasterPayload(order,type);const result=await window.malikPOS.printEscpos({port:printerPort,baudRate:Number(printerBaudRate)||9600,...raster});if(!result?.success)throw new Error(result?.error||'COM printer rejected the image');return true};
  if(printerMethod==='bluetooth'){try{await attemptRasterCom();notify(label+' receipt printed using direct COM image mode');return}catch(error){failures.push('Direct COM image: '+(error?.message||'failed'))}}
  try{await attemptNative();notify(label+' receipt printed using Windows printer'+(failures.length?' after direct COM failed':''));return}catch(error){failures.push('Windows printer: '+(error?.message||'failed'))}
  if(printerMethod!=='bluetooth'){try{await attemptRasterCom();notify(label+' receipt printed using direct COM image fallback');return}catch(error){failures.push('Direct COM image fallback: '+(error?.message||'failed'))}}
