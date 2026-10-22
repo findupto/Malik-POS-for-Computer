@@ -131,7 +131,7 @@ export function adjustRecipeIngredients(oldItems, nextItems, orderId) {
 
 export default function FastFoodStock({ notify }) {
   const [tab, setTab] = useState(() => readStock('activeTab', 'ingredients'));
-  const [ingredients, setIngredients] = useState(() => { const saved=readStock('ingredients', null); if(saved!==null)return saved; const seeded=starterIngredients.map(x=>({...x})); try{localStorage.setItem('malik-stock-ingredients',JSON.stringify(seeded));}catch{} return seeded; });
+  const [ingredients, setIngredients] = useState(() => { const saved=readStock('ingredients', null); const existing=Array.isArray(saved)?saved:[]; const names=new Set(existing.map(x=>String(x.name||'').trim().toLowerCase())); const merged=[...existing,...starterIngredients.filter(x=>!names.has(x.name.toLowerCase())).map(x=>({...x}))]; try{if(saved===null||merged.length!==existing.length)localStorage.setItem('malik-stock-ingredients',JSON.stringify(merged));}catch{} return merged; });
   const [recipes, setRecipes] = useState(() => { const saved=readStock('recipes', null); return saved===null?[]:saved; });
   const [purchases, setPurchases] = useState(() => readStock('purchases', []));
   const [movements, setMovements] = useState(() => readStock('movements', []));
