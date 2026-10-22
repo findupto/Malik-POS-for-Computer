@@ -390,7 +390,7 @@ async function printReceipt(type=receiptType, orderOverride=null){
     if(modal==='keyboard-shortcuts'){e.preventDefault();setModal('');return;}
     if(modal){e.preventDefault();setModal('');return;}
    }
-   if(e.altKey&&/^[1-7]$/.test(e.key)){e.preventDefault();const pages=['Overview','Point of Sale','Orders','Inventory','Kitchen Stock','Customers','Reports'];setPage(pages[Number(e.key)-1]);return;}
+   if(!typing&&e.altKey&&/^[1-7]$/.test(e.key)){e.preventDefault();const pages=['Overview','Point of Sale','Orders','Inventory','Kitchen Stock','Customers','Reports'];setPage(pages[Number(e.key)-1]);return;}
    if(typing||e.ctrlKey||e.metaKey||e.shiftKey||e.altKey)return;
    if(e.key==='F2'){e.preventDefault();if(page!=='Point of Sale')setPage('Point of Sale');requestAnimationFrame(()=>document.querySelector('[aria-label="Search products by name, variant, category, SKU or barcode"]')?.focus());}
    else if(e.key==='F3'){e.preventDefault();if(page!=='Point of Sale')setPage('Point of Sale');requestAnimationFrame(()=>document.querySelector('[aria-label="Barcode scanner"]')?.focus());}
