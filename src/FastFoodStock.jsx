@@ -209,7 +209,7 @@ export default function FastFoodStock({ notify }) {
     const generated = [];
     const sizeSets = [
       {test:/pizza/, sizes:['Small','Medium','Large','XL']},
-      {test:/shawarma|wrap|roll|burger|sandwich|pasta|fries|chips|nugget|wing|tender|biryani|rice|tea|chai|coffee|latte|smoothie|shake|frappe|fajita/, sizes:['Regular','Large']}
+      {test:/shawarma|wrap|roll|burger|sandwich|pasta|fries|chips|nugget|wing|tender|biryani|rice|tea|chai|coffee|latte|smoothie|shake|frappe|fajita/, sizes:['Small','Regular','Large']}
     ];
     for (const p of menuProducts) {
       const base = starterRecipeFor({...p,variant:p.variant||''}, ingredients);
