@@ -44,9 +44,7 @@
           ]
         }
       ],
-      "artifactName": "Malik-POS-Setup-${version}.${ext}",
-      "legalCopyright": "Copyright © 2026 Aamir Malik",
-      "legalTrademarks": "Malik POS"
+      "artifactName": "Malik-POS-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
