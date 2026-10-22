@@ -12,6 +12,28 @@ const unitScale = { kg: 1000, g: 1, L: 1000, ml: 1, each: 1 };
 const starterIngredients = [
   ['Chicken breast / boneless chicken','Meat','g'],['Beef mince / patty','Meat','g'],['Burger bun','Bakery','each'],['Pizza dough / base','Bakery','each'],['Pita / shawarma bread','Bakery','each'],['Tortilla / wrap','Bakery','each'],['Potato / fries','Food','g'],['Mozzarella cheese','Dairy','g'],['Cheddar cheese','Dairy','g'],['Mayonnaise','Sauce','g'],['Garlic mayo / toum','Sauce','g'],['Pizza sauce','Sauce','g'],['Ketchup','Sauce','g'],['BBQ sauce','Sauce','g'],['Fajita seasoning','Food','g'],['Shawarma spice mix','Food','g'],['Lettuce','Food','g'],['Tomato','Food','g'],['Onion','Food','g'],['Capsicum / bell pepper','Food','g'],['Cucumber / pickle','Food','g'],['Cooking oil','Food','ml'],['Salt','Food','g'],['Black pepper','Food','g'],['Flour / maida','Food','g'],['Milk','Dairy','ml'],['Sugar','Food','g'],['Coffee','Beverage','g'],['Tea','Beverage','g'],['Ice cream','Dairy','g'],['Chocolate syrup','Sauce','g'],['Paper box / packaging','Packaging','each'],['Pasta / penne / spaghetti','Food','g'],['Basmati rice','Food','g'],['Yogurt','Dairy','g'],['Cream','Dairy','ml'],['Butter','Dairy','g'],['Parmesan cheese','Dairy','g'],['Egg','Food','each'],['Breadcrumbs','Food','g'],['Cornflour','Food','g'],['Wings','Meat','g'],['Chicken mince','Meat','g'],['Biryani masala','Food','g'],['Ginger garlic paste','Food','g'],['Lemon juice','Food','ml'],['Chilli sauce','Sauce','g'],['Pickle / jalapeno','Food','g'],['Cabbage','Food','g'],['Carrot','Food','g'],['Peas','Food','g'],['Apple','Food','g'],['Pineapple','Food','g'],['Mango','Food','g'],['Banana','Food','g'],['Ice','Food','g'],['Water','Beverage','ml'],['Mint / coriander','Food','g'],['Oregano','Food','g'],['Yeast','Food','g'],['Honey','Food','g'],['Hot sauce','Sauce','g'],['Cheddar sauce','Sauce','g'],['Paratha','Bakery','each'],['Bread slices','Bakery','each'],['Pasta sauce','Sauce','g']
 ].map((x,i)=>({id:'starter-'+(i+1),name:x[0],sku:'ING-'+String(i+1).padStart(3,'0'),category:x[1],unit:x[2],stock:0,reorder:0,cost:0,supplier:'',starter:true}));
+
+const ingredientCostSeeds = {
+  'Chicken breast / boneless chicken':0.57, 'Chicken mince':0.57, 'Wings':0.57,
+  'Beef mince / patty':0.9, 'Milk':0.165, 'Egg':21.67, 'Flour / maida':0.11,
+  'Basmati rice':0.31, 'Sugar':0.156, 'Cooking oil':0.6, 'Potato / fries':0.026,
+  'Tomato':0.1, 'Onion':0.19, 'Capsicum / bell pepper':0.3, 'Ginger garlic paste':0.29,
+  'Lemon juice':0.25, 'Mint / coriander':0.35, 'Salt':0.08, 'Tea':2.1, 'Coffee':3.5,
+  'Mozzarella cheese':0.95, 'Cheddar cheese':1.1, 'Parmesan cheese':2.2,
+  'Pizza dough / base':35, 'Burger bun':22, 'Pita / shawarma bread':18, 'Tortilla / wrap':20,
+  'Paratha':25, 'Bread slices':8, 'Pasta / penne / spaghetti':0.55, 'Yogurt':0.25,
+  'Cream':0.85, 'Butter':1.0, 'Mayonnaise':0.65, 'Garlic mayo / toum':0.7,
+  'Pizza sauce':0.32, 'Ketchup':0.35, 'BBQ sauce':0.65, 'Chilli sauce':0.4,
+  'Hot sauce':0.6, 'Cheddar sauce':0.85, 'Pasta sauce':0.45, 'Chocolate syrup':0.8,
+  'Ice cream':0.7, 'Fajita seasoning':1.4, 'Shawarma spice mix':1.2, 'Biryani masala':1.5,
+  'Oregano':2.5, 'Black pepper':2.5, 'Cornflour':0.18, 'Breadcrumbs':0.25,
+  'Lettuce':0.18, 'Cucumber / pickle':0.35, 'Cabbage':0.09, 'Carrot':0.1, 'Peas':0.22,
+  'Apple':0.28, 'Pineapple':0.35, 'Mango':0.25, 'Banana':0.18, 'Ice':0.03, 'Water':0.002,
+  'Yeast':0.8, 'Honey':1.1, 'Pickle / jalapeno':0.65, 'Paper box / packaging':12,
+  'Capsicum / bell pepper':0.3
+};
+const ingredientPriceSource = 'Punjab FS&CPD notified Bhakkar rates dated 2026-10-20 for published staples; other items are editable local-market estimates.';
+
 const starterRecipeFor = (p, ingredients) => {
   const name=String(p.name||'').toLowerCase(), variant=String(p.variant||'').trim();
   const sizeText=(variant+' '+name).toLowerCase();
@@ -204,6 +226,22 @@ export default function FastFoodStock({ notify }) {
 
   const save = (key, value) => localStorage.setItem('malik-stock-' + key, JSON.stringify(value));
   useEffect(() => { save('activeTab', tab); }, [tab]);
+  useEffect(() => {
+    const marker = 'malik-stock-ingredient-prices-v1';
+    if (localStorage.getItem(marker)) return;
+    const next = ingredients.map(item => {
+      const seeded = ingredientCostSeeds[item.name];
+      if (seeded == null || Number(item.cost) > 0) return item;
+      return { ...item, cost: seeded, costSource: ingredientPriceSource, costUpdatedAt: '2026-10-20' };
+    });
+    if (JSON.stringify(next) !== JSON.stringify(ingredients)) {
+      setIngredients(next);
+      localStorage.setItem('malik-stock-ingredients', JSON.stringify(next));
+      window.dispatchEvent(new CustomEvent('malik-stock-updated'));
+    }
+    localStorage.setItem(marker, JSON.stringify({ date: '2026-10-20', source: 'Punjab FS&CPD plus estimates', currency: 'PKR' }));
+  }, [ingredients]);
+
   useEffect(() => {
     if (!menuProducts.length || !ingredients.length) return;
     const generated = [];
