@@ -206,14 +206,40 @@ export default function FastFoodStock({ notify }) {
   useEffect(() => { save('activeTab', tab); }, [tab]);
   useEffect(() => {
     if (!menuProducts.length || !ingredients.length) return;
-    const starter = menuProducts.map(p => starterRecipeFor(p, ingredients)).filter(Boolean);
-    if (!starter.length) return;
+    const generated = [];
+    const sizeSets = [
+      {test:/pizza/, sizes:['Small','Medium','Large','XL']},
+      {test:/shawarma|wrap|roll|burger|sandwich|pasta|fries|chips|nugget|wing|tender|biryani|rice|tea|chai|coffee|latte|smoothie|shake|frappe|fajita/, sizes:['Regular','Large']}
+    ];
+    for (const p of menuProducts) {
+      const base = starterRecipeFor({...p,variant:p.variant||''}, ingredients);
+      if (!base) continue;
+      const sizeSet = sizeSets.find(s=>s.test.test(String(p.name||'').toLowerCase()));
+      if (!sizeSet) { generated.push(base); continue; }
+      const knownVariant=String(p.variant||'').trim();
+      const variants = knownVariant ? [knownVariant] : sizeSet.sizes;
+      for (const variant of variants) {
+        const recipe=starterRecipeFor({...p,variant}, ingredients);
+        if (!recipe) continue;
+        const size=variant.toLowerCase();
+        const factor=/xl|extra large|xxl/.test(size)?1.65:/large|lg/.test(size)?1.35:/medium|med/.test(size)?1.15:/small|personal/.test(size)?0.8:1;
+        recipe.ingredients=recipe.ingredients.map(line=>{
+          let qty=Number(line.qty)||0;
+          if (/pizza/.test(String(p.name||'').toLowerCase()) && /dough \/ base/i.test(line.ingredientName)) qty=({small:180,medium:250,large:350,xl:450}[size]||250);
+          else if (/pizza/.test(String(p.name||'').toLowerCase())) qty=Math.round(qty*factor*100)/100;
+          else if (size!=='regular' && size!=='standard') qty=Math.round(qty*factor*100)/100;
+          return {...line,qty};
+        });
+        recipe.variant=variant;
+        generated.push(recipe);
+      }
+    }
     const key = r => String(r.productId||'')+'::'+String(r.variant||'').trim().toLowerCase();
-    const starterByKey = new Map(starter.map(r => [key(r), r]));
-    const next = recipes.map(r => r.starter && starterByKey.has(key(r)) ? starterByKey.get(key(r)) : r);
-    const existingKeys = new Set(next.map(key));
-    for (const recipe of starter) if (!existingKeys.has(key(recipe))) { next.push(recipe); existingKeys.add(key(recipe)); }
-    if (JSON.stringify(next) !== JSON.stringify(recipes)) { setRecipes(next); save('recipes', next); }
+    const starterByKey = new Map(generated.map(r=>[key(r),r]));
+    const next=recipes.map(r=>r.starter&&starterByKey.has(key(r))?starterByKey.get(key(r)):r);
+    const existingKeys=new Set(next.map(key));
+    for(const recipe of generated) if(!existingKeys.has(key(recipe))){next.push(recipe);existingKeys.add(key(recipe));}
+    if(JSON.stringify(next)!==JSON.stringify(recipes)){setRecipes(next);save('recipes',next);}
   }, [menuProducts, ingredients, recipes]);
 
   useEffect(() => {
