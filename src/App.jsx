@@ -380,7 +380,7 @@ async function printReceipt(type=receiptType, orderOverride=null){
   {label:"Low-stock items",value:lowStock.length,change:"Items needing attention",icon:Boxes,tint:"amber"}
  ];
  const notify=m=>setToast(m);
- const canAccessPage=(target,staffMember=signedInStaff)=>{if(!staffMember)return false;if(staffMember.role==='admin')return true;if(staffMember.role==='manager')return target!=='Settings'&&target!=='Printer & Templates'&&target!=='Staff';return ['Point of Sale','Orders','Customers','Shifts'].includes(target)};
+ const canAccessPage=(target,staffMember=signedInStaff)=>{if(!staffMember)return false;if(staffMember.role==='admin')return true;if(staffMember.role==='manager')return target!=='Settings'&&target!=='Printer & Templates'&&target!=='Staff';return ['Point of Sale','Orders','Customers','Shifts','Kitchen Stock'].includes(target)};
  const setPage=target=>{if(!signedInStaff){setPageState('Point of Sale');return}if(!canAccessPage(target)){notify('Your staff role does not have permission to open '+target);return}setPageState(target)};
  function signIn(e){e.preventDefault();const user=loginUsername.trim().toLowerCase();const member=staff.find(x=>x.active&&x.username.toLowerCase()===user&&x.pin===loginPin);if(!member){notify('Invalid username or PIN, or this account is inactive');return}setSignedInStaff({id:member.id,name:member.name,username:member.username,role:member.role});setLoginUsername('');setLoginPin('');setPageState('Point of Sale');notify('Welcome, '+member.name)}
  function signOut(){if(activeShift&&!activeShift.closed){notify('Close the active shift before signing out');setPageState('Shifts');return}setSignedInStaff(null);setLoginUsername('');setLoginPin('');setPageState('Point of Sale')}
