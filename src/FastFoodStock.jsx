@@ -209,9 +209,11 @@ export default function FastFoodStock({ notify }) {
     const starter = menuProducts.map(p => starterRecipeFor(p, ingredients)).filter(Boolean);
     if (!starter.length) return;
     const key = r => String(r.productId||'')+'::'+String(r.variant||'').trim().toLowerCase();
-    const existingKeys = new Set(recipes.map(key));
-    const missing = starter.filter(r => !existingKeys.has(key(r)));
-    if (missing.length) { const next=[...recipes,...missing]; setRecipes(next); save('recipes', next); }
+    const starterByKey = new Map(starter.map(r => [key(r), r]));
+    const next = recipes.map(r => r.starter && starterByKey.has(key(r)) ? starterByKey.get(key(r)) : r);
+    const existingKeys = new Set(next.map(key));
+    for (const recipe of starter) if (!existingKeys.has(key(recipe))) { next.push(recipe); existingKeys.add(key(recipe)); }
+    if (JSON.stringify(next) !== JSON.stringify(recipes)) { setRecipes(next); save('recipes', next); }
   }, [menuProducts, ingredients, recipes]);
 
   useEffect(() => {
