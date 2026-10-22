@@ -8,6 +8,28 @@ const moneyStock = n => 'Rs. ' + new Intl.NumberFormat('en-PK', { maximumFractio
 const units = ['kg', 'g', 'L', 'ml', 'each'];
 const unitFamilies = { kg: 'weight', g: 'weight', L: 'volume', ml: 'volume', each: 'count' };
 const unitScale = { kg: 1000, g: 1, L: 1000, ml: 1, each: 1 };
+
+const starterIngredients = [
+  ['Chicken breast / boneless chicken','Meat','g'],['Beef mince / patty','Meat','g'],['Burger bun','Bakery','each'],['Pizza dough / base','Bakery','each'],['Pita / shawarma bread','Bakery','each'],['Tortilla / wrap','Bakery','each'],['Potato / fries','Food','g'],['Mozzarella cheese','Dairy','g'],['Cheddar cheese','Dairy','g'],['Mayonnaise','Sauce','g'],['Garlic mayo / toum','Sauce','g'],['Pizza sauce','Sauce','g'],['Ketchup','Sauce','g'],['BBQ sauce','Sauce','g'],['Fajita seasoning','Food','g'],['Shawarma spice mix','Food','g'],['Lettuce','Food','g'],['Tomato','Food','g'],['Onion','Food','g'],['Capsicum / bell pepper','Food','g'],['Cucumber / pickle','Food','g'],['Cooking oil','Food','ml'],['Salt','Food','g'],['Black pepper','Food','g'],['Flour / maida','Food','g'],['Milk','Dairy','ml'],['Sugar','Food','g'],['Coffee','Beverage','g'],['Tea','Beverage','g'],['Ice cream','Dairy','g'],['Chocolate syrup','Sauce','g'],['Paper box / packaging','Packaging','each']
+].map((x,i)=>({id:'starter-'+(i+1),name:x[0],sku:'ING-'+String(i+1).padStart(3,'0'),category:x[1],unit:x[2],stock:0,reorder:0,cost:0,supplier:'',starter:true}));
+const starterRecipeFor = (p, ingredients) => {
+  const n=String(p.name||'').toLowerCase();
+  const pick=(name,qty)=>{const x=ingredients.find(i=>i.name===name);return x?{ingredientId:x.id,ingredientName:x.name,qty,unit:x.unit}:null;};
+  let lines=null;
+  if(/pizza/.test(n)){lines=[pick('Pizza dough / base',1),pick('Pizza sauce',60),pick('Mozzarella cheese',90)];if(/chicken|fajita|shawarma|tikka/.test(n))lines.push(pick('Chicken breast / boneless chicken',75));if(/fajita|mexican/.test(n))lines.push(pick('Capsicum / bell pepper',25),pick('Onion',20),pick('Fajita seasoning',4));}
+  else if(/shawarma|shwarma/.test(n)){lines=[pick('Pita / shawarma bread',1),pick('Chicken breast / boneless chicken',120),pick('Garlic mayo / toum',25),pick('Lettuce',15),pick('Tomato',20),pick('Shawarma spice mix',5)];}
+  else if(/fajita/.test(n)){lines=[pick('Tortilla / wrap',1),pick('Chicken breast / boneless chicken',100),pick('Capsicum / bell pepper',25),pick('Onion',20),pick('Fajita seasoning',5),pick('Mayonnaise',15)];}
+  else if(/zinger|chicken burger|burger|hamburger/.test(n)){lines=[pick('Burger bun',1),pick('Chicken breast / boneless chicken',120),pick('Mayonnaise',20),pick('Lettuce',15),pick('Tomato',20)];}
+  else if(/fries|chips/.test(n)){lines=[pick('Potato / fries',200),pick('Cooking oil',20),pick('Salt',2),pick('Ketchup',20)];}
+  else if(/wrap|roll|sandwich/.test(n)){lines=[pick('Tortilla / wrap',1),pick('Chicken breast / boneless chicken',90),pick('Mayonnaise',20),pick('Lettuce',10),pick('Tomato',15)];}
+  else if(/nugget|wing|tender/.test(n)){lines=[pick('Chicken breast / boneless chicken',150),pick('Flour / maida',25),pick('Cooking oil',20),pick('Salt',2),pick('Black pepper',1)];}
+  else if(/coffee|latte|cappuccino|mocha/.test(n)){lines=[pick('Coffee',10),pick('Milk',200),pick('Sugar',10)];}
+  else if(/tea|chai/.test(n)){lines=[pick('Tea',4),pick('Milk',100),pick('Sugar',10)];}
+  else if(/shake|smoothie|frappe/.test(n)){lines=[pick('Milk',200),pick('Ice cream',100),pick('Sugar',10)];}
+  else return null;
+  return {id:'starter-recipe-'+p.id,productId:String(p.id),productName:p.name,variant:'',ingredients:lines.filter(Boolean),starter:true,portionNote:'Starter estimate per 1 menu item — verify and edit to match your kitchen.'};
+};
+
 const tabs = [
   { id: 'ingredients', label: 'Ingredients & stock', icon: Boxes },
   { id: 'recipes', label: 'Recipes & portions', icon: BookOpen },
@@ -109,8 +131,8 @@ export function adjustRecipeIngredients(oldItems, nextItems, orderId) {
 
 export default function FastFoodStock({ notify }) {
   const [tab, setTab] = useState(() => readStock('activeTab', 'ingredients'));
-  const [ingredients, setIngredients] = useState(() => readStock('ingredients', []));
-  const [recipes, setRecipes] = useState(() => readStock('recipes', []));
+  const [ingredients, setIngredients] = useState(() => { const saved=readStock('ingredients', null); if(saved!==null)return saved; const seeded=starterIngredients.map(x=>({...x})); try{localStorage.setItem('malik-stock-ingredients',JSON.stringify(seeded));}catch{} return seeded; });
+  const [recipes, setRecipes] = useState(() => { const saved=readStock('recipes', null); return saved===null?[]:saved; });
   const [purchases, setPurchases] = useState(() => readStock('purchases', []));
   const [movements, setMovements] = useState(() => readStock('movements', []));
   const [batches, setBatches] = useState(() => readStock('batches', []));
@@ -130,6 +152,12 @@ export default function FastFoodStock({ notify }) {
 
   const save = (key, value) => localStorage.setItem('malik-stock-' + key, JSON.stringify(value));
   useEffect(() => { save('activeTab', tab); }, [tab]);
+  useEffect(() => {
+    if (recipes.length || !menuProducts.length || !ingredients.length) return;
+    const starter = menuProducts.map(p => starterRecipeFor(p, ingredients)).filter(Boolean);
+    if (starter.length) { setRecipes(starter); save('recipes', starter); }
+  }, [menuProducts, ingredients, recipes.length]);
+
   useEffect(() => {
     const refresh = () => {
       setIngredients(readStock('ingredients', [])); setRecipes(readStock('recipes', []));
