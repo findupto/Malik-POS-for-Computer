@@ -226,7 +226,7 @@ export default function FastFoodStock({ notify }) {
         recipe.ingredients=recipe.ingredients.map(line=>{
           let qty=Number(line.qty)||0;
           if (/pizza/.test(String(p.name||'').toLowerCase()) && /dough \/ base/i.test(line.ingredientName)) qty=({small:180,medium:250,large:350,xl:450}[size]||250);
-          else if (/pizza/.test(String(p.name||'').toLowerCase())) qty=Math.round(qty*factor*100)/100;
+          else if (/pizza/.test(String(p.name||'').toLowerCase())) qty=qty;
           else if (size!=='regular' && size!=='standard') qty=Math.round(qty*factor*100)/100;
           return {...line,qty};
         });
