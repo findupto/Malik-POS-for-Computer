@@ -1,8 +1,8 @@
 {
   "name": "malik-pos",
   "version": "1.0.0",
-  "private": true,
-  "description": "Malik POS - premium desktop point of sale system",
+  "private": false,
+  "description": "Free and open-source Malik POS desktop point-of-sale and kitchen recipe management system",
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
@@ -44,13 +44,20 @@
           ]
         }
       ],
-      "artifactName": "Malik-POS-Setup-${version}.${ext}"
+      "artifactName": "Malik-POS-Setup-${version}.${ext}",
+      "companyName": "Aamir Malik",
+      "legalCopyright": "Copyright © 2026 Aamir Malik",
+      "legalTrademarks": "Malik POS"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
-    }
-  }
+    },
+    "copyright": "Copyright © 2026 Aamir Malik"
+  },
+  "author": "Aamir Malik",
+  "license": "MIT",
+  "homepage": "https://github.com/findupto/Malik-POS-for-Computer"
 }
