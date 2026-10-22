@@ -10,24 +10,39 @@ const unitFamilies = { kg: 'weight', g: 'weight', L: 'volume', ml: 'volume', eac
 const unitScale = { kg: 1000, g: 1, L: 1000, ml: 1, each: 1 };
 
 const starterIngredients = [
-  ['Chicken breast / boneless chicken','Meat','g'],['Beef mince / patty','Meat','g'],['Burger bun','Bakery','each'],['Pizza dough / base','Bakery','each'],['Pita / shawarma bread','Bakery','each'],['Tortilla / wrap','Bakery','each'],['Potato / fries','Food','g'],['Mozzarella cheese','Dairy','g'],['Cheddar cheese','Dairy','g'],['Mayonnaise','Sauce','g'],['Garlic mayo / toum','Sauce','g'],['Pizza sauce','Sauce','g'],['Ketchup','Sauce','g'],['BBQ sauce','Sauce','g'],['Fajita seasoning','Food','g'],['Shawarma spice mix','Food','g'],['Lettuce','Food','g'],['Tomato','Food','g'],['Onion','Food','g'],['Capsicum / bell pepper','Food','g'],['Cucumber / pickle','Food','g'],['Cooking oil','Food','ml'],['Salt','Food','g'],['Black pepper','Food','g'],['Flour / maida','Food','g'],['Milk','Dairy','ml'],['Sugar','Food','g'],['Coffee','Beverage','g'],['Tea','Beverage','g'],['Ice cream','Dairy','g'],['Chocolate syrup','Sauce','g'],['Paper box / packaging','Packaging','each']
+  ['Chicken breast / boneless chicken','Meat','g'],['Beef mince / patty','Meat','g'],['Burger bun','Bakery','each'],['Pizza dough / base','Bakery','each'],['Pita / shawarma bread','Bakery','each'],['Tortilla / wrap','Bakery','each'],['Potato / fries','Food','g'],['Mozzarella cheese','Dairy','g'],['Cheddar cheese','Dairy','g'],['Mayonnaise','Sauce','g'],['Garlic mayo / toum','Sauce','g'],['Pizza sauce','Sauce','g'],['Ketchup','Sauce','g'],['BBQ sauce','Sauce','g'],['Fajita seasoning','Food','g'],['Shawarma spice mix','Food','g'],['Lettuce','Food','g'],['Tomato','Food','g'],['Onion','Food','g'],['Capsicum / bell pepper','Food','g'],['Cucumber / pickle','Food','g'],['Cooking oil','Food','ml'],['Salt','Food','g'],['Black pepper','Food','g'],['Flour / maida','Food','g'],['Milk','Dairy','ml'],['Sugar','Food','g'],['Coffee','Beverage','g'],['Tea','Beverage','g'],['Ice cream','Dairy','g'],['Chocolate syrup','Sauce','g'],['Paper box / packaging','Packaging','each'],['Pasta / penne / spaghetti','Food','g'],['Basmati rice','Food','g'],['Yogurt','Dairy','g'],['Cream','Dairy','ml'],['Butter','Dairy','g'],['Parmesan cheese','Dairy','g'],['Egg','Food','each'],['Breadcrumbs','Food','g'],['Cornflour','Food','g'],['Wings','Meat','g'],['Chicken mince','Meat','g'],['Biryani masala','Food','g'],['Ginger garlic paste','Food','g'],['Lemon juice','Food','ml'],['Chilli sauce','Sauce','g'],['Pickle / jalapeno','Food','g'],['Cabbage','Food','g'],['Carrot','Food','g'],['Peas','Food','g'],['Apple','Food','g'],['Pineapple','Food','g'],['Mango','Food','g'],['Banana','Food','g'],['Ice','Food','g'],['Water','Beverage','ml'],['Mint / coriander','Food','g'],['Oregano','Food','g'],['Yeast','Food','g'],['Honey','Food','g'],['Hot sauce','Sauce','g'],['Cheddar sauce','Sauce','g'],['Paratha','Bakery','each'],['Bread slices','Bakery','each'],['Pasta sauce','Sauce','g']
 ].map((x,i)=>({id:'starter-'+(i+1),name:x[0],sku:'ING-'+String(i+1).padStart(3,'0'),category:x[1],unit:x[2],stock:0,reorder:0,cost:0,supplier:'',starter:true}));
 const starterRecipeFor = (p, ingredients) => {
-  const n=String(p.name||'').toLowerCase();
-  const pick=(name,qty)=>{const x=ingredients.find(i=>i.name===name);return x?{ingredientId:x.id,ingredientName:x.name,qty,unit:x.unit}:null;};
-  let lines=null;
-  if(/pizza/.test(n)){lines=[pick('Pizza dough / base',1),pick('Pizza sauce',60),pick('Mozzarella cheese',90)];if(/chicken|fajita|shawarma|tikka/.test(n))lines.push(pick('Chicken breast / boneless chicken',75));if(/fajita|mexican/.test(n))lines.push(pick('Capsicum / bell pepper',25),pick('Onion',20),pick('Fajita seasoning',4));}
-  else if(/shawarma|shwarma/.test(n)){lines=[pick('Pita / shawarma bread',1),pick('Chicken breast / boneless chicken',120),pick('Garlic mayo / toum',25),pick('Lettuce',15),pick('Tomato',20),pick('Shawarma spice mix',5)];}
-  else if(/fajita/.test(n)){lines=[pick('Tortilla / wrap',1),pick('Chicken breast / boneless chicken',100),pick('Capsicum / bell pepper',25),pick('Onion',20),pick('Fajita seasoning',5),pick('Mayonnaise',15)];}
-  else if(/zinger|chicken burger|burger|hamburger/.test(n)){lines=[pick('Burger bun',1),pick('Chicken breast / boneless chicken',120),pick('Mayonnaise',20),pick('Lettuce',15),pick('Tomato',20)];}
-  else if(/fries|chips/.test(n)){lines=[pick('Potato / fries',200),pick('Cooking oil',20),pick('Salt',2),pick('Ketchup',20)];}
-  else if(/wrap|roll|sandwich/.test(n)){lines=[pick('Tortilla / wrap',1),pick('Chicken breast / boneless chicken',90),pick('Mayonnaise',20),pick('Lettuce',10),pick('Tomato',15)];}
-  else if(/nugget|wing|tender/.test(n)){lines=[pick('Chicken breast / boneless chicken',150),pick('Flour / maida',25),pick('Cooking oil',20),pick('Salt',2),pick('Black pepper',1)];}
-  else if(/coffee|latte|cappuccino|mocha/.test(n)){lines=[pick('Coffee',10),pick('Milk',200),pick('Sugar',10)];}
-  else if(/tea|chai/.test(n)){lines=[pick('Tea',4),pick('Milk',100),pick('Sugar',10)];}
-  else if(/shake|smoothie|frappe/.test(n)){lines=[pick('Milk',200),pick('Ice cream',100),pick('Sugar',10)];}
+  const name=String(p.name||'').toLowerCase(), variant=String(p.variant||'').trim();
+  const sizeText=(variant+' '+name).toLowerCase();
+  const pick=(n,q)=>{const x=ingredients.find(i=>i.name.toLowerCase()===n.toLowerCase());return x?{ingredientId:x.id,ingredientName:x.name,qty:q,unit:x.unit}:null;};
+  const lines=[], add=(n,q)=>{const x=pick(n,q);if(x)lines.push(x);};
+  const factor=/\b(xl|extra large|xxl)\b/.test(sizeText)?1.65:/\b(large|lg)\b/.test(sizeText)?1.35:/\b(medium|med)\b/.test(sizeText)?1.15:/\b(small|personal|regular)\b/.test(sizeText)?0.8:1;
+  let portion=variant;
+  if(/pizza/.test(name)){
+    portion=portion||(/\b(xl|extra large|xxl)\b/.test(name)?'XL':/\blarge\b/.test(name)?'Large':/\bmedium\b/.test(name)?'Medium':/\bsmall\b/.test(name)?'Small':'Standard');
+    add('Pizza dough / base',Math.round(({Small:180,Medium:250,Large:350,XL:450,Standard:250}[portion]||250)*factor));
+    add('Pizza sauce',Math.round(60*factor));add('Mozzarella cheese',Math.round(100*factor));
+    if(/chicken|fajita|shawarma|tikka|bbq|special|meat/.test(name))add('Chicken breast / boneless chicken',Math.round(80*factor));
+    if(/fajita|mexican/.test(name)){add('Capsicum / bell pepper',Math.round(25*factor));add('Onion',Math.round(20*factor));add('Fajita seasoning',Math.round(4*factor));}
+    if(/bbq/.test(name))add('BBQ sauce',Math.round(25*factor));add('Oregano',1);add('Cooking oil',3);
+  } else if(/shawarma|shwarma/.test(name)){add('Pita / shawarma bread',1);add('Chicken breast / boneless chicken',150);add('Garlic mayo / toum',25);add('Chilli sauce',8);add('Lettuce',15);add('Tomato',20);add('Onion',10);add('Shawarma spice mix',5);add('Lemon juice',5);}
+  else if(/fajita/.test(name)){add('Tortilla / wrap',1);add('Chicken breast / boneless chicken',120);add('Capsicum / bell pepper',25);add('Onion',20);add('Fajita seasoning',5);add('Mayonnaise',15);add('Mozzarella cheese',20);}
+  else if(/zinger|chicken burger|burger|hamburger/.test(name)){add('Burger bun',1);add(/beef|smash/.test(name)?'Beef mince / patty':'Chicken breast / boneless chicken',150);add('Mayonnaise',20);add('Ketchup',10);add('Lettuce',15);add('Tomato',20);add('Cheddar cheese',20);if(/zinger|crispy/.test(name)){add('Flour / maida',25);add('Cornflour',10);add('Breadcrumbs',20);add('Cooking oil',15);}}
+  else if(/pasta|alfredo|spaghetti|macaroni/.test(name)){add('Pasta / penne / spaghetti',120);add('Chicken breast / boneless chicken',90);add(/alfredo|creamy/.test(name)?'Cream':'Pasta sauce',100);add('Milk',40);add('Parmesan cheese',12);add('Butter',10);add('Black pepper',1);}
+  else if(/biryani|pulao/.test(name)){add('Basmati rice',150);add('Chicken breast / boneless chicken',150);add('Yogurt',40);add('Onion',40);add('Tomato',30);add('Ginger garlic paste',10);add('Biryani masala',8);add('Cooking oil',15);add('Mint / coriander',3);}
+  else if(/paratha|kathi roll/.test(name)){add('Paratha',1);add('Chicken breast / boneless chicken',120);add('Mayonnaise',20);add('Chilli sauce',8);add('Onion',15);add('Cabbage',15);add('Lemon juice',3);}
+  else if(/sandwich|club/.test(name)){add('Bread slices',3);add('Chicken breast / boneless chicken',90);add('Mayonnaise',20);add('Cheddar cheese',20);add('Lettuce',10);add('Tomato',15);add('Butter',5);}
+  else if(/loaded fries|bbq fries|cheese fries/.test(name)){add('Potato / fries',250);add('Cooking oil',15);add('Chicken breast / boneless chicken',60);add('Cheddar sauce',40);add('Mozzarella cheese',25);add(/bbq/.test(name)?'BBQ sauce':'Garlic mayo / toum',15);}
+  else if(/fries|chips/.test(name)){add('Potato / fries',200);add('Cooking oil',20);add('Salt',2);add('Ketchup',20);}
+  else if(/nugget/.test(name)){add('Chicken mince',150);add('Flour / maida',20);add('Egg',0.5);add('Breadcrumbs',30);add('Cooking oil',15);add('Salt',2);add('Black pepper',1);}
+  else if(/wing/.test(name)){add('Wings',300);add('Flour / maida',20);add('Hot sauce',30);add('Butter',10);add('Honey',8);add('Cooking oil',15);}
+  else if(/tender/.test(name)){add('Chicken breast / boneless chicken',150);add('Flour / maida',25);add('Breadcrumbs',25);add('Egg',0.5);add('Cooking oil',20);}
+  else if(/coffee|latte|cappuccino|mocha/.test(name)){add('Coffee',10);add('Milk',200);add('Sugar',10);}
+  else if(/tea|chai/.test(name)){add('Tea',4);add('Milk',140);add('Water',80);add('Sugar',10);}
+  else if(/shake|smoothie|frappe/.test(name)){add('Milk',180);add('Ice cream',80);add('Mango',80);add('Banana',40);add('Ice',50);add('Sugar',8);}
   else return null;
-  return {id:'starter-recipe-'+p.id,productId:String(p.id),productName:p.name,variant:'',ingredients:lines.filter(Boolean),starter:true,portionNote:'Starter estimate per 1 menu item — verify and edit to match your kitchen.'};
+  return {id:'starter-recipe-'+p.id,productId:String(p.id),productName:p.name,variant:variant||portion||'',ingredients:lines,starter:true,portionNote:'Illustrative starter portion per menu item. Weigh-test and approve before relying on stock deductions.'};
 };
 
 
@@ -190,10 +205,14 @@ export default function FastFoodStock({ notify }) {
   const save = (key, value) => localStorage.setItem('malik-stock-' + key, JSON.stringify(value));
   useEffect(() => { save('activeTab', tab); }, [tab]);
   useEffect(() => {
-    if (recipes.length || !menuProducts.length || !ingredients.length) return;
+    if (!menuProducts.length || !ingredients.length) return;
     const starter = menuProducts.map(p => starterRecipeFor(p, ingredients)).filter(Boolean);
-    if (starter.length) { setRecipes(starter); save('recipes', starter); }
-  }, [menuProducts, ingredients, recipes.length]);
+    if (!starter.length) return;
+    const key = r => String(r.productId||'')+'::'+String(r.variant||'').trim().toLowerCase();
+    const existingKeys = new Set(recipes.map(key));
+    const missing = starter.filter(r => !existingKeys.has(key(r)));
+    if (missing.length) { const next=[...recipes,...missing]; setRecipes(next); save('recipes', next); }
+  }, [menuProducts, ingredients, recipes]);
 
   useEffect(() => {
     const refresh = () => {
