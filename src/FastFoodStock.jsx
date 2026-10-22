@@ -17,7 +17,7 @@ const starterRecipeFor = (p, ingredients) => {
   const sizeText=(variant+' '+name).toLowerCase();
   const pick=(n,q)=>{const x=ingredients.find(i=>i.name.toLowerCase()===n.toLowerCase());return x?{ingredientId:x.id,ingredientName:x.name,qty:q,unit:x.unit}:null;};
   const lines=[], add=(n,q)=>{const x=pick(n,q);if(x)lines.push(x);};
-  const factor=/\b(xl|extra large|xxl)\b/.test(sizeText)?1.65:/\b(large|lg)\b/.test(sizeText)?1.35:/\b(medium|med)\b/.test(sizeText)?1.15:/\b(small|personal|regular)\b/.test(sizeText)?0.8:1;
+  const factor=/\b(xl|extra large|xxl)\b/.test(sizeText)?1.65:/\b(large|lg)\b/.test(sizeText)?1.35:/\b(medium|med)\b/.test(sizeText)?1.15:/\b(small|personal)\b/.test(sizeText)?0.8:1;
   let portion=variant;
   if(/pizza/.test(name)){
     portion=portion||(/\b(xl|extra large|xxl)\b/.test(name)?'XL':/\blarge\b/.test(name)?'Large':/\bmedium\b/.test(name)?'Medium':/\bsmall\b/.test(name)?'Small':'Standard');
