@@ -21,7 +21,7 @@ const starterRecipeFor = (p, ingredients) => {
   let portion=variant;
   if(/pizza/.test(name)){
     portion=portion||(/\b(xl|extra large|xxl)\b/.test(name)?'XL':/\blarge\b/.test(name)?'Large':/\bmedium\b/.test(name)?'Medium':/\bsmall\b/.test(name)?'Small':'Standard');
-    add('Pizza dough / base',Math.round(({Small:180,Medium:250,Large:350,XL:450,Standard:250}[portion]||250)*factor));
+    add('Pizza dough / base',({Small:180,Medium:250,Large:350,XL:450,Standard:250}[portion]||250));
     add('Pizza sauce',Math.round(60*factor));add('Mozzarella cheese',Math.round(100*factor));
     if(/chicken|fajita|shawarma|tikka|bbq|special|meat/.test(name))add('Chicken breast / boneless chicken',Math.round(80*factor));
     if(/fajita|mexican/.test(name)){add('Capsicum / bell pepper',Math.round(25*factor));add('Onion',Math.round(20*factor));add('Fajita seasoning',Math.round(4*factor));}
@@ -42,7 +42,7 @@ const starterRecipeFor = (p, ingredients) => {
   else if(/tea|chai/.test(name)){add('Tea',4);add('Milk',140);add('Water',80);add('Sugar',10);}
   else if(/shake|smoothie|frappe/.test(name)){add('Milk',180);add('Ice cream',80);add('Mango',80);add('Banana',40);add('Ice',50);add('Sugar',8);}
   else return null;
-  return {id:'starter-recipe-'+p.id,productId:String(p.id),productName:p.name,variant:variant||portion||'',ingredients:lines,starter:true,portionNote:'Illustrative starter portion per menu item. Weigh-test and approve before relying on stock deductions.'};
+  return {id:'starter-recipe-'+p.id,productId:String(p.id),productName:p.name,variant:variant||'',ingredients:lines,starter:true,portionNote:'Illustrative starter portion per menu item. Weigh-test and approve before relying on stock deductions.'};
 };
 
 
