@@ -242,6 +242,41 @@ export default function FastFoodStock({ notify }) {
     if(JSON.stringify(next)!==JSON.stringify(recipes)){setRecipes(next);save('recipes',next);}
   }, [menuProducts, ingredients, recipes]);
 
+  // On first stock setup, provision enough shared ingredients for 100 portions of every recipe the menu can currently calculate. Never rerun after the setup marker is written.
+  useEffect(() => {
+    if (!menuProducts.length || !recipes.length || !ingredients.length) return;
+    const setupKey = 'malik-stock-opening-100-sales-v1';
+    if (localStorage.getItem(setupKey)) return;
+    const knownProductIds = new Set(recipes.map(r => String(r.productId || '')));
+    if (!menuProducts.some(p => knownProductIds.has(String(p.id)))) return;
+    const required = new Map();
+    for (const recipe of recipes) {
+      if (!recipe || !(recipe.ingredients || []).length) continue;
+      for (const line of recipe.ingredients) {
+        const id = String(line.ingredientId || '');
+        const qty = Math.max(0, Number(line.qty) || 0) * 100;
+        if (id && qty > 0) required.set(id, (required.get(id) || 0) + qty);
+      }
+    }
+    if (!required.size) return;
+    const nextIngredients = ingredients.map(item => {
+      const minimum = required.get(String(item.id)) || 0;
+      return minimum > 0 && Number(item.stock || 0) < minimum
+        ? { ...item, stock: minimum, openingStockFor100Sales: minimum }
+        : item;
+    });
+    localStorage.setItem('malik-stock-ingredients', JSON.stringify(nextIngredients));
+    localStorage.setItem(setupKey, JSON.stringify({
+      completedAt: new Date().toISOString(),
+      targetSalesPerRecipe: 100,
+      recipeCount: recipes.filter(r => (r.ingredients || []).length).length,
+      menuProductCount: menuProducts.length,
+      uncoveredProducts: menuProducts.filter(p => !recipes.some(r => String(r.productId || '') === String(p.id))).map(p => ({ id: p.id, name: p.name }))
+    }));
+    setIngredients(nextIngredients);
+    window.dispatchEvent(new CustomEvent('malik-stock-updated'));
+  }, [menuProducts, recipes, ingredients]);
+  
   useEffect(() => {
     const refresh = () => {
       setIngredients(readStock('ingredients', [])); setRecipes(readStock('recipes', []));
