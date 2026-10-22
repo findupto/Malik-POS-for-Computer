@@ -314,3 +314,13 @@
  .receipt-modal .receipt-layout-items .receipt-items { height:auto!important; overflow:visible!important; }
  .receipt-modal .receipt-layout-meta .receipt-meta,.receipt-modal .receipt-layout-totals .receipt-totals { height:auto!important; overflow:visible!important; }
 }
+
+
+/* Editable signature recipe library */
+.ff-recipe-library-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:16px;padding:18px 0}
+.ff-library-card{min-width:0;border:1px solid var(--border-color,#e5e7eb);border-radius:14px;padding:16px;background:var(--panel-bg,#fff);box-shadow:0 2px 8px rgba(15,23,42,.04)}
+.ff-library-card-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.ff-library-card h3{font-size:16px;line-height:1.35;margin:12px 0 6px}
+.ff-library-card p{font-size:13px;line-height:1.6;margin:6px 0 14px;white-space:pre-wrap;overflow-wrap:anywhere}
+.ff-library-card>b{font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+@media(max-width:640px){.ff-recipe-library-grid{grid-template-columns:1fr;padding:10px 0}.ff-library-card{padding:13px}}
