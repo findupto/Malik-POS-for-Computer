@@ -390,17 +390,17 @@ async function printReceipt(type=receiptType, orderOverride=null){
     if(modal==='keyboard-shortcuts'){e.preventDefault();setModal('');return;}
     if(modal){e.preventDefault();setModal('');return;}
    }
+   if(e.altKey&&/^[1-7]$/.test(e.key)){e.preventDefault();const pages=['Overview','Point of Sale','Orders','Inventory','Kitchen Stock','Customers','Reports'];setPage(pages[Number(e.key)-1]);return;}
    if(typing||e.ctrlKey||e.metaKey||e.shiftKey||e.altKey)return;
    if(e.key==='F2'){e.preventDefault();if(page!=='Point of Sale')setPage('Point of Sale');requestAnimationFrame(()=>document.querySelector('[aria-label="Search products by name, variant, category, SKU or barcode"]')?.focus());}
    else if(e.key==='F3'){e.preventDefault();if(page!=='Point of Sale')setPage('Point of Sale');requestAnimationFrame(()=>document.querySelector('[aria-label="Barcode scanner"]')?.focus());}
    else if(e.key==='F4'){e.preventDefault();if(page==='Point of Sale')holdCurrentOrder();else notify('F4 Hold order is available on the Point of Sale screen.');}
    else if(e.key==='F9'){e.preventDefault();if(page==='Point of Sale')checkout();else notify('F9 Checkout is available on the Point of Sale screen.');}
-   else if(/^Alt$/.test(e.key))return;
-   else if(e.altKey&&/^[1-7]$/.test(e.key)){e.preventDefault();const pages=['Overview','Point of Sale','Orders','Inventory','Kitchen Stock','Customers','Reports'];setPage(pages[Number(e.key)-1]);}
+
   };
   window.addEventListener('keydown',onKeyDown);
   return()=>window.removeEventListener('keydown',onKeyDown);
- },[page,modal,cart,products,customers,serviceType,deliveryPhone,deliveryAddress,shiftEnabled,activeShift,query]);
+ });
 
  const categories=['All items',...new Set(products.map(p=>p.category))];
  const filtered=useMemo(()=>products.filter(p=>(category==='All items'||p.category===category)&&matchesProductSearch(p,query)),[products,category,query]);
