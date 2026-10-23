@@ -444,16 +444,17 @@ export default function FastFoodStock({ notify }) {
   }
   function exportBatches() {
     const rows = [['Batch ID','Purchase ID','Received Date','Expiry Date','Ingredient','Supplier','Invoice','Received Quantity','Remaining Quantity','Unit','Unit Cost per Base Unit PKR','Estimated Remaining Value PKR','Status']];
-    for (const batch of batches) {
+    const expiryHorizon = new Date(Date.now() + 7 * 86400000).toISOString().slice(0,10);
+    for (const batch of filteredBatches) {
       const remaining = Math.max(0, Number(batch.remainingQty || 0));
       const expiry = String(batch.expiryDate || '');
-      const status = remaining <= 0 ? 'Depleted' : expiry && expiry < todayISO ? 'Expired - review/write off' : expiry && expiry <= new Date(Date.now() + 7 * 86400000).toISOString().slice(0,10) ? 'Expiring within 7 days' : expiry ? 'In date' : 'No expiry recorded';
+      const status = remaining <= 0 ? 'Depleted' : expiry && expiry < todayISO ? 'Expired - review/write off' : expiry && expiry >= todayISO && expiry <= expiryHorizon ? 'Expiring within 7 days' : expiry ? 'In date' : 'No expiry recorded';
       rows.push([batch.id || '', batch.purchaseId || '', batch.receivedAt || batch.date || '', expiry, batch.ingredientName || '', batch.supplier || '', batch.invoice || '', Number(batch.receivedQty || 0), remaining, batch.unit || '', Number(batch.unitCost || 0), remaining * Number(batch.unitCost || 0), status]);
     }
     const csv = csvRowsStock(rows);
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
     const a = document.createElement('a'); a.href = url; a.download = 'malik-pos-stock-batches-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-    notify('Stock batch report exported');
+    notify('Stock batch report exported (' + filteredBatches.length + ' batches)');
   }
   function exportPurchases() {
     const rows = [['Purchase ID','Purchase Date','Payment Due Date','Supplier','Invoice','Ingredient','Purchase Quantity','Pack Unit','Base Units per Pack','Received Base Quantity','Base Unit','Unit Cost per Pack PKR','Total PKR','Paid PKR','Due PKR','Payment Status','Days Past Due','Expiry Date','Notes','Payment History'], ...filteredPurchases.map(p => { const due = Math.max(0, Number(p.total || 0) - Number(p.paid || 0)); const dueDate = String(p.dueDate || '').slice(0, 10); const daysPastDue = due > 0 && dueDate && dueDate < todayISO ? Math.floor((new Date(todayISO + 'T00:00:00').getTime() - new Date(dueDate + 'T00:00:00').getTime()) / 86400000) : 0; const paymentStatus = due <= 0 ? 'Paid' : dueDate && dueDate < todayISO ? 'Overdue' : dueDate && dueDate > todayISO ? 'Not yet due' : 'Outstanding'; return [p.id, p.date || '', dueDate, p.supplier || '', p.invoice || '', p.ingredientName || '', Number(p.purchaseQty || 0), p.purchaseUnit || '', Number(p.conversion || 0), Number(p.baseQty || 0), p.unit || '', Number(p.unitCost || 0), Number(p.total || 0), Number(p.paid || 0), due, paymentStatus, daysPastDue, p.expiryDate || '', p.notes || '', (p.paymentHistory || []).map(payment => [payment.date ? new Date(payment.date).toLocaleString() : 'Date not recorded', 'Rs. ' + Number(payment.amount || 0).toFixed(2), payment.note || ''].join(' · ')).join(' | ')]; })];
