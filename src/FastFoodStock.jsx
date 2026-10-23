@@ -566,7 +566,7 @@ export default function FastFoodStock({ notify }) {
     e.preventDefault();
     if (!recipeDraft.productName.trim() || !recipeDraft.ingredients.length) { notify('Choose a menu item and add at least one ingredient'); return; }
     const recipe = { ...recipeDraft, id: editingRecipe?.id ?? Date.now(), productId: recipeDraft.productId || '', ingredients: recipeDraft.ingredients.map(x => ({ ...x, qty: Number(x.qty) || 0 })), starter: false };
-    const next = [recipe, ...recipes.filter(r => !(String(r.productId || '') === String(recipe.productId) && r.variant === recipe.variant) && !(r.productName.toLowerCase() === recipe.productName.toLowerCase() && r.variant === recipe.variant))];
+    const next = [recipe, ...recipes.filter(r => String(r.id) !== String(editingRecipe?.id) && !(String(r.productId || '') === String(recipe.productId) && r.variant === recipe.variant) && !(String(r.productName || '').trim().toLowerCase() === recipe.productName.trim().toLowerCase() && r.variant === recipe.variant))];
     setRecipes(next); save('recipes', next); setRecipeDraft({ productId: '', productName: '', variant: '', ingredients: [] }); setShowRecipe(false); setEditingRecipe(null); notify(editingRecipe ? 'Recipe updated' : 'Recipe saved');
   }
   function addRecipeLine() {
