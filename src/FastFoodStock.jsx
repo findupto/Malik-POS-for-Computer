@@ -528,11 +528,6 @@ export default function FastFoodStock({ notify }) {
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
     const a = document.createElement('a'); a.href = url; a.download = 'malik-pos-waste-log-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     notify('Waste log exported (' + filteredWasteRecords.length + ' entries)');
-  }it Cost PKR','Waste Cost PKR','Reason','Staff','Notes'], ...wasteRecords.map(w => [w.id, w.date || '', w.ingredientName || '', Number(w.qty || 0), w.unit || '', Number(w.unitCost || 0), Number(w.cost || 0), w.reason || '', w.staff || '', w.notes || ''])];
-    const csv = '\\uFEFF' + rows.map(row => row.map(value => '"' + String(value ?? '').replaceAll('"', '""') + '"').join(',')).join('\\r\\n');
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
-    const a = document.createElement('a'); a.href = url; a.download = 'malik-pos-waste-log-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-    notify('Waste log exported');
   }
   function exportMovements() {
     const rows = [['Date','Ingredient','Movement Type','Quantity','Unit','Reference','Notes'], ...filteredMovements.map(m => [m.date || '', m.ingredientName || '', m.type || '', Number(m.qty || 0), m.unit || '', m.reference || '', m.note || ''])];
