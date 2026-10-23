@@ -550,8 +550,9 @@ export default function FastFoodStock({ notify }) {
 
   function saveIngredient(e) {
     e.preventDefault();
-    if (!ingredientDraft.name.trim() || Number(ingredientDraft.stock) < 0 || Number(ingredientDraft.cost) < 0) { notify('Enter a name and valid stock/cost'); return; }
-    const item = { ...ingredientDraft, id: editingIngredient?.id ?? Date.now(), name: ingredientDraft.name.trim(), stock: Number(ingredientDraft.stock) || 0, reorder: Number(ingredientDraft.reorder) || 0, cost: Number(ingredientDraft.cost) || 0 };
+    const openingStock = Number(ingredientDraft.stock), reorderLevel = Number(ingredientDraft.reorder), unitCost = Number(ingredientDraft.cost);
+    if (!ingredientDraft.name.trim() || !Number.isFinite(openingStock) || openingStock < 0 || !Number.isFinite(reorderLevel) || reorderLevel < 0 || !Number.isFinite(unitCost) || unitCost < 0) { notify('Enter a name and finite, non-negative stock, reorder level and unit cost'); return; }
+    const item = { ...ingredientDraft, id: editingIngredient?.id ?? Date.now(), name: ingredientDraft.name.trim(), stock: openingStock, reorder: reorderLevel, cost: unitCost };
     const next = editingIngredient ? ingredients.map(x => String(x.id)===String(editingIngredient.id)?item:x) : [item, ...ingredients]; setIngredients(next); save('ingredients', next);
     setIngredientDraft({ name: '', sku: '', category: 'Food', unit: 'g', stock: '0', reorder: '0', cost: '0', supplier: '' }); setShowIngredient(false); setEditingIngredient(null);
     if (!editingIngredient) setMovements(old => { const m = [{ id: Date.now() + 1, date: new Date().toISOString(), ingredientId: item.id, ingredientName: item.name, type: 'opening', qty: item.stock, unit: item.unit, reference: 'Opening balance', note: 'Opening stock' }, ...old]; save('movements', m); return m; });
