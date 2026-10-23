@@ -226,6 +226,8 @@ export default function FastFoodStock({ notify }) {
   const [wasteDraft, setWasteDraft] = useState({ ingredientId: '', qty: '', reason: 'Preparation waste', staff: '', notes: '' });
   const [menuProducts, setMenuProducts] = useState(() => { try { return JSON.parse(localStorage.getItem('malik-products') || '[]'); } catch { return []; } });
   const [search, setSearch] = useState('');
+  const [stockStatusFilter, setStockStatusFilter] = useState('all');
+  const [stockCategoryFilter, setStockCategoryFilter] = useState('all');
   const [showIngredient, setShowIngredient] = useState(false);
   const [editingIngredient, setEditingIngredient] = useState(null);
   const [editingRecipe, setEditingRecipe] = useState(null);
@@ -344,7 +346,13 @@ export default function FastFoodStock({ notify }) {
   const expiryBatches = batches.filter(b => b.expiryDate && Number(b.remainingQty) > 0).sort((a,b) => String(a.expiryDate).localeCompare(String(b.expiryDate)));
   const expiredBatches = expiryBatches.filter(b => b.expiryDate < todayISO);
   const expiringSoonBatches = expiryBatches.filter(b => b.expiryDate >= todayISO && b.expiryDate <= new Date(Date.now()+7*86400000).toISOString().slice(0,10));
-  const filteredIngredients = useMemo(() => ingredients.filter(x => (x.name + ' ' + x.sku + ' ' + x.category).toLowerCase().includes(search.toLowerCase())), [ingredients, search]);
+  const filteredIngredients = useMemo(() => ingredients.filter(x => {
+    const matchesSearch = (x.name + ' ' + x.sku + ' ' + x.category + ' ' + x.supplier).toLowerCase().includes(search.trim().toLowerCase());
+    const matchesCategory = stockCategoryFilter === 'all' || String(x.category || 'Other') === stockCategoryFilter;
+    const stock = Number(x.stock || 0), reorder = Number(x.reorder || 0);
+    const matchesStatus = stockStatusFilter === 'all' || (stockStatusFilter === 'out' && stock <= 0) || (stockStatusFilter === 'low' && stock > 0 && stock <= reorder) || (stockStatusFilter === 'healthy' && stock > reorder);
+    return matchesSearch && matchesCategory && matchesStatus;
+  }), [ingredients, search, stockCategoryFilter, stockStatusFilter]);
   const ingredientValue = ingredients.reduce((n, x) => n + Number(x.stock || 0) * Number(x.cost || 0), 0);
   const supplierDues = purchases.reduce((n, p) => n + Math.max(0, Number(p.total || 0) - Number(p.paid || 0)), 0);
   const totalPurchaseSpend = purchases.reduce((n, p) => n + Number(p.total || 0), 0);
@@ -588,7 +596,7 @@ export default function FastFoodStock({ notify }) {
     </div>
     <div className="ff-stock-tabs">{tabs.map(t => <button key={t.id} className={tab === t.id ? 'active' : ''} onClick={() => setTab(t.id)}><t.icon size={16}/>{t.label}</button>)}</div>
     {tab === 'ingredients' && <div className="panel table-panel">
-      <div className="table-toolbar"><div className="search-box"><Search size={16}/><input placeholder="Search ingredient, SKU or category" value={search} onChange={e => setSearch(e.target.value)}/></div><div className="toolbar-right"><button className="btn btn-secondary" onClick={() => setShowWaste(true)}><Trash2 size={16}/> Record waste</button><button className="btn btn-secondary" onClick={exportStock}>Export stock</button><button className="btn btn-primary" onClick={() => setShowIngredient(true)}><Plus size={16}/> Add ingredient</button></div></div>
+      <div className="table-toolbar"><div className="toolbar-left"><div className="search-box"><Search size={16}/><input placeholder="Search ingredient, SKU, category or supplier" value={search} onChange={e => setSearch(e.target.value)}/></div><select className="form-input" aria-label="Filter ingredients by category" value={stockCategoryFilter} onChange={e => setStockCategoryFilter(e.target.value)}><option value="all">All categories</option>{[...new Set(ingredients.map(x => String(x.category || "Other")))].sort().map(category => <option key={category} value={category}>{category}</option>)}</select><select className="form-input" aria-label="Filter ingredient stock status" value={stockStatusFilter} onChange={e => setStockStatusFilter(e.target.value)}><option value="all">All stock levels</option><option value="out">Out of stock</option><option value="low">Needs reorder</option><option value="healthy">In stock</option></select></div><div className="toolbar-right"><span className="ff-muted">{filteredIngredients.length} of {ingredients.length}</span><button className="btn btn-secondary" onClick={() => { setSearch(''); setStockCategoryFilter('all'); setStockStatusFilter('all'); }}>Clear filters</button><button className="btn btn-secondary" onClick={() => setShowWaste(true)}><Trash2 size={16}/> Record waste</button><button className="btn btn-secondary" onClick={exportStock}>Export stock</button><button className="btn btn-primary" onClick={() => setShowIngredient(true)}><Plus size={16}/> Add ingredient</button></div></div>
       <div className="responsive-table"><table><thead><tr><th>INGREDIENT</th><th>CATEGORY</th><th>ON HAND</th><th>UNIT COST</th><th>STOCK VALUE</th><th>REORDER AT</th><th>STATUS</th><th></th></tr></thead><tbody>{filteredIngredients.map(x => <tr key={x.id}><td><b>{x.name}</b><div className="ff-muted">{x.sku || 'No SKU'} · {x.supplier || 'No supplier set'}</div></td><td>{x.category}</td><td><b>{Number(x.stock).toLocaleString()} {x.unit}</b></td><td>{moneyStock(x.cost)}</td><td>{moneyStock(Number(x.stock) * Number(x.cost))}</td><td>{x.reorder} {x.unit}</td><td><span className={'status-pill ' + (Number(x.stock) <= 0 ? 'status-out' : Number(x.stock) <= Number(x.reorder) ? 'status-low' : 'status-good')}>{Number(x.stock) <= 0 ? 'Out of stock' : Number(x.stock) <= Number(x.reorder) ? 'Reorder' : 'In stock'}</span></td><td><button className="icon-btn" title="Edit ingredient" onClick={() => {setEditingIngredient(x);setIngredientDraft({name:x.name||'',sku:x.sku||'',category:x.category||'Food',unit:x.unit||'g',stock:String(x.stock??0),reorder:String(x.reorder??0),cost:String(x.cost??0),supplier:x.supplier||''});setShowIngredient(true);}}><BookOpen size={14}/></button><button className="icon-btn" title="Remove ingredient" onClick={() => removeIngredient(x.id)}><Trash2 size={14}/></button></td></tr>)}</tbody></table>{!filteredIngredients.length && <div className="empty-state"><Boxes size={28}/><b>No ingredients yet</b><span>Add bread, chicken, beef, milk, ice cream, sauces, cups and packaging as shared stock items.</span></div>}</div>
     </div>}
     {tab === 'recipes' && <div className="panel table-panel">
