@@ -34,18 +34,26 @@ function iconForProduct(name,category='',variant=''){const text=String(name||'')
 function getProductEmoji(p){return iconForProduct(p?.name,p?.category,p?.variant)||p?.emoji||'📦'}
 function editDistanceOne(a,b){if(a===b)return true;if(Math.abs(a.length-b.length)>1)return false;let i=0,j=0,edits=0;while(i<a.length&&j<b.length){if(a[i]===b[j]){i++;j++;continue}if(++edits>1)return false;if(a.length>=b.length)i++;if(b.length>=a.length)j++}return edits+(i<a.length||j<b.length?1:0)<=1}
 const PRODUCT_SEARCH_SYNONYMS={pizzas:'pizza',flatbread:'pizza',burgers:'burger',hamburgers:'burger',shwarma:'shawarma',shwarm:'shawarma',wraps:'wrap',fries:'fries',fajitas:'fajita',nugget:'nuggets',cofee:'coffee',coffe:'coffee',parata:'paratha',margreta:'margherita',margrita:'margherita'};
-function matchesProductSearch(p,query){
- const q=normalizeSearchText(query);if(!q)return true;
- const fields=[p.name,p.sku,p.barcode,p.category,p.variant,p.recipeText,p.recipe].filter(Boolean).map(normalizeSearchText);
- const full=fields.join(' ');if(fields.some(field=>field.includes(q)))return true;
- const terms=q.split(' ').filter(Boolean);const words=[...new Set(full.split(' ').filter(Boolean))];
- // Multi-word searches require every typed word to match; this avoids irrelevant synonym-only results.
- const matchesTerm=t=>words.some(w=>w===t||w.startsWith(t)||w.includes(t)||(t.length>=5&&editDistanceOne(t,w)));
- if(terms.every(matchesTerm))return true;
- // Expand common menu spellings only when a single term was entered.
- if(terms.length===1){const synonym=PRODUCT_SEARCH_SYNONYMS[terms[0]];if(synonym&&words.some(w=>w===synonym||w.startsWith(synonym)||w.includes(synonym)))return true;}
- return false;
+function productSearchScore(p,query){
+ const q=normalizeSearchText(query);if(!q)return 1;
+ const name=normalizeSearchText(p.name),sku=normalizeSearchText(p.sku),barcode=normalizeSearchText(p.barcode),variant=normalizeSearchText(p.variant),category=normalizeSearchText(p.category);
+ const fields=[name,sku,barcode,variant,category,normalizeSearchText([p.recipeText,p.recipe].filter(Boolean).join(' '))].filter(Boolean);
+ if(sku===q||barcode===q)return 120;
+ if(name===q)return 110;
+ if(name.startsWith(q))return 100;
+ if(name.split(' ').some(w=>w===q))return 95;
+ if(variant===q)return 90;
+ if(fields.some(f=>f===q))return 85;
+ if(name.includes(q))return 80;
+ if(variant&&variant.includes(q))return 70;
+ const terms=q.split(' ').filter(Boolean),words=[...new Set(fields.join(' ').split(' ').filter(Boolean))];
+ const matchesTerm=t=>words.some(w=>w===t||w.startsWith(t)||(t.length>=5&&editDistanceOne(t,w)));
+ if(terms.length>1&&terms.every(matchesTerm))return 60;
+ if(terms.length===1){const synonym=PRODUCT_SEARCH_SYNONYMS[terms[0]];if(synonym&&words.some(w=>w===synonym||w.startsWith(synonym)))return 55;if(name.split(' ').some(w=>w.includes(terms[0])&&terms[0].length>=3))return 45;}
+ return 0;
 }
+function matchesProductSearch(p,query){return productSearchScore(p,query)>0;}
+
 const BUSINESS_TYPES = ['Fastfood Store','Medical Store','Super Store','Restaurant','Showroom','General Store','Other'];
 const nav = [{label:'Overview',icon:LayoutDashboard},{label:'Point of Sale',icon:ShoppingCart},{label:'Orders',icon:ClipboardList},{label:'Inventory',icon:Boxes},{label:'Kitchen Stock',icon:ClipboardList},{label:'Customers',icon:Users},{label:'Reports',icon:BarChart3}];
 function read(key,fallback){try{return JSON.parse(localStorage.getItem('malik-'+key)) ?? fallback}catch{return fallback}}
@@ -403,7 +411,7 @@ async function printReceipt(type=receiptType, orderOverride=null){
  });
 
  const categories=['All items',...new Set(products.map(p=>p.category))];
- const filtered=useMemo(()=>products.filter(p=>(category==='All items'||p.category===category)&&matchesProductSearch(p,query)),[products,category,query]);
+ const filtered=useMemo(()=>products.map(p=>({...p,_searchScore:productSearchScore(p,query)})).filter(p=>(category==='All items'||p.category===category)&&p._searchScore>0).sort((a,b)=>b._searchScore-a._searchScore||String(a.name||'').localeCompare(String(b.name||''))),[products,category,query]);
  const subtotal=cart.reduce((s,i)=>s+i.price*i.qty,0), discountAmount=Math.min(subtotal,Math.max(0,Number(discount)||0))+ (appliedDeal?Math.min(Math.max(0,subtotal-Math.min(subtotal,Math.max(0,Number(discount)||0))),Math.max(0,subtotal-Math.min(subtotal,Math.max(0,Number(discount)||0)))*(Number(appliedDeal.discount)||0)/100):0), taxable=Math.max(0,subtotal-discountAmount), tax=taxEnabled?taxable*(Number(gstRate)||0)/100:0, serviceCharges=taxable*(Number(serviceChargeRate)||0)/100, total=taxable+tax+serviceCharges;
  const completedOrders=orders.filter(o=>(o.status||'completed')==='completed'); const costedOrders=completedOrders.filter(o=>Number.isFinite(Number(o.ingredientCostEstimate))&&o.ingredientCostEstimate!==undefined); const estimatedIngredientCOGS=costedOrders.reduce((n,o)=>n+Math.max(0,Number(o.ingredientCostEstimate||0)),0); const recipeCoverageUnits=completedOrders.reduce((n,o)=>n+Number(o.recipeCostCoveredUnits||0),0); const recipeUncoveredUnits=completedOrders.reduce((n,o)=>n+Number(o.recipeCostUncoveredUnits||0),0); const totalWasteCost=read('stock-waste-records',[]).reduce((n,w)=>n+Number(w.cost||0),0); const todayOrders=completedOrders.filter(o=>new Date(o.date).toDateString()===new Date().toDateString());
  const todaySales=todayOrders.reduce((s,o)=>s+o.total,0);
