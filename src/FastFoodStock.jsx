@@ -484,9 +484,11 @@ export default function FastFoodStock({ notify }) {
     const due = Math.max(0, Number(purchase.total || 0) - Number(purchase.paid || 0));
     if (!due) return aging;
     const today = new Date(todayISO + 'T00:00:00').getTime();
-    const dueDate = String(purchase.dueDate || '').slice(0, 10);
+    const rawDueDate = String(purchase.dueDate || '');
+    const dueDate = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDueDate) && Number.isFinite(new Date(rawDueDate + 'T00:00:00').getTime()) && new Date(rawDueDate + 'T00:00:00').toISOString().slice(0, 10) === rawDueDate ? rawDueDate : '';
     if (dueDate && dueDate > todayISO) { aging.upcoming += due; aging.upcomingCount += 1; return aging; }
-    const agingDate = dueDate || String(purchase.date || '').slice(0, 10);
+    const rawPurchaseDate = String(purchase.date || '');
+    const agingDate = dueDate || (/^\\d{4}-\\d{2}-\\d{2}/.test(rawPurchaseDate) ? rawPurchaseDate.slice(0, 10) : '');
     const timestamp = agingDate ? new Date(agingDate + 'T00:00:00').getTime() : NaN;
     if (!Number.isFinite(timestamp)) { aging.unknown += due; aging.unknownCount += 1; return aging; }
     const days = Math.max(0, Math.floor((today - timestamp) / 86400000));
