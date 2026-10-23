@@ -428,9 +428,11 @@ export default function FastFoodStock({ notify }) {
     const duplicateInvoiceLine = invoiceRef && purchases.some(p => String(p.supplier || '').trim().toLowerCase() === supplierRef && String(p.invoice || '').trim().toLowerCase() === invoiceRef && String(p.ingredientId) === String(ingredientRef?.id));
     if (duplicateInvoiceLine && !window.confirm('A purchase for this supplier, invoice number and ingredient already exists. Record another line anyway?')) return;
     const ingredient = ingredientRef;
-    const qty = Number(purchaseDraft.purchaseQty), conversion = Number(purchaseDraft.conversion), unitCost = Number(purchaseDraft.unitCost);
-    if (!ingredient || qty <= 0 || conversion <= 0 || unitCost < 0 || !purchaseDraft.supplier.trim()) { notify('Enter supplier, ingredient, quantity, conversion and cost'); return; }
+    const qty = Number(purchaseDraft.purchaseQty), conversion = Number(purchaseDraft.conversion), unitCost = Number(purchaseDraft.unitCost), paidAmount = Number(purchaseDraft.paid || 0);
+    if (!ingredient || !purchaseDraft.supplier.trim() || !Number.isFinite(qty) || qty <= 0 || !Number.isFinite(conversion) || conversion <= 0 || !Number.isFinite(unitCost) || unitCost < 0 || !Number.isFinite(paidAmount) || paidAmount < 0) { notify('Enter a supplier, ingredient, positive quantity and conversion, and valid costs'); return; }
     const baseQty = qty * conversion, total = qty * unitCost;
+    if (!Number.isFinite(baseQty) || !Number.isFinite(total) || baseQty <= 0 || total < 0) { notify('Purchase quantity or total is outside the supported range'); return; }
+    if (paidAmount > total) { notify('Amount paid cannot exceed the purchase total'); return; }
     const initialPaid = Number(purchaseDraft.paid || 0);
     if (!Number.isFinite(initialPaid) || initialPaid < 0 || initialPaid > total) { notify('Amount paid must be between Rs. 0 and the purchase total (' + moneyStock(total) + ')'); return; }
     const oldStock = Number(ingredient.stock || 0), oldCost = Number(ingredient.cost || 0);
