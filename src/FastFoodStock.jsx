@@ -440,7 +440,7 @@ export default function FastFoodStock({ notify }) {
   }
   function exportSupplierPayables() {
     const rows = [['Supplier','Invoice Count','Purchase Value PKR','Paid PKR','Outstanding PKR','Oldest Open Invoice Date'], ...supplierPayableSummary.map(supplier => [supplier.supplier, supplier.invoices, supplier.total, supplier.paid, supplier.due, supplier.oldestOpenDate || ''])];
-    const csv = '\\uFEFF' + rows.map(row => row.map(value => '"' + String(value ?? '').replaceAll('"', '""') + '"').join(',')).join('\\r\\n');
+    const csv = '\uFEFF' + rows.map(row => row.map(value => '"' + String(value ?? '').replaceAll('"', '""') + '"').join(',')).join('\r\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
     const a = document.createElement('a'); a.href = url; a.download = 'malik-pos-supplier-payables-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     notify('Supplier payable summary exported');
