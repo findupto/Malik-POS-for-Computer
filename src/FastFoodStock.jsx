@@ -650,7 +650,7 @@ export default function FastFoodStock({ notify }) {
     e.preventDefault();
     const supplierRecords = (() => { try { return JSON.parse(localStorage.getItem('malik-suppliers') || '[]'); } catch { return []; } })();
     if (supplierRecords.some(x => x.blocked && String(x.name || '').trim().toLowerCase() === String(purchaseDraft.supplier || '').trim().toLowerCase())) { notify('This supplier is blocked. An administrator must unblock the supplier before recording a purchase.'); return; }
-    const supplierName = supplierRecords.find(x => String(x.name || '').trim().toLowerCase() === String(purchaseDraft.supplier || '').trim().toLowerCase())?.name?.trim() || supplierName;
+    const supplierName = supplierRecords.find(x => String(x.name || '').trim().toLowerCase() === String(purchaseDraft.supplier || '').trim().toLowerCase())?.name?.trim() || String(purchaseDraft.supplier || '').trim();
     const invoiceRef = String(purchaseDraft.invoice || '').trim().toLowerCase();
     const supplierRef = String(supplierName || '').trim().toLowerCase();
     const ingredientRef = ingredients.find(x => String(x.id) === String(purchaseDraft.ingredientId));
