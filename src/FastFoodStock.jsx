@@ -387,7 +387,12 @@ export default function FastFoodStock({ notify }) {
     e.preventDefault();
     const supplierRecords = (() => { try { return JSON.parse(localStorage.getItem('malik-suppliers') || '[]'); } catch { return []; } })();
     if (supplierRecords.some(x => x.blocked && String(x.name || '').trim().toLowerCase() === String(purchaseDraft.supplier || '').trim().toLowerCase())) { notify('This supplier is blocked. An administrator must unblock the supplier before recording a purchase.'); return; }
-    const ingredient = ingredients.find(x => String(x.id) === String(purchaseDraft.ingredientId));
+    const invoiceRef = String(purchaseDraft.invoice || '').trim().toLowerCase();
+    const supplierRef = String(purchaseDraft.supplier || '').trim().toLowerCase();
+    const ingredientRef = ingredients.find(x => String(x.id) === String(purchaseDraft.ingredientId));
+    const duplicateInvoiceLine = invoiceRef && purchases.some(p => String(p.supplier || '').trim().toLowerCase() === supplierRef && String(p.invoice || '').trim().toLowerCase() === invoiceRef && String(p.ingredientId) === String(ingredientRef?.id));
+    if (duplicateInvoiceLine && !window.confirm('A purchase for this supplier, invoice number and ingredient already exists. Record another line anyway?')) return;
+    const ingredient = ingredientRef;
     const qty = Number(purchaseDraft.purchaseQty), conversion = Number(purchaseDraft.conversion), unitCost = Number(purchaseDraft.unitCost);
     if (!ingredient || qty <= 0 || conversion <= 0 || unitCost < 0 || !purchaseDraft.supplier.trim()) { notify('Enter supplier, ingredient, quantity, conversion and cost'); return; }
     const baseQty = qty * conversion, total = qty * unitCost;
