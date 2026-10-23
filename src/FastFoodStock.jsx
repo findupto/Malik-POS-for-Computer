@@ -343,7 +343,7 @@ export default function FastFoodStock({ notify }) {
   }).sort((a,b) => new Date(b.date || 0) - new Date(a.date || 0)), [purchases, purchaseSearch, purchaseBalanceFilter]);
   function exportPurchases() {
     const rows = [['Purchase ID','Date','Supplier','Invoice','Ingredient','Purchase Quantity','Pack Unit','Base Units per Pack','Received Base Quantity','Base Unit','Unit Cost per Pack PKR','Total PKR','Paid PKR','Due PKR','Expiry Date','Notes'], ...filteredPurchases.map(p => [p.id, p.date || '', p.supplier || '', p.invoice || '', p.ingredientName || '', Number(p.purchaseQty || 0), p.purchaseUnit || '', Number(p.conversion || 0), Number(p.baseQty || 0), p.unit || '', Number(p.unitCost || 0), Number(p.total || 0), Number(p.paid || 0), Math.max(0, Number(p.total || 0) - Number(p.paid || 0)), p.expiryDate || '', p.notes || ''])];
-    const csv = '\\uFEFF' + rows.map(row => row.map(value => '"' + String(value ?? '').replaceAll('"', '""') + '"').join(',')).join('\\r\\n');
+    const csv = '\uFEFF' + rows.map(row => row.map(value => '"' + String(value ?? '').replaceAll('"', '""') + '"').join(',')).join('\r\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
     const a = document.createElement('a'); a.href = url; a.download = 'malik-pos-purchase-invoices-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     notify('Purchase invoice report exported');
