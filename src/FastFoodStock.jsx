@@ -580,7 +580,7 @@ export default function FastFoodStock({ notify }) {
     const nextDueDate = window.prompt('Payment due date for ' + (purchase.invoice || purchase.id) + ' (YYYY-MM-DD). Leave blank to clear.', currentDueDate);
     if (nextDueDate === null) return;
     const dueDate = nextDueDate.trim();
-    if (dueDate && (!/^\\d{4}-\\d{2}-\\d{2}$/.test(dueDate) || !Number.isFinite(new Date(dueDate + 'T00:00:00').getTime()) || new Date(dueDate + 'T00:00:00').toISOString().slice(0, 10) !== dueDate)) {
+    if (dueDate && (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate) || !Number.isFinite(new Date(dueDate + 'T00:00:00').getTime()) || new Date(dueDate + 'T00:00:00').toISOString().slice(0, 10) !== dueDate)) {
       notify('Enter a valid due date in YYYY-MM-DD format');
       return;
     }
