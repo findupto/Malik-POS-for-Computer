@@ -560,7 +560,11 @@ export default function FastFoodStock({ notify }) {
 
   function removeIngredient(id) {
     if (recipes.some(r => r.ingredients.some(x => String(x.ingredientId) === String(id)))) { notify('Remove this ingredient from its recipes first'); return; }
-    const next = ingredients.filter(x => x.id !== id); setIngredients(next); save('ingredients', next); notify('Ingredient removed');
+    if (purchases.some(p => String(p.ingredientId) === String(id)) || batches.some(b => String(b.ingredientId) === String(id)) || movements.some(m => String(m.ingredientId) === String(id)) || wasteRecords.some(w => String(w.ingredientId) === String(id))) {
+      notify('This ingredient has purchase, batch, stock-movement or waste history. Keep it for audit records; set its stock to zero and rename it if it is no longer used.');
+      return;
+    }
+    const next = ingredients.filter(x => String(x.id) !== String(id)); setIngredients(next); save('ingredients', next); notify('Ingredient removed');
   }
   function removeRecipe(id) { const next = recipes.filter(x => String(x.id) !== String(id)); setRecipes(next); save('recipes', next); notify('Recipe removed'); }
   function exportStock() {
