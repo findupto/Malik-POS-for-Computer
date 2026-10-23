@@ -485,10 +485,10 @@ export default function FastFoodStock({ notify }) {
     if (!due) return aging;
     const today = new Date(todayISO + 'T00:00:00').getTime();
     const rawDueDate = String(purchase.dueDate || '');
-    const dueDate = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDueDate) && Number.isFinite(new Date(rawDueDate + 'T00:00:00').getTime()) && new Date(rawDueDate + 'T00:00:00').toISOString().slice(0, 10) === rawDueDate ? rawDueDate : '';
+    const dueDate = /^\d{4}-\d{2}-\d{2}$/.test(rawDueDate) && Number.isFinite(new Date(rawDueDate + 'T00:00:00').getTime()) && new Date(rawDueDate + 'T00:00:00').toISOString().slice(0, 10) === rawDueDate ? rawDueDate : '';
     if (dueDate && dueDate > todayISO) { aging.upcoming += due; aging.upcomingCount += 1; return aging; }
     const rawPurchaseDate = String(purchase.date || '');
-    const agingDate = dueDate || (/^\\d{4}-\\d{2}-\\d{2}/.test(rawPurchaseDate) ? rawPurchaseDate.slice(0, 10) : '');
+    const agingDate = dueDate || (/^\d{4}-\d{2}-\d{2}/.test(rawPurchaseDate) ? rawPurchaseDate.slice(0, 10) : '');
     const timestamp = agingDate ? new Date(agingDate + 'T00:00:00').getTime() : NaN;
     if (!Number.isFinite(timestamp)) { aging.unknown += due; aging.unknownCount += 1; return aging; }
     const days = Math.max(0, Math.floor((today - timestamp) / 86400000));
