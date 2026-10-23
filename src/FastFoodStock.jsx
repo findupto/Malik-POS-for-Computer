@@ -366,7 +366,7 @@ export default function FastFoodStock({ notify }) {
   }, { total: 0, paid: 0, due: 0 }), [filteredPurchases]);
   function exportPurchasePayments() {
     const rows = [['Purchase ID','Purchase Date','Supplier','Invoice','Payment ID','Payment Date','Amount PKR','Note'], ...filteredPurchases.flatMap(p => (p.paymentHistory || []).map(payment => [p.id, p.date || '', p.supplier || '', p.invoice || '', payment.id || '', payment.date || '', Number(payment.amount || 0), payment.note || '']))];
-    const csv = '\\uFEFF' + rows.map(row => row.map(value => '"' + String(value ?? '').replaceAll('"', '""') + '"').join(',')).join('\\r\\n');
+    const csv = '\uFEFF' + rows.map(row => row.map(value => '"' + String(value ?? '').replaceAll('"', '""') + '"').join(',')).join('\r\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
     const a = document.createElement('a'); a.href = url; a.download = 'malik-pos-supplier-payments-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     notify('Supplier payment ledger exported');
