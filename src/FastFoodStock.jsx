@@ -402,10 +402,9 @@ export default function FastFoodStock({ notify }) {
       const remaining = Math.max(0, Number(batch.remainingQty || 0));
       const expiry = String(batch.expiryDate || '');
       const status = remaining <= 0 ? 'Depleted' : expiry && expiry < todayISO ? 'Expired - review/write off' : expiry && expiry <= new Date(Date.now() + 7 * 86400000).toISOString().slice(0,10) ? 'Expiring within 7 days' : expiry ? 'In date' : 'No expiry recorded';
-      const purchase = purchases.find(p => String(p.id) === String(batch.purchaseId));
       rows.push([batch.id || '', batch.purchaseId || '', batch.receivedAt || batch.date || '', expiry, batch.ingredientName || '', batch.supplier || '', batch.invoice || '', Number(batch.receivedQty || 0), remaining, batch.unit || '', Number(batch.unitCost || 0), remaining * Number(batch.unitCost || 0), status]);
     }
-    const csv = '\\uFEFF' + rows.map(row => row.map(value => '\"' + String(value ?? '').replaceAll('\"', '\"\"') + '\"').join(',')).join('\\r\\n');
+    const csv = '\uFEFF' + rows.map(row => row.map(value => '"' + String(value ?? '').replaceAll('"', '""') + '"').join(',')).join('\r\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
     const a = document.createElement('a'); a.href = url; a.download = 'malik-pos-stock-batches-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     notify('Stock batch report exported');
