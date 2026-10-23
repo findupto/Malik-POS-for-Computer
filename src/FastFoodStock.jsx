@@ -725,6 +725,22 @@ export default function FastFoodStock({ notify }) {
     notify('Stock movement report exported');
   }
   const recipeCost = recipe => (recipe.ingredients || []).reduce((n, line) => { const item = ingredients.find(x => String(x.id) === String(line.ingredientId)); return n + Number(line.qty || 0) * Number(item?.cost || 0); }, 0);
+  function exportRecipeCosts() {
+    const rows = [['Recipe ID','Menu Item','Variant','Ingredient Lines','Ingredients Without Cost','Estimated Ingredient Cost PKR','Ingredient Breakdown']];
+    for (const recipe of recipes) {
+      const lines = (recipe.ingredients || []).map(line => {
+        const item = ingredients.find(x => String(x.id) === String(line.ingredientId));
+        const qty = Number(line.qty || 0), unitCost = Number(item?.cost || 0);
+        return { name: line.ingredientName || item?.name || 'Unknown ingredient', qty, unit: line.unit || item?.unit || '', unitCost, lineCost: qty * unitCost, hasCost: Boolean(item && Number(item.cost) > 0) };
+      });
+      const breakdown = lines.map(line => `${line.name}: ${line.qty} ${line.unit} × Rs. ${line.unitCost} = Rs. ${line.lineCost.toFixed(2)}`).join(' | ');
+      rows.push([recipe.id, recipe.productName || '', recipe.variant || 'Default / all variants', lines.length, lines.filter(line => !line.hasCost).length, recipeCost(recipe), breakdown]);
+    }
+    const csv = csvRowsStock(rows);
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+    const a = document.createElement('a'); a.href = url; a.download = 'malik-pos-recipe-costs-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    notify('Recipe cost report exported (' + recipes.length + ' recipes)');
+  }
 
   return <div className="ff-stock">
     <div className="ff-stock-summary">
@@ -740,7 +756,7 @@ export default function FastFoodStock({ notify }) {
       <div className="responsive-table"><table><thead><tr><th>INGREDIENT</th><th>CATEGORY</th><th>ON HAND</th><th>UNIT COST</th><th>STOCK VALUE</th><th>REORDER AT</th><th>STATUS</th><th></th></tr></thead><tbody>{filteredIngredients.map(x => <tr key={x.id}><td><b>{x.name}</b><div className="ff-muted">{x.sku || 'No SKU'} · {x.supplier || 'No supplier set'}</div></td><td>{x.category}</td><td><b>{Number(x.stock).toLocaleString()} {x.unit}</b></td><td>{moneyStock(x.cost)}</td><td>{moneyStock(Number(x.stock) * Number(x.cost))}</td><td>{x.reorder} {x.unit}</td><td><span className={'status-pill ' + (Number(x.stock) <= 0 ? 'status-out' : Number(x.stock) <= Number(x.reorder) ? 'status-low' : 'status-good')}>{Number(x.stock) <= 0 ? 'Out of stock' : Number(x.stock) <= Number(x.reorder) ? 'Reorder' : 'In stock'}</span></td><td><button className="icon-btn" title="Edit ingredient" onClick={() => {setEditingIngredient(x);setIngredientDraft({name:x.name||'',sku:x.sku||'',category:x.category||'Food',unit:x.unit||'g',stock:String(x.stock??0),reorder:String(x.reorder??0),cost:String(x.cost??0),supplier:x.supplier||''});setShowIngredient(true);}}><BookOpen size={14}/></button><button className="icon-btn" title="Remove ingredient" onClick={() => removeIngredient(x.id)}><Trash2 size={14}/></button></td></tr>)}</tbody></table>{!filteredIngredients.length && <div className="empty-state"><Boxes size={28}/><b>No ingredients yet</b><span>Add bread, chicken, beef, milk, ice cream, sauces, cups and packaging as shared stock items.</span></div>}</div>
     </div>}
     {tab === 'recipes' && <div className="panel table-panel">
-      <div className="table-toolbar"><div><b>Recipe & portion cards</b><div className="ff-muted">Quantities are consumed in each ingredient's base unit per one menu item.</div></div><button className="btn btn-primary" onClick={() => setShowRecipe(true)}><Plus size={16}/> Build recipe</button></div>
+      <div className="table-toolbar"><div><b>Recipe & portion cards</b><div className="ff-muted">Quantities are consumed in each ingredient's base unit per one menu item.</div></div><div className="toolbar-right"><button className="btn btn-secondary" onClick={exportRecipeCosts}>Export recipe costs</button><button className="btn btn-primary" onClick={() => setShowRecipe(true)}><Plus size={16}/> Build recipe</button></div></div>
       <div className="responsive-table"><table><thead><tr><th>MENU ITEM</th><th>VARIANT</th><th>INGREDIENTS</th><th>EST. FOOD COST</th><th></th></tr></thead><tbody>{recipes.map(r => <tr key={r.id}><td><b>{r.productName}</b></td><td>{r.variant || 'Default / all variants'}</td><td><div className="ff-recipe-lines">{r.ingredients.map((line,i) => <span key={i}>{line.ingredientName}: {line.qty} {line.unit}</span>)}</div></td><td><b>{moneyStock(recipeCost(r))}</b></td><td><button className="icon-btn" title="Edit recipe" onClick={() => {setEditingRecipe(r);setRecipeDraft({productId:String(r.productId||''),productName:r.productName||'',variant:r.variant||'',ingredients:(r.ingredients||[]).map(x=>({...x}))});setRecipeLine({ingredientId:'',qty:''});setShowRecipe(true);}}><BookOpen size={14}/></button><button className="icon-btn" title="Remove recipe" onClick={() => removeRecipe(r.id)}><Trash2 size={14}/></button></td></tr>)}</tbody></table>{!recipes.length && <div className="empty-state"><BookOpen size={28}/><b>No recipes configured</b><span>Create recipes for menu items and their portion sizes. Different variants can share the same ingredient.</span></div>}</div>
       {missingRecipes.length > 0 && <div className="ff-alert"><Utensils size={17}/><div><b>{missingRecipes.length} menu items need recipe setup</b><p>Unconfigured items will still sell, but will not deduct ingredient stock. Start with your best-selling items.</p></div></div>}
     </div>}
