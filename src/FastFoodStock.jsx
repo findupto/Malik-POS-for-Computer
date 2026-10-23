@@ -569,11 +569,11 @@ export default function FastFoodStock({ notify }) {
   }
   function removeRecipe(id) { const next = recipes.filter(x => String(x.id) !== String(id)); setRecipes(next); save('recipes', next); notify('Recipe removed'); }
   function exportStock() {
-    const rows = [['Ingredient','SKU','Category','On hand','Base unit','Reorder level','Cost per base unit PKR','Stock value'], ...ingredients.map(x => [x.name, x.sku || '', x.category || '', Number(x.stock || 0), x.unit || '', Number(x.reorder || 0), Number(x.cost || 0), Number(x.stock || 0) * Number(x.cost || 0)])];
+    const rows = [['Ingredient','SKU','Category','Supplier','On hand','Base unit','Reorder level','Stock status','Cost per base unit PKR','Stock value'], ...filteredIngredients.map(x => { const stock = Number(x.stock || 0), reorder = Number(x.reorder || 0); return [x.name, x.sku || '', x.category || '', x.supplier || '', stock, x.unit || '', reorder, stock <= 0 ? 'Out of stock' : stock <= reorder ? 'Reorder' : 'In stock', Number(x.cost || 0), stock * Number(x.cost || 0)]; })];
     const csv = '\uFEFF' + rows.map(row => row.map(value => '"' + String(value ?? '').replaceAll('"', '""') + '"').join(',')).join('\r\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
     const a = document.createElement('a'); a.href = url; a.download = 'malik-pos-ingredient-stock-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-    notify('Ingredient stock exported');
+    notify('Ingredient stock exported (' + filteredIngredients.length + ' items)');
   }
   function exportWaste() {
     const rows = [['Waste ID','Date','Ingredient','Quantity','Unit','Unit Cost PKR','Waste Cost PKR','Reason','Staff','Notes'], ...filteredWasteRecords.map(w => [w.id, w.date || '', w.ingredientName || '', Number(w.qty || 0), w.unit || '', Number(w.unitCost || 0), Number(w.cost || 0), w.reason || '', w.staff || '', w.notes || ''])];
