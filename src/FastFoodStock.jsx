@@ -685,7 +685,12 @@ export default function FastFoodStock({ notify }) {
     const weightedCost = oldStock + baseQty > 0 ? ((oldStock * oldCost) + total) / (oldStock + baseQty) : total / baseQty;
     const nextIngredients = ingredients.map(x => String(x.id) === String(ingredient.id) ? { ...x, stock: oldStock + baseQty, cost: weightedCost, supplier: supplierName } : x);
     const selectedPurchaseDate = String(purchaseDraft.purchaseDate || stockDateKey());
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(selectedPurchaseDate) || !Number.isFinite(new Date(selectedPurchaseDate + 'T12:00:00').getTime())) { notify('Enter a valid purchase date'); return; }
+    const validDateOnly = value => /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(new Date(value + 'T12:00:00').getTime()) && new Date(value + 'T12:00:00').toISOString().slice(0, 10) === value;
+    if (!validDateOnly(selectedPurchaseDate)) { notify('Enter a real calendar date for the purchase'); return; }
+    const selectedDueDate = String(purchaseDraft.dueDate || '').trim();
+    if (selectedDueDate && (!validDateOnly(selectedDueDate) || selectedDueDate < selectedPurchaseDate)) { notify('Supplier due date must be a real date on or after the purchase date'); return; }
+    const selectedExpiryDate = String(purchaseDraft.expiryDate || '').trim();
+    if (selectedExpiryDate && !validDateOnly(selectedExpiryDate)) { notify('Enter a real calendar date for the batch expiry'); return; }
     const purchaseDate = new Date(selectedPurchaseDate + 'T12:00:00').toISOString();
     const purchase = { id: 'PUR-' + Date.now().toString().slice(-7), date: purchaseDate, dueDate: purchaseDraft.dueDate || '', supplier: supplierName, invoice: purchaseDraft.invoice, ingredientId: ingredient.id, ingredientName: ingredient.name, purchaseQty: qty, purchaseUnit: purchaseDraft.purchaseUnit || ingredient.unit, conversion, baseQty, unit: ingredient.unit, unitCost, total, paid: initialPaid, paymentHistory: initialPaid > 0 ? [{ id: 'SP-' + Date.now().toString().slice(-7), date: purchaseDate, amount: initialPaid, note: 'Initial payment at purchase' }] : [], expiryDate: purchaseDraft.expiryDate || '', notes: purchaseDraft.notes };
     const batch = { id: 'BAT-' + Date.now().toString().slice(-7), purchaseId: purchase.id, receivedAt: purchase.date, date: purchase.date, expiryDate: purchaseDraft.expiryDate || '', ingredientId: ingredient.id, ingredientName: ingredient.name, supplier: purchase.supplier, invoice: purchase.invoice, receivedQty: baseQty, remainingQty: baseQty, unit: ingredient.unit, unitCost: conversion > 0 ? unitCost / conversion : 0 };
