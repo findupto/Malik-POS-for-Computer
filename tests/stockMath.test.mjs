@@ -24,5 +24,9 @@ test('days past due only counts open invoices overdue by calendar date', () => {
   assert.equal(daysPastDue('2026-10-20', '2026-10-23', 10), 3);
   assert.equal(daysPastDue('2026-10-23', '2026-10-23', 10), 0);
   assert.equal(daysPastDue('2026-10-24', '2026-10-23', 10), 0);
+  assert.equal(daysPastDue('2026-02-30', '2026-03-05', 10), 0);
+  assert.equal(daysPastDue('2026-10-20', '2026-02-30', 10), 0);
+  assert.equal(daysPastDue('not-a-date', '2026-10-23', 10), 0);
+  assert.equal(daysPastDue('2026-10-20T12:00:00Z', '2026-10-23', 10), 0);
   assert.equal(daysPastDue('2026-10-20', '2026-10-23', 0), 0);
 });
