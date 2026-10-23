@@ -5,8 +5,8 @@ const readStock = (key, fallback) => {
   try { return JSON.parse(localStorage.getItem('malik-stock-' + key)) ?? fallback; } catch { return fallback; }
 };
 const moneyStock = n => 'Rs. ' + new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(Number(n) || 0);
-const csvCellStock = value => { const raw = String(value ?? ''); const safe = typeof value === 'string' && /^[\\t\\r ]*[=+\\-@]/.test(raw) ? "'" + raw : raw; return '"' + safe.replaceAll('"', '""') + '"'; };
-const csvRowsStock = rows => '\\uFEFF' + rows.map(row => row.map(csvCellStock).join(',')).join('\\r\\n');
+const csvCellStock = value => { const raw = String(value ?? ''); const safe = typeof value === 'string' && /^[\t\r ]*[=+\-@]/.test(raw) ? "'" + raw : raw; return '"' + safe.replaceAll('"', '""') + '"'; };
+const csvRowsStock = rows => '\uFEFF' + rows.map(row => row.map(csvCellStock).join(',')).join('\r\n');
 const units = ['kg', 'g', 'L', 'ml', 'each'];
 const unitFamilies = { kg: 'weight', g: 'weight', L: 'volume', ml: 'volume', each: 'count' };
 const unitScale = { kg: 1000, g: 1, L: 1000, ml: 1, each: 1 };
