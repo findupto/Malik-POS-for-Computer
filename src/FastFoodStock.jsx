@@ -615,9 +615,27 @@ export default function FastFoodStock({ notify }) {
     const date = new Date().toISOString();
     const entryId = 'ADJ-' + Date.now().toString().slice(-7);
     const nextIngredients = ingredients.map(x => String(x.id) === String(ingredient.id) ? { ...x, stock: countedQty } : x);
+    // Keep the traceable batch ledger aligned with physical stock adjustments.
+    // A stock increase becomes an adjustment batch; a decrease reduces tracked batches FIFO.
+    let nextBatches = [...batches];
+    if (delta > 0) {
+      nextBatches = [{ id: 'BAT-' + entryId, purchaseId: entryId, receivedAt: date, date, expiryDate: '', ingredientId: ingredient.id, ingredientName: ingredient.name, supplier: 'Stock count adjustment', invoice: entryId, receivedQty: delta, remainingQty: delta, unit: ingredient.unit, unitCost: Number(ingredient.cost || 0), adjustmentReason: adjustmentDraft.reason.trim() }, ...nextBatches];
+    } else {
+      let toRemove = Math.abs(delta);
+      nextBatches = nextBatches.map(batch => ({ ...batch }));
+      const fifo = nextBatches.filter(batch => String(batch.ingredientId) === String(ingredient.id) && Number(batch.remainingQty) > 0).sort((a, b) => String(a.receivedAt || a.date || '').localeCompare(String(b.receivedAt || b.date || '')));
+      for (const batch of fifo) {
+        if (toRemove <= 0) break;
+        const available = Math.max(0, Number(batch.remainingQty) || 0);
+        const removed = Math.min(available, toRemove);
+        batch.remainingQty = available - removed;
+        toRemove -= removed;
+      }
+    }
     const movement = { id: Date.now(), date, ingredientId: ingredient.id, ingredientName: ingredient.name, type: 'stock adjustment', qty: delta, unit: ingredient.unit, reference: entryId, note: adjustmentDraft.reason.trim() + ' · Staff: ' + adjustmentDraft.staff.trim() + ' · Counted ' + countedQty + ' (was ' + previousQty + ')' + (adjustmentDraft.notes.trim() ? ' · ' + adjustmentDraft.notes.trim() : '') };
     const nextMovements = [movement, ...movements];
     setIngredients(nextIngredients); save('ingredients', nextIngredients);
+    setBatches(nextBatches); save('batches', nextBatches);
     setMovements(nextMovements); save('movements', nextMovements);
     setAdjustmentDraft({ ingredientId: '', countedQty: '', reason: 'Physical stock count', staff: '', notes: '' });
     setShowStockAdjustment(false);
