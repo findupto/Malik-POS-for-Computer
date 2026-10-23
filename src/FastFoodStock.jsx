@@ -379,6 +379,21 @@ export default function FastFoodStock({ notify }) {
     const paid = Math.min(total, Math.max(0, Number(purchase.paid || 0)));
     totals.total += total; totals.paid += paid; totals.due += Math.max(0, total - paid); return totals;
   }, { total: 0, paid: 0, due: 0 }), [filteredPurchases]);
+  const supplierPayableSummary = useMemo(() => {
+    const grouped = new Map();
+    for (const purchase of purchases) {
+      const supplier = String(purchase.supplier || 'Unspecified supplier').trim() || 'Unspecified supplier';
+      const key = supplier.toLowerCase();
+      const entry = grouped.get(key) || { supplier, invoices: 0, total: 0, paid: 0, due: 0, oldestOpenDate: '' };
+      const total = Math.max(0, Number(purchase.total || 0));
+      const paid = Math.min(total, Math.max(0, Number(purchase.paid || 0)));
+      const due = Math.max(0, total - paid);
+      entry.invoices += 1; entry.total += total; entry.paid += paid; entry.due += due;
+      if (due > 0 && purchase.date && (!entry.oldestOpenDate || String(purchase.date) < entry.oldestOpenDate)) entry.oldestOpenDate = String(purchase.date);
+      grouped.set(key, entry);
+    }
+    return [...grouped.values()].sort((a, b) => b.due - a.due || a.supplier.localeCompare(b.supplier));
+  }, [purchases]);
   const purchaseAging = useMemo(() => purchases.reduce((aging, purchase) => {
     const due = Math.max(0, Number(purchase.total || 0) - Number(purchase.paid || 0));
     if (!due) return aging;
@@ -591,6 +606,10 @@ export default function FastFoodStock({ notify }) {
         <div className="ff-stat"><span>Due · 8–30 days</span><b>{moneyStock(purchaseAging.medium)}</b><small>{purchaseAging.mediumCount} invoice(s)</small></div>
         <div className="ff-stat"><span>Due · over 30 days</span><b>{moneyStock(purchaseAging.old)}</b><small>{purchaseAging.oldCount} invoice(s)</small></div>
         {purchaseAging.unknownCount > 0 && <div className="ff-stat"><span>Due · date unavailable</span><b>{moneyStock(purchaseAging.unknown)}</b><small>{purchaseAging.unknownCount} invoice(s) need date review</small></div>}
+      </div>
+      <div className="panel table-panel">
+        <div className="panel-head"><div><h2>Supplier payable summary</h2><p>Balances are calculated from ingredient purchase invoices and their recorded payments.</p></div><span className="ff-muted">{supplierPayableSummary.length} supplier(s)</span></div>
+        <div className="responsive-table"><table><thead><tr><th>SUPPLIER</th><th>INVOICES</th><th>PURCHASE VALUE</th><th>PAID</th><th>OUTSTANDING</th><th>OLDEST OPEN INVOICE</th></tr></thead><tbody>{supplierPayableSummary.map(supplier => <tr key={supplier.supplier.toLowerCase()}><td><b>{supplier.supplier}</b></td><td>{supplier.invoices}</td><td>{moneyStock(supplier.total)}</td><td>{moneyStock(supplier.paid)}</td><td><b>{moneyStock(supplier.due)}</b></td><td>{supplier.oldestOpenDate ? new Date(supplier.oldestOpenDate).toLocaleDateString() : '—'}</td></tr>)}</tbody></table>{!supplierPayableSummary.length && <div className="empty-state"><ShoppingCart size={24}/><b>No supplier balances yet</b><span>Record ingredient purchases to build the supplier payable summary.</span></div>}</div>
       </div>
       <div className="responsive-table"><table><thead><tr><th>BATCH</th><th>INGREDIENT</th><th>RECEIVED</th><th>EXPIRY</th><th>REMAINING</th><th>STATUS / ACTION</th></tr></thead><tbody>{batches.filter(b => b.expiryDate).map(b => { const expired = b.expiryDate < todayISO && Number(b.remainingQty)>0; const soon = b.expiryDate >= todayISO && b.expiryDate <= new Date(Date.now()+7*86400000).toISOString().slice(0,10) && Number(b.remainingQty)>0; return <tr key={b.id}><td><b>{b.id}</b><div className="ff-muted">{b.purchaseId}</div></td><td>{b.ingredientName}<div className="ff-muted">{b.supplier}</div></td><td>{Number(b.receivedQty).toLocaleString()} {b.unit}</td><td>{b.expiryDate}</td><td>{Number(b.remainingQty).toLocaleString()} {b.unit}</td><td>{Number(b.remainingQty)<=0 ? 'Depleted' : expired ? <><span className="ff-negative">Expired</span> <button className="btn btn-secondary" onClick={() => writeOffExpiredBatch(b.id)}>Write off</button></> : soon ? <span className="ff-negative">Expiring soon</span> : 'In date'}</td></tr>; })}</tbody></table>{!batches.some(b => b.expiryDate) && <div className="empty-state"><Boxes size={24}/><b>No expiry-dated batches yet</b><span>Enter expiry dates on new purchase receipts to enable batch alerts and write-offs. Existing stock is not retroactively assigned an expiry date.</span></div>}</div>
       <div className="ff-stat-grid"><div className="ff-stat"><span>Filtered invoice value</span><b>{moneyStock(purchaseFilteredTotals.total)}</b><small>{filteredPurchases.length} invoice(s)</small></div><div className="ff-stat"><span>Payments recorded</span><b>{moneyStock(purchaseFilteredTotals.paid)}</b><small>For the filtered invoices</small></div><div className="ff-stat"><span>Outstanding balance</span><b>{moneyStock(purchaseFilteredTotals.due)}</b><small>For the filtered invoices</small></div></div>
