@@ -364,6 +364,16 @@ export default function FastFoodStock({ notify }) {
     const paid = Math.min(total, Math.max(0, Number(purchase.paid || 0)));
     totals.total += total; totals.paid += paid; totals.due += Math.max(0, total - paid); return totals;
   }, { total: 0, paid: 0, due: 0 }), [filteredPurchases]);
+  const purchaseAging = useMemo(() => purchases.reduce((aging, purchase) => {
+    const due = Math.max(0, Number(purchase.total || 0) - Number(purchase.paid || 0));
+    if (!due) return aging;
+    const timestamp = new Date(purchase.date || '').getTime();
+    if (!Number.isFinite(timestamp)) { aging.unknown += due; aging.unknownCount += 1; return aging; }
+    const days = Math.max(0, Math.floor((Date.now() - timestamp) / 86400000));
+    const bucket = days <= 7 ? 'recent' : days <= 30 ? 'medium' : 'old';
+    aging[bucket] += due; aging[bucket + 'Count'] += 1;
+    return aging;
+  }, { recent: 0, medium: 0, old: 0, unknown: 0, recentCount: 0, mediumCount: 0, oldCount: 0, unknownCount: 0 }), [purchases]);
   function exportPurchasePayments() {
     const rows = [['Purchase ID','Purchase Date','Supplier','Invoice','Payment ID','Payment Date','Amount PKR','Note'], ...filteredPurchases.flatMap(p => (p.paymentHistory || []).map(payment => [p.id, p.date || '', p.supplier || '', p.invoice || '', payment.id || '', payment.date || '', Number(payment.amount || 0), payment.note || '']))];
     const csv = '\uFEFF' + rows.map(row => row.map(value => '"' + String(value ?? '').replaceAll('"', '""') + '"').join(',')).join('\r\n');
@@ -533,6 +543,12 @@ export default function FastFoodStock({ notify }) {
         <div className="ff-stat"><span>Paid to suppliers</span><b>{moneyStock(purchases.reduce((n, p) => n + Number(p.paid || 0), 0))}</b><small>Payments entered against invoices</small></div>
         <div className="ff-stat"><span>Outstanding balance</span><b>{moneyStock(supplierDues)}</b><small>{purchases.filter(p => Number(p.total || 0) > Number(p.paid || 0)).length} invoice(s) with due amounts</small></div>
         <div className="ff-stat"><span>Fully paid invoices</span><b>{purchases.filter(p => Number(p.total || 0) <= Number(p.paid || 0)).length}</b><small>Includes invoices with zero due</small></div>
+      </div>
+      <div className="ff-stat-grid">
+        <div className="ff-stat"><span>Due · 0–7 days</span><b>{moneyStock(purchaseAging.recent)}</b><small>{purchaseAging.recentCount} invoice(s)</small></div>
+        <div className="ff-stat"><span>Due · 8–30 days</span><b>{moneyStock(purchaseAging.medium)}</b><small>{purchaseAging.mediumCount} invoice(s)</small></div>
+        <div className="ff-stat"><span>Due · over 30 days</span><b>{moneyStock(purchaseAging.old)}</b><small>{purchaseAging.oldCount} invoice(s)</small></div>
+        {purchaseAging.unknownCount > 0 && <div className="ff-stat"><span>Due · date unavailable</span><b>{moneyStock(purchaseAging.unknown)}</b><small>{purchaseAging.unknownCount} invoice(s) need date review</small></div>}
       </div>
       <div className="responsive-table"><table><thead><tr><th>BATCH</th><th>INGREDIENT</th><th>RECEIVED</th><th>EXPIRY</th><th>REMAINING</th><th>STATUS / ACTION</th></tr></thead><tbody>{batches.filter(b => b.expiryDate).map(b => { const expired = b.expiryDate < todayISO && Number(b.remainingQty)>0; const soon = b.expiryDate >= todayISO && b.expiryDate <= new Date(Date.now()+7*86400000).toISOString().slice(0,10) && Number(b.remainingQty)>0; return <tr key={b.id}><td><b>{b.id}</b><div className="ff-muted">{b.purchaseId}</div></td><td>{b.ingredientName}<div className="ff-muted">{b.supplier}</div></td><td>{Number(b.receivedQty).toLocaleString()} {b.unit}</td><td>{b.expiryDate}</td><td>{Number(b.remainingQty).toLocaleString()} {b.unit}</td><td>{Number(b.remainingQty)<=0 ? 'Depleted' : expired ? <><span className="ff-negative">Expired</span> <button className="btn btn-secondary" onClick={() => writeOffExpiredBatch(b.id)}>Write off</button></> : soon ? <span className="ff-negative">Expiring soon</span> : 'In date'}</td></tr>; })}</tbody></table>{!batches.some(b => b.expiryDate) && <div className="empty-state"><Boxes size={24}/><b>No expiry-dated batches yet</b><span>Enter expiry dates on new purchase receipts to enable batch alerts and write-offs. Existing stock is not retroactively assigned an expiry date.</span></div>}</div>
       <div className="ff-stat-grid"><div className="ff-stat"><span>Filtered invoice value</span><b>{moneyStock(purchaseFilteredTotals.total)}</b><small>{filteredPurchases.length} invoice(s)</small></div><div className="ff-stat"><span>Payments recorded</span><b>{moneyStock(purchaseFilteredTotals.paid)}</b><small>For the filtered invoices</small></div><div className="ff-stat"><span>Outstanding balance</span><b>{moneyStock(purchaseFilteredTotals.due)}</b><small>For the filtered invoices</small></div></div>
