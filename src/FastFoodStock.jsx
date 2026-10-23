@@ -209,6 +209,8 @@ export default function FastFoodStock({ notify }) {
   const [purchaseSearch, setPurchaseSearch] = useState('');
   const [purchaseBalanceFilter, setPurchaseBalanceFilter] = useState('all');
   const [movements, setMovements] = useState(() => readStock('movements', []));
+  const [movementSearch, setMovementSearch] = useState('');
+  const [movementTypeFilter, setMovementTypeFilter] = useState('all');
   const [batches, setBatches] = useState(() => readStock('batches', []));
   const [wasteRecords, setWasteRecords] = useState(() => readStock('waste-records', []));
   const [showWaste, setShowWaste] = useState(false);
@@ -335,6 +337,11 @@ export default function FastFoodStock({ notify }) {
   const ingredientValue = ingredients.reduce((n, x) => n + Number(x.stock || 0) * Number(x.cost || 0), 0);
   const supplierDues = purchases.reduce((n, p) => n + Math.max(0, Number(p.total || 0) - Number(p.paid || 0)), 0);
   const totalPurchaseSpend = purchases.reduce((n, p) => n + Number(p.total || 0), 0);
+  const filteredMovements = useMemo(() => movements.filter(m => {
+    const q = movementSearch.trim().toLowerCase();
+    const matches = !q || [m.ingredientName, m.type, m.reference, m.note, m.unit].some(v => String(v || '').toLowerCase().includes(q));
+    return matches && (movementTypeFilter === 'all' || String(m.type || '').toLowerCase() === movementTypeFilter);
+  }).sort((a,b) => new Date(b.date || 0) - new Date(a.date || 0)), [movements, movementSearch, movementTypeFilter]);
   const filteredPurchases = useMemo(() => purchases.filter(p => {
     const q = purchaseSearch.trim().toLowerCase();
     const matches = !q || [p.id, p.supplier, p.invoice, p.ingredientName, p.notes].some(v => String(v || '').toLowerCase().includes(q));
@@ -436,6 +443,13 @@ export default function FastFoodStock({ notify }) {
     const csv = rows.map(row => row.map(v => '"' + String(v ?? '').replaceAll('"','""') + '"').join(',')).join('\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'malik-pos-ingredient-stock.csv'; a.click(); URL.revokeObjectURL(a.href);
   }
+  function exportMovements() {
+    const rows = [['Date','Ingredient','Movement Type','Quantity','Unit','Reference','Notes'], ...filteredMovements.map(m => [m.date || '', m.ingredientName || '', m.type || '', Number(m.qty || 0), m.unit || '', m.reference || '', m.note || ''])];
+    const csv = '\\uFEFF' + rows.map(row => row.map(v => '"' + String(v ?? '').replaceAll('"', '""') + '"').join(',')).join('\\r\\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+    const a = document.createElement('a'); a.href = url; a.download = 'malik-pos-stock-movements-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    notify('Stock movement report exported');
+  }
   const recipeCost = recipe => (recipe.ingredients || []).reduce((n, line) => { const item = ingredients.find(x => String(x.id) === String(line.ingredientId)); return n + Number(line.qty || 0) * Number(item?.cost || 0); }, 0);
 
   return <div className="ff-stock">
@@ -477,8 +491,9 @@ export default function FastFoodStock({ notify }) {
       <div className="responsive-table"><table><thead><tr><th>DATE</th><th>INGREDIENT</th><th>QUANTITY</th><th>UNIT COST</th><th>WASTE COST</th><th>REASON</th><th>STAFF</th><th>NOTES</th></tr></thead><tbody>{wasteRecords.map(w=><tr key={w.id}><td>{new Date(w.date).toLocaleString()}</td><td><b>{w.ingredientName}</b></td><td>{w.qty} {w.unit}</td><td>{moneyStock(w.unitCost)}</td><td><b>{moneyStock(w.cost)}</b></td><td>{w.reason}</td><td>{w.staff}</td><td>{w.notes||'—'}</td></tr>)}</tbody></table>{!wasteRecords.length&&<div className="empty-state"><Trash2 size={28}/><b>No ingredient waste recorded</b><span>Record spoilage, prep loss, spills or other ingredient waste to track cost and stock impact.</span></div>}</div>
     </div>}
     {tab === 'reports' && <div className="panel table-panel">
-      <div className="panel-head"><div><h2>Stock movement report</h2><p>Opening balances, purchases and recipe consumption</p></div><button className="btn btn-secondary" onClick={exportStock}>Export CSV</button></div>
-      <div className="responsive-table"><table><thead><tr><th>DATE</th><th>INGREDIENT</th><th>MOVEMENT</th><th>QUANTITY</th><th>REFERENCE</th><th>NOTES</th></tr></thead><tbody>{movements.map(m => <tr key={m.id}><td>{new Date(m.date).toLocaleString()}</td><td><b>{m.ingredientName}</b></td><td>{m.type}</td><td className={m.qty < 0 ? 'ff-negative' : 'ff-positive'}>{m.qty > 0 ? '+' : ''}{m.qty} {m.unit}</td><td>{m.reference}</td><td>{m.note}</td></tr>)}</tbody></table>{!movements.length && <div className="empty-state"><TrendingUp size={28}/><b>No stock movements yet</b><span>Purchases and configured recipe sales will appear here.</span></div>}</div>
+      <div className="panel-head"><div><h2>Stock movement report</h2><p>Opening balances, purchases and recipe consumption</p></div><button className="btn btn-secondary" onClick={exportMovements}>Export filtered CSV</button></div>
+      <div className="table-toolbar"><div className="toolbar-left"><input className="form-input" value={movementSearch} onChange={e => setMovementSearch(e.target.value)} placeholder="Search ingredient, reference, notes" aria-label="Search stock movements"/><select className="form-input" value={movementTypeFilter} onChange={e => setMovementTypeFilter(e.target.value)} aria-label="Filter stock movement type"><option value="all">All movement types</option>{[...new Set(movements.map(m => String(m.type || '').toLowerCase()).filter(Boolean))].sort().map(type => <option key={type} value={type}>{type}</option>)}</select><button className="btn btn-secondary" onClick={() => { setMovementSearch(''); setMovementTypeFilter('all'); }}>Clear filters</button></div><span className="ff-muted">{filteredMovements.length} of {movements.length} movements</span></div>
+      <div className="responsive-table"><table><thead><tr><th>DATE</th><th>INGREDIENT</th><th>MOVEMENT</th><th>QUANTITY</th><th>REFERENCE</th><th>NOTES</th></tr></thead><tbody>{filteredMovements.map(m => <tr key={m.id}><td>{new Date(m.date).toLocaleString()}</td><td><b>{m.ingredientName}</b></td><td>{m.type}</td><td className={m.qty < 0 ? 'ff-negative' : 'ff-positive'}>{m.qty > 0 ? '+' : ''}{m.qty} {m.unit}</td><td>{m.reference}</td><td>{m.note}</td></tr>)}</tbody></table>{!filteredMovements.length && <div className="empty-state"><TrendingUp size={28}/><b>{movements.length ? 'No matching movements' : 'No stock movements yet'}</b><span>{movements.length ? 'Try a different search or movement type.' : 'Purchases and configured recipe sales will appear here.'}</span></div>}</div>
       <div className="ff-report-shortcuts">{['Low stock', 'Uncosted recipes', 'Supplier dues'].map(label => <button key={label} onClick={() => { if(label === 'Low stock') { setTab('ingredients'); setSearch(''); } else if(label === 'Uncosted recipes') setTab('recipes'); else setTab('purchases'); }}>{label} <TrendingDown size={15}/></button>)}</div>
     </div>}
 
