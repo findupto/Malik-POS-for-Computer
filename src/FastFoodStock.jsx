@@ -245,6 +245,8 @@ export default function FastFoodStock({ notify }) {
   const [purchaseHistoryView, setPurchaseHistoryView] = useState(null);
   const [ingredientDraft, setIngredientDraft] = useState({ name: '', sku: '', category: 'Food', unit: 'g', stock: '0', reorder: '0', cost: '0', supplier: '' });
   const [recipeDraft, setRecipeDraft] = useState({ productId: '', productName: '', variant: '', ingredients: [] });
+  const [generatedRecipeDrafts, setGeneratedRecipeDrafts] = useState([]);
+  const [recipeGenerationMessage, setRecipeGenerationMessage] = useState('');
   const [recipeLine, setRecipeLine] = useState({ ingredientId: '', qty: '' });
   const [purchaseDraft, setPurchaseDraft] = useState({ supplier: '', invoice: '', dueDate: '', ingredientId: '', purchaseQty: '', purchaseUnit: 'carton', conversion: '1', unitCost: '', paid: '', expiryDate: '', notes: '' });
 
@@ -562,6 +564,56 @@ export default function FastFoodStock({ notify }) {
     }
     notify(editingIngredient ? 'Ingredient updated' : 'Ingredient added');
   }
+  function generateRecipeSuggestions() {
+    const templates = [
+      { test: /pizza/i, lines: [['Pizza dough / base',1,'each'],['Pizza sauce',35,'g'],['Mozzarella cheese',90,'g'],['Chicken breast / boneless chicken',60,'g'],['Onion',15,'g'],['Capsicum / bell pepper',15,'g']] },
+      { test: /burger|zinger/i, lines: [['Burger bun',1,'each'],['Chicken breast / boneless chicken',120,'g'],['Mayonnaise',20,'g'],['Lettuce',15,'g'],['Tomato',20,'g'],['Cooking oil',10,'ml']] },
+      { test: /shawarma|shwarma/i, lines: [['Pita / shawarma bread',1,'each'],['Chicken breast / boneless chicken',110,'g'],['Mayonnaise',25,'g'],['Onion',15,'g'],['Tomato',15,'g'],['Chilli sauce',10,'g']] },
+      { test: /fries|wedges/i, lines: [['Potato / fries',180,'g'],['Cooking oil',15,'ml'],['Salt',2,'g'],['Cheddar cheese',25,'g']] },
+      { test: /pasta|alfredo|macaroni|spaghetti/i, lines: [['Pasta / penne / spaghetti',120,'g'],['Pasta sauce',80,'g'],['Chicken breast / boneless chicken',70,'g'],['Milk',40,'ml'],['Mozzarella cheese',20,'g']] },
+      { test: /wrap|roll|tortilla/i, lines: [['Tortilla / wrap',1,'each'],['Chicken breast / boneless chicken',100,'g'],['Mayonnaise',20,'g'],['Onion',15,'g'],['Lettuce',10,'g']] },
+      { test: /biryani|pulao|rice/i, lines: [['Basmati rice',150,'g'],['Chicken breast / boneless chicken',100,'g'],['Yogurt',30,'g'],['Onion',25,'g'],['Cooking oil',15,'ml'],['Ginger garlic paste',8,'g']] },
+      { test: /tea|chai|doodh pati/i, lines: [['Tea',3,'g'],['Milk',120,'ml'],['Sugar',10,'g']] },
+      { test: /coffee|latte|cappuccino/i, lines: [['Coffee',8,'g'],['Milk',180,'ml'],['Sugar',8,'g']] },
+      { test: /sandwich|club/i, lines: [['Bread slices',3,'each'],['Chicken breast / boneless chicken',70,'g'],['Mayonnaise',20,'g'],['Lettuce',10,'g'],['Tomato',15,'g']] },
+      { test: /broast|wings|nugget|fried chicken/i, lines: [['Chicken breast / boneless chicken',180,'g'],['Flour / maida',35,'g'],['Cooking oil',25,'ml'],['Salt',3,'g'],['Chilli sauce',10,'g']] }
+    ];
+    const defaults = [['Chicken breast / boneless chicken',90,'g'],['Onion',15,'g'],['Tomato',15,'g'],['Mayonnaise',15,'g'],['Cooking oil',8,'ml'],['Salt',2,'g']];
+    const missing = menuProducts.filter(p => !recipes.some(r => String(r.productId || '') === String(p.id) || String(r.productName || '').trim().toLowerCase() === String(p.name || '').trim().toLowerCase())).slice(0, 100);
+    const candidates = missing.map(product => {
+      const template = templates.find(t => t.test.test(String(product.name || '')));
+      const lines = (template || { lines: defaults }).lines.map(([name,qty,unit]) => {
+        const found = ingredients.find(x => String(x.name || '').trim().toLowerCase() === name.toLowerCase())
+          || ingredients.find(x => new RegExp(name.split(/[ /-]/)[0], 'i').test(String(x.name || '')));
+        return { ingredientName: found?.name || name, existingId: found?.id ?? null, qty, unit: found?.unit || unit };
+      }).filter((line,index,all) => all.findIndex(x => x.ingredientName.toLowerCase() === line.ingredientName.toLowerCase()) === index);
+      return { productId: String(product.id || ''), productName: String(product.name || ''), variant: product.variant || '', ingredients: lines, sourceUrl: '', reviewNote: 'Estimated starter portion. Verify against your preparation and supplier pack sizes.' };
+    });
+    setGeneratedRecipeDrafts(candidates);
+    setRecipeGenerationMessage(candidates.length ? 'Created ' + candidates.length + ' draft recipe(s). Review portions before saving; these are heuristic estimates, not verified recipes from the internet.' : (menuProducts.length ? 'No unconfigured menu items found. Existing recipes were left unchanged.' : 'Add or import menu items in the POS catalog first.'));
+  }
+  function saveGeneratedRecipes() {
+    let nextIngredients = [...ingredients], nextRecipes = [...recipes], saved = 0;
+    const getIngredient = line => {
+      let item = nextIngredients.find(x => line.existingId != null && String(x.id) === String(line.existingId))
+        || nextIngredients.find(x => String(x.name || '').trim().toLowerCase() === line.ingredientName.trim().toLowerCase());
+      if (!item) {
+        item = { id: 'auto-' + Date.now().toString(36) + '-' + nextIngredients.length, name: line.ingredientName, sku: 'AUTO-' + String(nextIngredients.length + 1).padStart(3,'0'), category: 'Suggested', unit: line.unit, stock: 0, reorder: 0, cost: 0, supplier: '', autoSuggested: true };
+        nextIngredients.push(item);
+      }
+      return item;
+    };
+    generatedRecipeDrafts.forEach((draft,index) => {
+      if (!menuProducts.some(p => String(p.id) === draft.productId) || nextRecipes.some(r => String(r.productId || '') === draft.productId || String(r.productName || '').trim().toLowerCase() === draft.productName.trim().toLowerCase())) return;
+      const lines = draft.ingredients.map(line => { const item = getIngredient(line); return { ingredientId: item.id, ingredientName: item.name, qty: Number(line.qty), unit: item.unit }; });
+      nextRecipes.unshift({ id: 'AUTO-RECIPE-' + Date.now().toString(36) + '-' + index, productId: draft.productId, productName: draft.productName, variant: draft.variant, ingredients: lines, starter: false, autoSuggested: true, sourceUrl: draft.sourceUrl || '', reviewNote: draft.reviewNote });
+      saved++;
+    });
+    setIngredients(nextIngredients); save('ingredients', nextIngredients); setRecipes(nextRecipes); save('recipes', nextRecipes);
+    window.dispatchEvent(new CustomEvent('malik-stock-updated')); setGeneratedRecipeDrafts([]);
+    setRecipeGenerationMessage('Saved ' + saved + ' suggested recipe(s). New ingredient records start with zero stock and zero cost; verify quantities and costs before using automatic stock deduction.');
+    notify('Suggested recipes saved for review');
+  }
   function saveRecipe(e) {
     e.preventDefault();
     if (!recipeDraft.productName.trim() || !recipeDraft.ingredients.length) { notify('Choose a menu item and add at least one ingredient'); return; }
@@ -784,8 +836,8 @@ export default function FastFoodStock({ notify }) {
       <div className="responsive-table"><table><thead><tr><th>INGREDIENT</th><th>CATEGORY</th><th>ON HAND</th><th>UNIT COST</th><th>STOCK VALUE</th><th>REORDER AT</th><th>STATUS</th><th></th></tr></thead><tbody>{filteredIngredients.map(x => <tr key={x.id}><td><b>{x.name}</b><div className="ff-muted">{x.sku || 'No SKU'} · {x.supplier || 'No supplier set'}</div></td><td>{x.category}</td><td><b>{Number(x.stock).toLocaleString()} {x.unit}</b></td><td>{moneyStock(x.cost)}</td><td>{moneyStock(Number(x.stock) * Number(x.cost))}</td><td>{x.reorder} {x.unit}</td><td><span className={'status-pill ' + (Number(x.stock) <= 0 ? 'status-out' : Number(x.stock) <= Number(x.reorder) ? 'status-low' : 'status-good')}>{Number(x.stock) <= 0 ? 'Out of stock' : Number(x.stock) <= Number(x.reorder) ? 'Reorder' : 'In stock'}</span></td><td><button className="icon-btn" title="Edit ingredient" onClick={() => {setEditingIngredient(x);setIngredientDraft({name:x.name||'',sku:x.sku||'',category:x.category||'Food',unit:x.unit||'g',stock:String(x.stock??0),reorder:String(x.reorder??0),cost:String(x.cost??0),supplier:x.supplier||''});setShowIngredient(true);}}><BookOpen size={14}/></button><button className="icon-btn" title="Remove ingredient" onClick={() => removeIngredient(x.id)}><Trash2 size={14}/></button></td></tr>)}</tbody></table>{!filteredIngredients.length && <div className="empty-state"><Boxes size={28}/><b>No ingredients yet</b><span>Add bread, chicken, beef, milk, ice cream, sauces, cups and packaging as shared stock items.</span></div>}</div>
     </div>}
     {tab === 'recipes' && <div className="panel table-panel">
-      <div className="table-toolbar"><div><b>Recipe & portion cards</b><div className="ff-muted">Quantities are consumed in each ingredient's base unit per one menu item.</div></div><div className="toolbar-right"><button className="btn btn-secondary" onClick={exportRecipeCosts}>Export recipe costs</button><button className="btn btn-primary" onClick={() => setShowRecipe(true)}><Plus size={16}/> Build recipe</button></div></div>
-      <div className="responsive-table"><table><thead><tr><th>MENU ITEM</th><th>VARIANT</th><th>INGREDIENTS</th><th>EST. FOOD COST</th><th></th></tr></thead><tbody>{recipes.map(r => <tr key={r.id}><td><b>{r.productName}</b></td><td>{r.variant || 'Default / all variants'}</td><td><div className="ff-recipe-lines">{r.ingredients.map((line,i) => <span key={i}>{line.ingredientName}: {line.qty} {line.unit}</span>)}</div></td><td><b>{moneyStock(recipeCost(r))}</b></td><td><button className="icon-btn" title="Edit recipe" onClick={() => {setEditingRecipe(r);setRecipeDraft({productId:String(r.productId||''),productName:r.productName||'',variant:r.variant||'',ingredients:(r.ingredients||[]).map(x=>({...x}))});setRecipeLine({ingredientId:'',qty:''});setShowRecipe(true);}}><BookOpen size={14}/></button><button className="icon-btn" title="Remove recipe" onClick={() => removeRecipe(r.id)}><Trash2 size={14}/></button></td></tr>)}</tbody></table>{!recipes.length && <div className="empty-state"><BookOpen size={28}/><b>No recipes configured</b><span>Create recipes for menu items and their portion sizes. Different variants can share the same ingredient.</span></div>}</div>
+      <div className="table-toolbar"><div><b>Recipe & portion cards</b><div className="ff-muted">Quantities are consumed in each ingredient's base unit per one menu item.</div></div><div className="toolbar-right"><button className="btn btn-secondary" onClick={generateRecipeSuggestions}>Auto-make up to 100 drafts</button><button className="btn btn-secondary" onClick={exportRecipeCosts}>Export recipe costs</button><button className="btn btn-primary" onClick={() => setShowRecipe(true)}><Plus size={16}/> Build recipe</button></div></div>
+      {recipeGenerationMessage && <div className="ff-alert"><div>{recipeGenerationMessage}</div></div>}{generatedRecipeDrafts.length > 0 && <div className="panel"><div className="panel-head"><div><h2>Auto-generated recipe drafts ({generatedRecipeDrafts.length})</h2><p>Review estimated portions before saving. This generator uses menu names and local ingredient records; it does not claim to fetch verified recipes from websites.</p></div><div className="toolbar-right"><button className="btn btn-secondary" onClick={() => setGeneratedRecipeDrafts([])}>Discard drafts</button><button className="btn btn-primary" onClick={saveGeneratedRecipes}>Save drafts & ingredients</button></div></div><div className="responsive-table"><table><thead><tr><th>MENU ITEM</th><th>SUGGESTED INGREDIENTS / PORTION</th><th>REVIEW</th></tr></thead><tbody>{generatedRecipeDrafts.map((draft,index) => <tr key={draft.productId || index}><td><b>{draft.productName}</b><div className="ff-muted">{draft.variant || 'Default portion'}</div></td><td><div className="ff-recipe-lines">{draft.ingredients.map((line,i) => <span key={i}>{line.ingredientName}: {line.qty} {line.unit}</span>)}</div></td><td><span className="ff-muted">Estimate — verify quantities and cost</span><button className="btn btn-secondary" onClick={() => setGeneratedRecipeDrafts(old => old.filter((_,i) => i !== index))}>Remove</button></td></tr>)}</tbody></table></div></div>}<div className="responsive-table"><table><thead><tr><th>MENU ITEM</th><th>VARIANT</th><th>INGREDIENTS</th><th>EST. FOOD COST</th><th></th></tr></thead><tbody>{recipes.map(r => <tr key={r.id}><td><b>{r.productName}</b></td><td>{r.variant || 'Default / all variants'}</td><td><div className="ff-recipe-lines">{r.ingredients.map((line,i) => <span key={i}>{line.ingredientName}: {line.qty} {line.unit}</span>)}</div></td><td><b>{moneyStock(recipeCost(r))}</b></td><td><button className="icon-btn" title="Edit recipe" onClick={() => {setEditingRecipe(r);setRecipeDraft({productId:String(r.productId||''),productName:r.productName||'',variant:r.variant||'',ingredients:(r.ingredients||[]).map(x=>({...x}))});setRecipeLine({ingredientId:'',qty:''});setShowRecipe(true);}}><BookOpen size={14}/></button><button className="icon-btn" title="Remove recipe" onClick={() => removeRecipe(r.id)}><Trash2 size={14}/></button></td></tr>)}</tbody></table>{!recipes.length && <div className="empty-state"><BookOpen size={28}/><b>No recipes configured</b><span>Create recipes for menu items and their portion sizes. Different variants can share the same ingredient.</span></div>}</div>
       {missingRecipes.length > 0 && <div className="ff-alert"><Utensils size={17}/><div><b>{missingRecipes.length} menu items need recipe setup</b><p>Unconfigured items will still sell, but will not deduct ingredient stock. Start with your best-selling items.</p></div></div>}
     </div>}
 
