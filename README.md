@@ -3,17 +3,19 @@
 A desktop point-of-sale workspace built with React, Vite, and Electron.
 
 ## Included features
-- Product catalog with search and category filters
-- Cart quantity controls, discounts, configurable GST (default 0%), service charges (default 0%), and cash/card/digital payment selection
-- Checkout, transaction history, and printable receipts
-- Inventory management, stock decrement on sale, and low-stock alerts
-- Customer directory and lifetime spending totals
-- Sales overview, transaction exports (CSV), and full JSON data backup
-- Default company profile: The Slice Of Heaven, Bhakkar, Punjab, Pakistan; editable contact/address details
-- First-launch business type setup for fast food, medical store, super store, restaurant, showroom, and other businesses
-- PKR / Rs. currency formatting and 58mm/80mm thermal paper preferences
+- POS checkout, cart editing, discounts, configurable GST and service charges, cash/card/digital payments, printable receipts, and transaction history
+- Product catalog search with SKU/barcode matching, partial/fuzzy terms, and keyboard shortcuts for common counter workflows
+- Product/category sales reporting, date-range filters, CSV exports, and dashboard net-sales calculations that account for recorded refunds
+- Customer and supplier directories with search, filters, credit/payable visibility, and CSV exports
+- Business command center with actionable alerts for pending kitchen orders, unpaid orders, customer dues, supplier dues, and unassigned deliveries
+- Inventory and ingredient stock management, recipe-based ingredient costing, opening-stock helpers, low-stock alerts, demand-based restock suggestions, and restock CSV export
+- Ingredient purchase receiving with pack-to-base-unit conversion, weighted average ingredient costing, stock movements, batch/expiry tracking, expired-stock write-offs, supplier invoice balances, payment history, due-date aging, supplier payment exports, and purchase price comparisons
+- Recipe and portion management, recipe library, waste recording, and stock movement reports
+- Cash drawer shifts with expected-vs-counted cash reconciliation and shift report export
+- Customer/product/report exports in CSV, plus JSON data backup
+- Editable company profile, PKR / Rs. currency formatting, and 58mm/80mm thermal paper preferences
 - Bluetooth Low Energy printer discovery and remembered-device reconnect where supported; classic Bluetooth SPP printers may require Windows pairing/driver and use the system print dialog
-- Store preferences and responsive interface
+- First-launch business type setup for fast food, medical store, super store, restaurant, showroom, and other businesses
 - Windows NSIS installer build via GitHub Actions
 
 ## Run locally
@@ -41,8 +43,7 @@ npm run build:win
 The installer is written to `release/`. Every push to `main` also starts the **Build Malik POS for Windows** GitHub Actions workflow. On success, download the `Malik-POS-Windows-Installer` artifact from the completed workflow run.
 
 ## Data and production notes
-This starter release stores records in the local browser profile using localStorage. Export the JSON backup regularly. Data is not yet synchronized between computers, and multi-user authentication, supplier purchasing, expense entry, barcode hardware integration, and a production database/API require additional implementation before a multi-terminal production rollout. Currency formatting is fixed to PKR (Rs.). Bluetooth printer discovery depends on the printer exposing a supported BLE interface; it cannot guarantee direct printing to every classic Bluetooth thermal printer.
-
+The current desktop app stores operational records in the local browser profile using `localStorage`. Export the JSON backup regularly and test restore procedures before relying on the app for critical operations. Data is not synchronized between computers, and the current app does not provide shared multi-user authentication or a production database/API. Supplier purchases, expense tracking and stock/recipe workflows exist in the app, but they are not a substitute for a server-side accounting or inventory system with centralized access controls. Currency formatting is fixed to PKR (Rs.). Product restock recommendations and ingredient cost/profit estimates are heuristics; accuracy depends on complete product history, correct recipes, and current costs. Bluetooth printer discovery depends on the printer exposing a supported BLE interface and cannot guarantee direct printing to every classic Bluetooth thermal printer.
 
 ## Multi-computer architecture decision (planned; not yet implemented)
 
