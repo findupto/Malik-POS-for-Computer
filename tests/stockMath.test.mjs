@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { calculateWeightedAverageCost, purchaseBalance, daysPastDue } from '../src/stockMath.mjs';
 
 test('weighted average cost combines existing inventory and receipt cost', () => {
-  assert.equal(calculateWeightedAverageCost(10, 2, 5, 20), 2);
+  assert.equal(calculateWeightedAverageCost(10, 2, 5, 20), 40 / 15);
   assert.equal(calculateWeightedAverageCost(0, 0, 4, 18), 4.5);
 });
 
