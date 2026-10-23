@@ -639,20 +639,32 @@ export default function FastFoodStock({ notify }) {
     notify('Ingredient stock exported (' + filteredIngredients.length + ' items)');
   }
   function exportReorderPlan() {
-    const items = ingredients
-      .filter(x => Number(x.reorder || 0) > 0 && Number(x.stock || 0) <= Number(x.reorder || 0))
-      .map(x => {
-        const stock = Math.max(0, Number(x.stock || 0));
-        const reorder = Math.max(0, Number(x.reorder || 0));
-        const suggestedQty = Math.max(0, reorder * 2 - stock);
-        return { ...x, stock, reorder, suggestedQty, estimatedCost: suggestedQty * Math.max(0, Number(x.cost || 0)) };
-      })
-      .sort((a, b) => b.estimatedCost - a.estimatedCost);
-    const rows = [['Ingredient','SKU','Supplier','On hand','Reorder level','Suggested order quantity','Base unit','Cost per base unit PKR','Estimated order cost PKR','Reason'], ...items.map(x => [x.name, x.sku || '', x.supplier || '', x.stock, x.reorder, x.suggestedQty, x.unit || '', Number(x.cost || 0), x.estimatedCost, x.stock <= 0 ? 'Out of stock' : 'At or below reorder level'])];
+    const cutoff = Date.now() - 30 * 86400000;
+    const dailyUsage = new Map();
+    for (const movement of movements) {
+      if (String(movement.type || '').toLowerCase() !== 'sale' || !movement.date) continue;
+      const time = new Date(movement.date).getTime();
+      const qty = Math.abs(Number(movement.qty) || 0);
+      if (!Number.isFinite(time) || time < cutoff || time > Date.now() || qty <= 0) continue;
+      const key = String(movement.ingredientId);
+      dailyUsage.set(key, (dailyUsage.get(key) || 0) + qty / 30);
+    }
+    const items = ingredients.map(x => {
+      const stock = Math.max(0, Number(x.stock || 0));
+      const reorder = Math.max(0, Number(x.reorder || 0));
+      const dailyUse = dailyUsage.get(String(x.id)) || 0;
+      const daysCover = dailyUse > 0 ? stock / dailyUse : null;
+      const targetStock = Math.max(reorder * 2, Math.ceil(dailyUse * 7 * 1.2));
+      const suggestedQty = Math.max(0, targetStock - stock);
+      const atRisk = stock <= reorder || (daysCover !== null && daysCover < 7);
+      return { ...x, stock, reorder, dailyUse, daysCover, suggestedQty, estimatedCost: suggestedQty * Math.max(0, Number(x.cost || 0)), atRisk };
+    }).filter(x => x.atRisk && x.suggestedQty > 0)
+      .sort((a, b) => (a.daysCover ?? Infinity) - (b.daysCover ?? Infinity) || b.estimatedCost - a.estimatedCost);
+    const rows = [['Ingredient','SKU','Supplier','On hand','Reorder level','30-day average daily usage','Estimated days of stock cover','Suggested order quantity','Base unit','Cost per base unit PKR','Estimated order cost PKR','Reason'], ...items.map(x => [x.name, x.sku || '', x.supplier || '', x.stock, x.reorder, Number(x.dailyUse.toFixed(3)), x.daysCover === null ? 'No recent sales history' : Number(x.daysCover.toFixed(1)), x.suggestedQty, x.unit || '', Number(x.cost || 0), x.estimatedCost, x.stock <= 0 ? 'Out of stock' : x.stock <= x.reorder ? 'At or below reorder level' : 'Less than 7 days of estimated cover'])];
     const csv = csvRowsStock(rows);
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
-    const a = document.createElement('a'); a.href = url; a.download = 'malik-pos-ingredient-reorder-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-    notify('Ingredient reorder list exported (' + items.length + ' items). Suggested quantities target 2× the reorder level.');
+    const a = document.createElement('a'); a.href = url; a.download = 'malik-pos-ingredient-reorder-' + stockDateKey() + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    notify('Sales-informed ingredient reorder list exported (' + items.length + ' items). Targets use recent sales, a 7-day horizon and 20% buffer, alongside configured reorder levels.');
   }
   function exportWaste() {
     const rows = [['Waste ID','Date','Ingredient','Quantity','Unit','Unit Cost PKR','Waste Cost PKR','Reason','Staff','Notes'], ...filteredWasteRecords.map(w => [w.id, w.date || '', w.ingredientName || '', Number(w.qty || 0), w.unit || '', Number(w.unitCost || 0), Number(w.cost || 0), w.reason || '', w.staff || '', w.notes || ''])];
