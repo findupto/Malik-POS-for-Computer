@@ -18,6 +18,8 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install
+      - name: Run stock calculation tests
+        run: npm test
       - name: Build and package Windows installer
         run: npm run build:win
       - name: Verify installer exists
