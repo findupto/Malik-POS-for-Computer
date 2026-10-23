@@ -438,6 +438,13 @@ export default function FastFoodStock({ notify }) {
     const a = document.createElement('a'); a.href = url; a.download = 'malik-pos-purchase-invoices-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     notify('Purchase invoice report exported');
   }
+  function exportSupplierPayables() {
+    const rows = [['Supplier','Invoice Count','Purchase Value PKR','Paid PKR','Outstanding PKR','Oldest Open Invoice Date'], ...supplierPayableSummary.map(supplier => [supplier.supplier, supplier.invoices, supplier.total, supplier.paid, supplier.due, supplier.oldestOpenDate || ''])];
+    const csv = '\\uFEFF' + rows.map(row => row.map(value => '"' + String(value ?? '').replaceAll('"', '""') + '"').join(',')).join('\\r\\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+    const a = document.createElement('a'); a.href = url; a.download = 'malik-pos-supplier-payables-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    notify('Supplier payable summary exported');
+  }
   function exportSupplierPayments() {
     const rows = [['Payment ID','Payment Date','Purchase ID','Supplier','Invoice','Ingredient','Payment Amount PKR','Note']];
     for (const purchase of filteredPurchases) {
@@ -616,7 +623,7 @@ export default function FastFoodStock({ notify }) {
         {purchaseAging.unknownCount > 0 && <div className="ff-stat"><span>Due · date unavailable</span><b>{moneyStock(purchaseAging.unknown)}</b><small>{purchaseAging.unknownCount} invoice(s) need date review</small></div>}
       </div>
       <div className="panel table-panel">
-        <div className="panel-head"><div><h2>Supplier payable summary</h2><p>Balances are calculated from ingredient purchase invoices and their recorded payments.</p></div><span className="ff-muted">{supplierPayableSummary.length} supplier(s)</span></div>
+        <div className="panel-head"><div><h2>Supplier payable summary</h2><p>Balances are calculated from ingredient purchase invoices and their recorded payments.</p></div><div className="toolbar-right"><span className="ff-muted">{supplierPayableSummary.length} supplier(s)</span><button className="btn btn-secondary" onClick={exportSupplierPayables}>Export payable summary</button></div></div>
         <div className="responsive-table"><table><thead><tr><th>SUPPLIER</th><th>INVOICES</th><th>PURCHASE VALUE</th><th>PAID</th><th>OUTSTANDING</th><th>OLDEST OPEN INVOICE</th></tr></thead><tbody>{supplierPayableSummary.map(supplier => <tr key={supplier.supplier.toLowerCase()}><td><b>{supplier.supplier}</b></td><td>{supplier.invoices}</td><td>{moneyStock(supplier.total)}</td><td>{moneyStock(supplier.paid)}</td><td><b>{moneyStock(supplier.due)}</b></td><td>{supplier.oldestOpenDate ? new Date(supplier.oldestOpenDate).toLocaleDateString() : '—'}</td></tr>)}</tbody></table>{!supplierPayableSummary.length && <div className="empty-state"><ShoppingCart size={24}/><b>No supplier balances yet</b><span>Record ingredient purchases to build the supplier payable summary.</span></div>}</div>
       </div>
       <div className="responsive-table"><table><thead><tr><th>BATCH</th><th>INGREDIENT</th><th>RECEIVED</th><th>EXPIRY</th><th>REMAINING</th><th>STATUS / ACTION</th></tr></thead><tbody>{batches.filter(b => b.expiryDate).map(b => { const expired = b.expiryDate < todayISO && Number(b.remainingQty)>0; const soon = b.expiryDate >= todayISO && b.expiryDate <= new Date(Date.now()+7*86400000).toISOString().slice(0,10) && Number(b.remainingQty)>0; return <tr key={b.id}><td><b>{b.id}</b><div className="ff-muted">{b.purchaseId}</div></td><td>{b.ingredientName}<div className="ff-muted">{b.supplier}</div></td><td>{Number(b.receivedQty).toLocaleString()} {b.unit}</td><td>{b.expiryDate}</td><td>{Number(b.remainingQty).toLocaleString()} {b.unit}</td><td>{Number(b.remainingQty)<=0 ? 'Depleted' : expired ? <><span className="ff-negative">Expired</span> <button className="btn btn-secondary" onClick={() => writeOffExpiredBatch(b.id)}>Write off</button></> : soon ? <span className="ff-negative">Expiring soon</span> : 'In date'}</td></tr>; })}</tbody></table>{!batches.some(b => b.expiryDate) && <div className="empty-state"><Boxes size={24}/><b>No expiry-dated batches yet</b><span>Enter expiry dates on new purchase receipts to enable batch alerts and write-offs. Existing stock is not retroactively assigned an expiry date.</span></div>}</div>
