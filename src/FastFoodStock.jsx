@@ -650,14 +650,15 @@ export default function FastFoodStock({ notify }) {
     e.preventDefault();
     const supplierRecords = (() => { try { return JSON.parse(localStorage.getItem('malik-suppliers') || '[]'); } catch { return []; } })();
     if (supplierRecords.some(x => x.blocked && String(x.name || '').trim().toLowerCase() === String(purchaseDraft.supplier || '').trim().toLowerCase())) { notify('This supplier is blocked. An administrator must unblock the supplier before recording a purchase.'); return; }
+    const supplierName = supplierRecords.find(x => String(x.name || '').trim().toLowerCase() === String(purchaseDraft.supplier || '').trim().toLowerCase())?.name?.trim() || supplierName;
     const invoiceRef = String(purchaseDraft.invoice || '').trim().toLowerCase();
-    const supplierRef = String(purchaseDraft.supplier || '').trim().toLowerCase();
+    const supplierRef = String(supplierName || '').trim().toLowerCase();
     const ingredientRef = ingredients.find(x => String(x.id) === String(purchaseDraft.ingredientId));
     const duplicateInvoiceLine = invoiceRef && purchases.some(p => String(p.supplier || '').trim().toLowerCase() === supplierRef && String(p.invoice || '').trim().toLowerCase() === invoiceRef && String(p.ingredientId) === String(ingredientRef?.id));
     if (duplicateInvoiceLine && !window.confirm('A purchase for this supplier, invoice number and ingredient already exists. Record another line anyway?')) return;
     const ingredient = ingredientRef;
     const qty = Number(purchaseDraft.purchaseQty), conversion = Number(purchaseDraft.conversion), unitCost = Number(purchaseDraft.unitCost), paidAmount = Number(purchaseDraft.paid || 0);
-    if (!ingredient || !purchaseDraft.supplier.trim() || !Number.isFinite(qty) || qty <= 0 || !Number.isFinite(conversion) || conversion <= 0 || !Number.isFinite(unitCost) || unitCost < 0 || !Number.isFinite(paidAmount) || paidAmount < 0) { notify('Enter a supplier, ingredient, positive quantity and conversion, and valid costs'); return; }
+    if (!ingredient || !supplierName || !Number.isFinite(qty) || qty <= 0 || !Number.isFinite(conversion) || conversion <= 0 || !Number.isFinite(unitCost) || unitCost < 0 || !Number.isFinite(paidAmount) || paidAmount < 0) { notify('Enter a supplier, ingredient, positive quantity and conversion, and valid costs'); return; }
     const baseQty = qty * conversion, total = qty * unitCost;
     if (!Number.isFinite(baseQty) || !Number.isFinite(total) || baseQty <= 0 || total < 0) { notify('Purchase quantity or total is outside the supported range'); return; }
     if (paidAmount > total) { notify('Amount paid cannot exceed the purchase total'); return; }
@@ -665,13 +666,13 @@ export default function FastFoodStock({ notify }) {
     if (!Number.isFinite(initialPaid) || initialPaid < 0 || initialPaid > total) { notify('Amount paid must be between Rs. 0 and the purchase total (' + moneyStock(total) + ')'); return; }
     const oldStock = Number(ingredient.stock || 0), oldCost = Number(ingredient.cost || 0);
     const weightedCost = oldStock + baseQty > 0 ? ((oldStock * oldCost) + total) / (oldStock + baseQty) : total / baseQty;
-    const nextIngredients = ingredients.map(x => String(x.id) === String(ingredient.id) ? { ...x, stock: oldStock + baseQty, cost: weightedCost, supplier: purchaseDraft.supplier.trim() } : x);
+    const nextIngredients = ingredients.map(x => String(x.id) === String(ingredient.id) ? { ...x, stock: oldStock + baseQty, cost: weightedCost, supplier: supplierName } : x);
     const purchaseDate = new Date().toISOString();
-    const purchase = { id: 'PUR-' + Date.now().toString().slice(-7), date: purchaseDate, dueDate: purchaseDraft.dueDate || '', supplier: purchaseDraft.supplier.trim(), invoice: purchaseDraft.invoice, ingredientId: ingredient.id, ingredientName: ingredient.name, purchaseQty: qty, purchaseUnit: purchaseDraft.purchaseUnit || ingredient.unit, conversion, baseQty, unit: ingredient.unit, unitCost, total, paid: initialPaid, paymentHistory: initialPaid > 0 ? [{ id: 'SP-' + Date.now().toString().slice(-7), date: purchaseDate, amount: initialPaid, note: 'Initial payment at purchase' }] : [], expiryDate: purchaseDraft.expiryDate || '', notes: purchaseDraft.notes };
+    const purchase = { id: 'PUR-' + Date.now().toString().slice(-7), date: purchaseDate, dueDate: purchaseDraft.dueDate || '', supplier: supplierName, invoice: purchaseDraft.invoice, ingredientId: ingredient.id, ingredientName: ingredient.name, purchaseQty: qty, purchaseUnit: purchaseDraft.purchaseUnit || ingredient.unit, conversion, baseQty, unit: ingredient.unit, unitCost, total, paid: initialPaid, paymentHistory: initialPaid > 0 ? [{ id: 'SP-' + Date.now().toString().slice(-7), date: purchaseDate, amount: initialPaid, note: 'Initial payment at purchase' }] : [], expiryDate: purchaseDraft.expiryDate || '', notes: purchaseDraft.notes };
     const batch = { id: 'BAT-' + Date.now().toString().slice(-7), purchaseId: purchase.id, receivedAt: purchase.date, date: purchase.date, expiryDate: purchaseDraft.expiryDate || '', ingredientId: ingredient.id, ingredientName: ingredient.name, supplier: purchase.supplier, invoice: purchase.invoice, receivedQty: baseQty, remainingQty: baseQty, unit: ingredient.unit, unitCost: conversion > 0 ? unitCost / conversion : 0 };
     const nextPurchases = [purchase, ...purchases];
     const nextBatches = [batch, ...batches];
-    const movement = { id: Date.now(), date: purchase.date, ingredientId: ingredient.id, ingredientName: ingredient.name, type: 'purchase', qty: baseQty, unit: ingredient.unit, reference: purchase.id, note: purchaseDraft.supplier + (purchaseDraft.invoice ? ' · Invoice ' + purchaseDraft.invoice : '') };
+    const movement = { id: Date.now(), date: purchase.date, ingredientId: ingredient.id, ingredientName: ingredient.name, type: 'purchase', qty: baseQty, unit: ingredient.unit, reference: purchase.id, note: supplierName + (purchaseDraft.invoice ? ' · Invoice ' + purchaseDraft.invoice : '') };
     setIngredients(nextIngredients); save('ingredients', nextIngredients); setPurchases(nextPurchases); save('purchases', nextPurchases); setBatches(nextBatches); save('batches', nextBatches);
     const nextMovements = [movement, ...movements]; setMovements(nextMovements); save('movements', nextMovements);
     setPurchaseDraft({ supplier: '', invoice: '', dueDate: '', ingredientId: '', purchaseQty: '', purchaseUnit: 'carton', conversion: '1', unitCost: '', paid: '', expiryDate: '', notes: '' }); setShowPurchase(false); notify('Purchase recorded with batch traceability');
