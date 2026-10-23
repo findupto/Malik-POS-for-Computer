@@ -504,7 +504,7 @@ export default function FastFoodStock({ notify }) {
   }
   function exportMovements() {
     const rows = [['Date','Ingredient','Movement Type','Quantity','Unit','Reference','Notes'], ...filteredMovements.map(m => [m.date || '', m.ingredientName || '', m.type || '', Number(m.qty || 0), m.unit || '', m.reference || '', m.note || ''])];
-    const csv = '\\uFEFF' + rows.map(row => row.map(v => '"' + String(v ?? '').replaceAll('"', '""') + '"').join(',')).join('\\r\\n');
+    const csv = '\uFEFF' + rows.map(row => row.map(v => '"' + String(v ?? '').replaceAll('"', '""') + '"').join(',')).join('\r\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
     const a = document.createElement('a'); a.href = url; a.download = 'malik-pos-stock-movements-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     notify('Stock movement report exported');
