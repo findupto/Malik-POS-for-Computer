@@ -360,6 +360,31 @@ export default function FastFoodStock({ notify }) {
   const ingredientValue = ingredients.reduce((n, x) => n + Number(x.stock || 0) * Number(x.cost || 0), 0);
   const supplierDues = purchases.reduce((n, p) => n + Math.max(0, Number(p.total || 0) - Number(p.paid || 0)), 0);
   const totalPurchaseSpend = purchases.reduce((n, p) => n + Number(p.total || 0), 0);
+  const purchasePriceChanges = useMemo(() => {
+    const byIngredient = new Map();
+    for (const purchase of purchases) {
+      const conversion = Number(purchase.conversion || 0), packCost = Number(purchase.unitCost || 0);
+      if (!purchase.ingredientId || conversion <= 0 || !Number.isFinite(packCost) || packCost < 0) continue;
+      const entry = { ...purchase, costPerBaseUnit: packCost / conversion };
+      const key = String(purchase.ingredientId);
+      if (!byIngredient.has(key)) byIngredient.set(key, []);
+      byIngredient.get(key).push(entry);
+    }
+    return [...byIngredient.values()].map(list => list.sort((a,b) => new Date(b.date || 0) - new Date(a.date || 0)))
+      .filter(list => list.length > 1)
+      .map(list => {
+        const latest = list[0], previous = list[1];
+        const changePct = previous.costPerBaseUnit > 0 ? ((latest.costPerBaseUnit - previous.costPerBaseUnit) / previous.costPerBaseUnit) * 100 : null;
+        return { ingredientId: latest.ingredientId, ingredientName: latest.ingredientName, unit: latest.unit, latest, previous, changePct };
+      }).sort((a,b) => (b.changePct ?? -Infinity) - (a.changePct ?? -Infinity));
+  }, [purchases]);
+  function exportPurchasePriceChanges() {
+    const rows = [['Ingredient','Base Unit','Latest Purchase Date','Latest Supplier','Latest Invoice','Latest Cost per Base Unit PKR','Previous Purchase Date','Previous Supplier','Previous Invoice','Previous Cost per Base Unit PKR','Change Percent'], ...purchasePriceChanges.map(item => [item.ingredientName || '', item.unit || '', item.latest.date || '', item.latest.supplier || '', item.latest.invoice || '', item.latest.costPerBaseUnit, item.previous.date || '', item.previous.supplier || '', item.previous.invoice || '', item.previous.costPerBaseUnit, item.changePct == null ? 'N/A (previous cost zero)' : item.changePct])];
+    const csv = csvRowsStock(rows);
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+    const a = document.createElement('a'); a.href = url; a.download = 'malik-pos-purchase-price-changes-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    notify('Purchase price comparison exported');
+  }
   const filteredMovements = useMemo(() => movements.filter(m => {
     const q = movementSearch.trim().toLowerCase();
     const matches = !q || [m.ingredientName, m.type, m.reference, m.note, m.unit].some(v => String(v || '').toLowerCase().includes(q));
@@ -638,6 +663,10 @@ export default function FastFoodStock({ notify }) {
       <div className="table-toolbar"><div><b>Supplier purchases & batches</b><div className="ff-muted">Purchase receipts create traceable batches; FIFO sales consume oldest recorded batches first.</div></div><div className="toolbar-right"><button className="btn btn-secondary" onClick={exportBatches}>Export batch report</button><button className="btn btn-primary" onClick={() => setShowPurchase(true)}><Plus size={16}/> Record purchase</button></div></div>
       <div className="ff-stat-grid"><div className="ff-stat"><span>Purchase invoices</span><b>{purchases.length}</b><small>{purchases.filter(p=>Math.max(0,Number(p.total||0)-Number(p.paid||0))>0).length} outstanding</small></div><div className="ff-stat"><span>Total purchase value</span><b>{moneyStock(totalPurchaseSpend)}</b></div><div className="ff-stat"><span>Paid to suppliers</span><b>{moneyStock(purchases.reduce((n,p)=>n+Math.min(Number(p.total||0),Math.max(0,Number(p.paid||0))),0))}</b></div><div className="ff-stat"><span>Outstanding balance</span><b>{moneyStock(supplierDues)}</b></div></div>
       {(expiredBatches.length > 0 || expiringSoonBatches.length > 0) && <div className="ff-alert"><b>Expiry attention:</b> {expiredBatches.length} expired batch(es), {expiringSoonBatches.length} expiring within 7 days. Review remaining quantities below.</div>}
+      <div className="panel table-panel">
+        <div className="panel-head"><div><h2>Purchase price watch</h2><p>Compares the two latest recorded purchases per ingredient using normalized cost per stock base unit. It does not rewrite your ingredient cost.</p></div><div className="toolbar-right"><span className="ff-muted">{purchasePriceChanges.length} ingredient(s) compared</span><button className="btn btn-secondary" onClick={exportPurchasePriceChanges} disabled={!purchasePriceChanges.length}>Export price changes</button></div></div>
+        <div className="responsive-table"><table><thead><tr><th>INGREDIENT</th><th>PREVIOUS COST / UNIT</th><th>LATEST COST / UNIT</th><th>CHANGE</th><th>LATEST SUPPLIER / INVOICE</th><th>PREVIOUS SUPPLIER / INVOICE</th></tr></thead><tbody>{purchasePriceChanges.map(item => <tr key={String(item.ingredientId)}><td><b>{item.ingredientName}</b><div className="ff-muted">per {item.unit || 'base unit'}</div></td><td>{moneyStock(item.previous.costPerBaseUnit)}</td><td>{moneyStock(item.latest.costPerBaseUnit)}</td><td>{item.changePct == null ? 'Baseline was Rs. 0' : <span className={item.changePct > 0 ? 'ff-negative' : item.changePct < 0 ? 'ff-positive' : ''}>{item.changePct > 0 ? '+' : ''}{item.changePct.toFixed(1)}%</span>}{item.changePct != null && item.changePct >= 10 && <div className="ff-muted">Review price increase</div>}</td><td>{item.latest.supplier || '—'}<div className="ff-muted">{item.latest.invoice || item.latest.id}</div></td><td>{item.previous.supplier || '—'}<div className="ff-muted">{item.previous.invoice || item.previous.id}</div></td></tr>)}</tbody></table>{!purchasePriceChanges.length && <div className="empty-state"><TrendingUp size={24}/><b>Not enough purchase history yet</b><span>Record at least two purchases for the same ingredient to compare supplier unit costs.</span></div>}</div>
+      </div>
       <div className="ff-stat-grid">
         <div className="ff-stat"><span>Purchase value</span><b>{moneyStock(totalPurchaseSpend)}</b><small>All recorded supplier invoices</small></div>
         <div className="ff-stat"><span>Paid to suppliers</span><b>{moneyStock(purchases.reduce((n, p) => n + Number(p.paid || 0), 0))}</b><small>Payments entered against invoices</small></div>
