@@ -5,6 +5,8 @@ const readStock = (key, fallback) => {
   try { return JSON.parse(localStorage.getItem('malik-stock-' + key)) ?? fallback; } catch { return fallback; }
 };
 const moneyStock = n => 'Rs. ' + new Intl.NumberFormat('en-PK', { maximumFractionDigits: 2 }).format(Number(n) || 0);
+const csvCellStock = value => { const raw = String(value ?? ''); const safe = typeof value === 'string' && /^[\\t\\r ]*[=+\\-@]/.test(raw) ? "'" + raw : raw; return '"' + safe.replaceAll('"', '""') + '"'; };
+const csvRowsStock = rows => '\\uFEFF' + rows.map(row => row.map(csvCellStock).join(',')).join('\\r\\n');
 const units = ['kg', 'g', 'L', 'ml', 'each'];
 const unitFamilies = { kg: 'weight', g: 'weight', L: 'volume', ml: 'volume', each: 'count' };
 const unitScale = { kg: 1000, g: 1, L: 1000, ml: 1, each: 1 };
@@ -422,7 +424,7 @@ export default function FastFoodStock({ notify }) {
   }, { upcoming: 0, upcomingCount: 0, recent: 0, medium: 0, old: 0, unknown: 0, recentCount: 0, mediumCount: 0, oldCount: 0, unknownCount: 0 }), [purchases, todayISO]);
   function exportPurchasePayments() {
     const rows = [['Purchase ID','Purchase Date','Supplier','Invoice','Payment ID','Payment Date','Amount PKR','Note'], ...filteredPurchases.flatMap(p => (p.paymentHistory || []).map(payment => [p.id, p.date || '', p.supplier || '', p.invoice || '', payment.id || '', payment.date || '', Number(payment.amount || 0), payment.note || '']))];
-    const csv = '\uFEFF' + rows.map(row => row.map(value => { const raw = String(value ?? ''); const safe = typeof value === 'string' && /^[\t\r ]*[=+\-@]/.test(raw) ? "'" + raw : raw; return '"' + safe.replaceAll('"', '""') + '"'; }).join(',')).join('\r\n');
+    const csv = csvRowsStock(rows);
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
     const a = document.createElement('a'); a.href = url; a.download = 'malik-pos-supplier-payments-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     notify('Supplier payment ledger exported');
@@ -435,21 +437,21 @@ export default function FastFoodStock({ notify }) {
       const status = remaining <= 0 ? 'Depleted' : expiry && expiry < todayISO ? 'Expired - review/write off' : expiry && expiry <= new Date(Date.now() + 7 * 86400000).toISOString().slice(0,10) ? 'Expiring within 7 days' : expiry ? 'In date' : 'No expiry recorded';
       rows.push([batch.id || '', batch.purchaseId || '', batch.receivedAt || batch.date || '', expiry, batch.ingredientName || '', batch.supplier || '', batch.invoice || '', Number(batch.receivedQty || 0), remaining, batch.unit || '', Number(batch.unitCost || 0), remaining * Number(batch.unitCost || 0), status]);
     }
-    const csv = '\uFEFF' + rows.map(row => row.map(value => '"' + String(value ?? '').replaceAll('"', '""') + '"').join(',')).join('\r\n');
+    const csv = csvRowsStock(rows);
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
     const a = document.createElement('a'); a.href = url; a.download = 'malik-pos-stock-batches-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     notify('Stock batch report exported');
   }
   function exportPurchases() {
     const rows = [['Purchase ID','Purchase Date','Payment Due Date','Supplier','Invoice','Ingredient','Purchase Quantity','Pack Unit','Base Units per Pack','Received Base Quantity','Base Unit','Unit Cost per Pack PKR','Total PKR','Paid PKR','Due PKR','Payment Status','Days Past Due','Expiry Date','Notes','Payment History'], ...filteredPurchases.map(p => { const due = Math.max(0, Number(p.total || 0) - Number(p.paid || 0)); const dueDate = String(p.dueDate || '').slice(0, 10); const daysPastDue = due > 0 && dueDate && dueDate < todayISO ? Math.floor((new Date(todayISO + 'T00:00:00').getTime() - new Date(dueDate + 'T00:00:00').getTime()) / 86400000) : 0; const paymentStatus = due <= 0 ? 'Paid' : dueDate && dueDate < todayISO ? 'Overdue' : dueDate && dueDate > todayISO ? 'Not yet due' : 'Outstanding'; return [p.id, p.date || '', dueDate, p.supplier || '', p.invoice || '', p.ingredientName || '', Number(p.purchaseQty || 0), p.purchaseUnit || '', Number(p.conversion || 0), Number(p.baseQty || 0), p.unit || '', Number(p.unitCost || 0), Number(p.total || 0), Number(p.paid || 0), due, paymentStatus, daysPastDue, p.expiryDate || '', p.notes || '', (p.paymentHistory || []).map(payment => [payment.date ? new Date(payment.date).toLocaleString() : 'Date not recorded', 'Rs. ' + Number(payment.amount || 0).toFixed(2), payment.note || ''].join(' · ')).join(' | ')]; })];
-    const csv = '\uFEFF' + rows.map(row => row.map(value => '"' + String(value ?? '').replaceAll('"', '""') + '"').join(',')).join('\r\n');
+    const csv = csvRowsStock(rows);
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
     const a = document.createElement('a'); a.href = url; a.download = 'malik-pos-purchase-invoices-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     notify('Purchase invoice report exported');
   }
   function exportSupplierPayables() {
     const rows = [['Supplier','Invoice Count','Purchase Value PKR','Paid PKR','Outstanding PKR','Oldest Open Invoice Date'], ...supplierPayableSummary.map(supplier => [supplier.supplier, supplier.invoices, supplier.total, supplier.paid, supplier.due, supplier.oldestOpenDate || ''])];
-    const csv = '\uFEFF' + rows.map(row => row.map(value => '"' + String(value ?? '').replaceAll('"', '""') + '"').join(',')).join('\r\n');
+    const csv = csvRowsStock(rows);
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
     const a = document.createElement('a'); a.href = url; a.download = 'malik-pos-supplier-payables-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     notify('Supplier payable summary exported');
@@ -462,7 +464,7 @@ export default function FastFoodStock({ notify }) {
       }
     }
     if (rows.length === 1) { notify('No recorded invoice payments in the current filter'); return; }
-    const csv = '\uFEFF' + rows.map(row => row.map(value => '"' + String(value ?? '').replaceAll('"', '""') + '"').join(',')).join('\r\n');
+    const csv = csvRowsStock(rows);
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
     const a = document.createElement('a'); a.href = url; a.download = 'malik-pos-supplier-payment-ledger-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     notify('Supplier payment ledger exported');
@@ -570,21 +572,21 @@ export default function FastFoodStock({ notify }) {
   function removeRecipe(id) { const next = recipes.filter(x => String(x.id) !== String(id)); setRecipes(next); save('recipes', next); notify('Recipe removed'); }
   function exportStock() {
     const rows = [['Ingredient','SKU','Category','Supplier','On hand','Base unit','Reorder level','Stock status','Cost per base unit PKR','Stock value'], ...filteredIngredients.map(x => { const stock = Number(x.stock || 0), reorder = Number(x.reorder || 0); return [x.name, x.sku || '', x.category || '', x.supplier || '', stock, x.unit || '', reorder, stock <= 0 ? 'Out of stock' : stock <= reorder ? 'Reorder' : 'In stock', Number(x.cost || 0), stock * Number(x.cost || 0)]; })];
-    const csv = '\uFEFF' + rows.map(row => row.map(value => '"' + String(value ?? '').replaceAll('"', '""') + '"').join(',')).join('\r\n');
+    const csv = csvRowsStock(rows);
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
     const a = document.createElement('a'); a.href = url; a.download = 'malik-pos-ingredient-stock-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     notify('Ingredient stock exported (' + filteredIngredients.length + ' items)');
   }
   function exportWaste() {
     const rows = [['Waste ID','Date','Ingredient','Quantity','Unit','Unit Cost PKR','Waste Cost PKR','Reason','Staff','Notes'], ...filteredWasteRecords.map(w => [w.id, w.date || '', w.ingredientName || '', Number(w.qty || 0), w.unit || '', Number(w.unitCost || 0), Number(w.cost || 0), w.reason || '', w.staff || '', w.notes || ''])];
-    const csv = '\uFEFF' + rows.map(row => row.map(value => '"' + String(value ?? '').replaceAll('"', '""') + '"').join(',')).join('\r\n');
+    const csv = csvRowsStock(rows);
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
     const a = document.createElement('a'); a.href = url; a.download = 'malik-pos-waste-log-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     notify('Waste log exported (' + filteredWasteRecords.length + ' entries)');
   }
   function exportMovements() {
     const rows = [['Date','Ingredient','Movement Type','Quantity','Unit','Reference','Notes'], ...filteredMovements.map(m => [m.date || '', m.ingredientName || '', m.type || '', Number(m.qty || 0), m.unit || '', m.reference || '', m.note || ''])];
-    const csv = '\uFEFF' + rows.map(row => row.map(v => '"' + String(v ?? '').replaceAll('"', '""') + '"').join(',')).join('\r\n');
+    const csv = csvRowsStock(rows);
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
     const a = document.createElement('a'); a.href = url; a.download = 'malik-pos-stock-movements-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     notify('Stock movement report exported');
