@@ -24,7 +24,7 @@ export function purchaseBalance(total, paid) {
 
 function parseDateOnly(value) {
   const key = String(value || '').slice(0, 10);
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(key)) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return null;
   const date = new Date(key + 'T00:00:00Z');
   if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== key) return null;
   return date;
