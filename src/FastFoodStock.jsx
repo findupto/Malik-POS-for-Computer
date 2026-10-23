@@ -570,10 +570,11 @@ export default function FastFoodStock({ notify }) {
     setRecipes(next); save('recipes', next); setRecipeDraft({ productId: '', productName: '', variant: '', ingredients: [] }); setShowRecipe(false); setEditingRecipe(null); notify(editingRecipe ? 'Recipe updated' : 'Recipe saved');
   }
   function addRecipeLine() {
-    if (!recipeLine.ingredientId || Number(recipeLine.qty) <= 0) { notify('Choose an ingredient and enter a positive quantity'); return; }
+    const quantity = Number(recipeLine.qty);
+    if (!recipeLine.ingredientId || !Number.isFinite(quantity) || quantity <= 0) { notify('Choose an ingredient and enter a finite positive quantity'); return; }
     const item = ingredients.find(x => String(x.id) === String(recipeLine.ingredientId));
     if (!item) return;
-    setRecipeDraft(old => ({ ...old, ingredients: [...old.ingredients, { ingredientId: item.id, ingredientName: item.name, qty: Number(recipeLine.qty), unit: item.unit }] }));
+    setRecipeDraft(old => ({ ...old, ingredients: [...old.ingredients, { ingredientId: item.id, ingredientName: item.name, qty: quantity, unit: item.unit }] }));
     setRecipeLine({ ingredientId: '', qty: '' });
   }
   function editPurchaseDueDate(purchase) {
