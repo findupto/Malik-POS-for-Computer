@@ -212,6 +212,8 @@ export default function FastFoodStock({ notify }) {
   const [movements, setMovements] = useState(() => readStock('movements', []));
   const [movementSearch, setMovementSearch] = useState('');
   const [movementTypeFilter, setMovementTypeFilter] = useState('all');
+  const [movementFromDate, setMovementFromDate] = useState('');
+  const [movementToDate, setMovementToDate] = useState('');
   const [batches, setBatches] = useState(() => readStock('batches', []));
   const [wasteRecords, setWasteRecords] = useState(() => readStock('waste-records', []));
   const [showWaste, setShowWaste] = useState(false);
@@ -341,8 +343,11 @@ export default function FastFoodStock({ notify }) {
   const filteredMovements = useMemo(() => movements.filter(m => {
     const q = movementSearch.trim().toLowerCase();
     const matches = !q || [m.ingredientName, m.type, m.reference, m.note, m.unit].some(v => String(v || '').toLowerCase().includes(q));
-    return matches && (movementTypeFilter === 'all' || String(m.type || '').toLowerCase() === movementTypeFilter);
-  }).sort((a,b) => new Date(b.date || 0) - new Date(a.date || 0)), [movements, movementSearch, movementTypeFilter]);
+    const date = String(m.date || '').slice(0, 10);
+    const afterStart = !movementFromDate || (date && date >= movementFromDate);
+    const beforeEnd = !movementToDate || (date && date <= movementToDate);
+    return matches && afterStart && beforeEnd && (movementTypeFilter === 'all' || String(m.type || '').toLowerCase() === movementTypeFilter);
+  }).sort((a,b) => new Date(b.date || 0) - new Date(a.date || 0)), [movements, movementSearch, movementTypeFilter, movementFromDate, movementToDate]);
   const filteredPurchases = useMemo(() => purchases.filter(p => {
     const q = purchaseSearch.trim().toLowerCase();
     const matches = !q || [p.id, p.supplier, p.invoice, p.ingredientName, p.notes].some(v => String(v || '').toLowerCase().includes(q));
@@ -506,7 +511,7 @@ export default function FastFoodStock({ notify }) {
     </div>}
     {tab === 'reports' && <div className="panel table-panel">
       <div className="panel-head"><div><h2>Stock movement report</h2><p>Opening balances, purchases and recipe consumption</p></div><button className="btn btn-secondary" onClick={exportMovements}>Export filtered CSV</button></div>
-      <div className="table-toolbar"><div className="toolbar-left"><input className="form-input" value={movementSearch} onChange={e => setMovementSearch(e.target.value)} placeholder="Search ingredient, reference, notes" aria-label="Search stock movements"/><select className="form-input" value={movementTypeFilter} onChange={e => setMovementTypeFilter(e.target.value)} aria-label="Filter stock movement type"><option value="all">All movement types</option>{[...new Set(movements.map(m => String(m.type || '').toLowerCase()).filter(Boolean))].sort().map(type => <option key={type} value={type}>{type}</option>)}</select><button className="btn btn-secondary" onClick={() => { setMovementSearch(''); setMovementTypeFilter('all'); }}>Clear filters</button></div><span className="ff-muted">{filteredMovements.length} of {movements.length} movements</span></div>
+      <div className="table-toolbar"><div className="toolbar-left"><input className="form-input" value={movementSearch} onChange={e => setMovementSearch(e.target.value)} placeholder="Search ingredient, reference, notes" aria-label="Search stock movements"/><select className="form-input" value={movementTypeFilter} onChange={e => setMovementTypeFilter(e.target.value)} aria-label="Filter stock movement type"><option value="all">All movement types</option>{[...new Set(movements.map(m => String(m.type || '').toLowerCase()).filter(Boolean))].sort().map(type => <option key={type} value={type}>{type}</option>)}</select><label className="ff-date-filter">From <input className="form-input" type="date" value={movementFromDate} max={movementToDate || undefined} onChange={e => setMovementFromDate(e.target.value)} aria-label="Movement start date"/></label><label className="ff-date-filter">To <input className="form-input" type="date" value={movementToDate} min={movementFromDate || undefined} onChange={e => setMovementToDate(e.target.value)} aria-label="Movement end date"/></label><button className="btn btn-secondary" onClick={() => { setMovementSearch(''); setMovementTypeFilter('all'); setMovementFromDate(''); setMovementToDate(''); }}>Clear filters</button></div><span className="ff-muted">{filteredMovements.length} of {movements.length} movements</span></div>
       <div className="responsive-table"><table><thead><tr><th>DATE</th><th>INGREDIENT</th><th>MOVEMENT</th><th>QUANTITY</th><th>REFERENCE</th><th>NOTES</th></tr></thead><tbody>{filteredMovements.map(m => <tr key={m.id}><td>{new Date(m.date).toLocaleString()}</td><td><b>{m.ingredientName}</b></td><td>{m.type}</td><td className={m.qty < 0 ? 'ff-negative' : 'ff-positive'}>{m.qty > 0 ? '+' : ''}{m.qty} {m.unit}</td><td>{m.reference}</td><td>{m.note}</td></tr>)}</tbody></table>{!filteredMovements.length && <div className="empty-state"><TrendingUp size={28}/><b>{movements.length ? 'No matching movements' : 'No stock movements yet'}</b><span>{movements.length ? 'Try a different search or movement type.' : 'Purchases and configured recipe sales will appear here.'}</span></div>}</div>
       <div className="ff-report-shortcuts">{['Low stock', 'Uncosted recipes', 'Supplier dues'].map(label => <button key={label} onClick={() => { if(label === 'Low stock') { setTab('ingredients'); setSearch(''); } else if(label === 'Uncosted recipes') setTab('recipes'); else setTab('purchases'); }}>{label} <TrendingDown size={15}/></button>)}</div>
     </div>}
