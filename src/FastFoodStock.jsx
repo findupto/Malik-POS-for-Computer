@@ -522,7 +522,7 @@ export default function FastFoodStock({ notify }) {
     if (recipes.some(r => r.ingredients.some(x => String(x.ingredientId) === String(id)))) { notify('Remove this ingredient from its recipes first'); return; }
     const next = ingredients.filter(x => x.id !== id); setIngredients(next); save('ingredients', next); notify('Ingredient removed');
   }
-  function rfunction exportWaste() {
+  function exportWaste() {
     const rows = [['Waste ID','Date','Ingredient','Quantity','Unit','Unit Cost PKR','Waste Cost PKR','Reason','Staff','Notes'], ...filteredWasteRecords.map(w => [w.id, w.date || '', w.ingredientName || '', Number(w.qty || 0), w.unit || '', Number(w.unitCost || 0), Number(w.cost || 0), w.reason || '', w.staff || '', w.notes || ''])];
     const csv = '\uFEFF' + rows.map(row => row.map(value => '"' + String(value ?? '').replaceAll('"', '""') + '"').join(',')).join('\r\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
