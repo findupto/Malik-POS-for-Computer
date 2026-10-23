@@ -451,16 +451,33 @@ export default function FastFoodStock({ notify }) {
     for (const purchase of purchases) {
       const supplier = String(purchase.supplier || 'Unspecified supplier').trim() || 'Unspecified supplier';
       const key = supplier.toLowerCase();
-      const entry = grouped.get(key) || { supplier, invoices: 0, total: 0, paid: 0, due: 0, oldestOpenDate: '' };
+      const entry = grouped.get(key) || { supplier, invoices: 0, openInvoices: 0, total: 0, paid: 0, due: 0, overdue: 0, upcoming: 0, recent: 0, medium: 0, old: 0, unknown: 0, oldestOpenDate: '' };
       const total = Math.max(0, Number(purchase.total || 0));
       const paid = Math.min(total, Math.max(0, Number(purchase.paid || 0)));
       const due = Math.max(0, total - paid);
       entry.invoices += 1; entry.total += total; entry.paid += paid; entry.due += due;
-      if (due > 0 && purchase.date && (!entry.oldestOpenDate || String(purchase.date) < entry.oldestOpenDate)) entry.oldestOpenDate = String(purchase.date);
+      if (due > 0) {
+        entry.openInvoices += 1;
+        const dueDate = String(purchase.dueDate || '').slice(0, 10);
+        const invoiceDate = String(purchase.date || '').slice(0, 10);
+        if (dueDate && dueDate < todayISO) entry.overdue += due;
+        if (dueDate && dueDate > todayISO) entry.upcoming += due;
+        const agingDate = dueDate || invoiceDate;
+        const timestamp = agingDate ? new Date(agingDate + 'T00:00:00').getTime() : NaN;
+        if (!Number.isFinite(timestamp)) entry.unknown += due;
+        else if (dueDate && dueDate > todayISO) { /* future-due balances are tracked separately */ }
+        else {
+          const days = Math.max(0, Math.floor((new Date(todayISO + 'T00:00:00').getTime() - timestamp) / 86400000));
+          if (days <= 7) entry.recent += due;
+          else if (days <= 30) entry.medium += due;
+          else entry.old += due;
+        }
+        if (purchase.date && (!entry.oldestOpenDate || String(purchase.date) < entry.oldestOpenDate)) entry.oldestOpenDate = String(purchase.date);
+      }
       grouped.set(key, entry);
     }
     return [...grouped.values()].sort((a, b) => b.due - a.due || a.supplier.localeCompare(b.supplier));
-  }, [purchases]);
+  }, [purchases, todayISO]);
   const purchaseAging = useMemo(() => purchases.reduce((aging, purchase) => {
     const due = Math.max(0, Number(purchase.total || 0) - Number(purchase.paid || 0));
     if (!due) return aging;
@@ -530,7 +547,7 @@ export default function FastFoodStock({ notify }) {
     notify('Purchase invoice report exported');
   }
   function exportSupplierPayables() {
-    const rows = [['Supplier','Invoice Count','Purchase Value PKR','Paid PKR','Outstanding PKR','Oldest Open Invoice Date'], ...supplierPayableSummary.map(supplier => [supplier.supplier, supplier.invoices, supplier.total, supplier.paid, supplier.due, supplier.oldestOpenDate || ''])];
+    const rows = [['Supplier','Invoice Count','Open Invoice Count','Purchase Value PKR','Paid PKR','Outstanding PKR','Overdue PKR','Not Yet Due PKR','Open 0-7 Days PKR','Open 8-30 Days PKR','Open Over 30 Days PKR','Unknown Age PKR','Oldest Open Invoice Date'], ...supplierPayableSummary.map(supplier => [supplier.supplier, supplier.invoices, supplier.openInvoices, supplier.total, supplier.paid, supplier.due, supplier.overdue, supplier.upcoming, supplier.recent, supplier.medium, supplier.old, supplier.unknown, supplier.oldestOpenDate || ''])];
     const csv = csvRowsStock(rows);
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
     const a = document.createElement('a'); a.href = url; a.download = 'malik-pos-supplier-payables-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
