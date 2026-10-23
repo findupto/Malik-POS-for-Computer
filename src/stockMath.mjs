@@ -22,10 +22,18 @@ export function purchaseBalance(total, paid) {
   return Math.max(0, invoiceTotal - amountPaid);
 }
 
+function parseDateOnly(value) {
+  const key = String(value || '').slice(0, 10);
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(key)) return null;
+  const date = new Date(key + 'T00:00:00Z');
+  if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== key) return null;
+  return date;
+}
+
 export function daysPastDue(dueDate, todayDate, balance) {
   if (!(Number(balance) > 0) || !dueDate || !todayDate) return 0;
-  const due = new Date(String(dueDate).slice(0, 10) + 'T00:00:00Z');
-  const today = new Date(String(todayDate).slice(0, 10) + 'T00:00:00Z');
-  if (!Number.isFinite(due.getTime()) || !Number.isFinite(today.getTime())) return 0;
+  const due = parseDateOnly(dueDate);
+  const today = parseDateOnly(todayDate);
+  if (!due || !today) return 0;
   return due < today ? Math.floor((today.getTime() - due.getTime()) / 86400000) : 0;
 }
