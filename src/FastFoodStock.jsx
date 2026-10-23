@@ -372,7 +372,8 @@ export default function FastFoodStock({ notify }) {
   }).sort((a,b) => new Date(b.date || 0) - new Date(a.date || 0)), [wasteRecords, wasteSearch, wasteFromDate, wasteToDate]);
   const filteredPurchases = useMemo(() => purchases.filter(p => {
     const q = purchaseSearch.trim().toLowerCase();
-    const matches = !q || [p.id, p.supplier, p.invoice, p.ingredientName, p.notes].some(v => String(v || '').toLowerCase().includes(q));
+    const searchableFields = [p.id, p.supplier, p.invoice, p.ingredientName, p.notes, p.dueDate, p.expiryDate, ...(p.paymentHistory || []).flatMap(payment => [payment.id, payment.note, payment.date, payment.amount])];
+    const matches = !q || searchableFields.some(v => String(v ?? '').toLowerCase().includes(q));
     const due = Math.max(0, Number(p.total || 0) - Number(p.paid || 0));
     const purchaseDate = String(p.date || '').slice(0, 10);
     const inDateRange = (!purchaseFromDate || purchaseDate >= purchaseFromDate) && (!purchaseToDate || purchaseDate <= purchaseToDate);
