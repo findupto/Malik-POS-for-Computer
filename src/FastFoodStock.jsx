@@ -385,6 +385,20 @@ export default function FastFoodStock({ notify }) {
     const a = document.createElement('a'); a.href = url; a.download = 'malik-pos-supplier-payments-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     notify('Supplier payment ledger exported');
   }
+  function exportBatches() {
+    const rows = [['Batch ID','Purchase ID','Received Date','Expiry Date','Ingredient','Supplier','Invoice','Received Quantity','Remaining Quantity','Unit','Unit Cost per Base Unit PKR','Estimated Remaining Value PKR','Status']];
+    for (const batch of batches) {
+      const remaining = Math.max(0, Number(batch.remainingQty || 0));
+      const expiry = String(batch.expiryDate || '');
+      const status = remaining <= 0 ? 'Depleted' : expiry && expiry < todayISO ? 'Expired - review/write off' : expiry && expiry <= new Date(Date.now() + 7 * 86400000).toISOString().slice(0,10) ? 'Expiring within 7 days' : expiry ? 'In date' : 'No expiry recorded';
+      const purchase = purchases.find(p => String(p.id) === String(batch.purchaseId));
+      rows.push([batch.id || '', batch.purchaseId || '', batch.receivedAt || batch.date || '', expiry, batch.ingredientName || '', batch.supplier || '', batch.invoice || '', Number(batch.receivedQty || 0), remaining, batch.unit || '', Number(batch.unitCost || 0), remaining * Number(batch.unitCost || 0), status]);
+    }
+    const csv = '\\uFEFF' + rows.map(row => row.map(value => '\"' + String(value ?? '').replaceAll('\"', '\"\"') + '\"').join(',')).join('\\r\\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+    const a = document.createElement('a'); a.href = url; a.download = 'malik-pos-stock-batches-' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    notify('Stock batch report exported');
+  }
   function exportPurchases() {
     const rows = [['Purchase ID','Date','Supplier','Invoice','Ingredient','Purchase Quantity','Pack Unit','Base Units per Pack','Received Base Quantity','Base Unit','Unit Cost per Pack PKR','Total PKR','Paid PKR','Due PKR','Days Open','Expiry Date','Notes','Payment History'], ...filteredPurchases.map(p => [p.id, p.date || '', p.supplier || '', p.invoice || '', p.ingredientName || '', Number(p.purchaseQty || 0), p.purchaseUnit || '', Number(p.conversion || 0), Number(p.baseQty || 0), p.unit || '', Number(p.unitCost || 0), Number(p.total || 0), Number(p.paid || 0), Math.max(0, Number(p.total || 0) - Number(p.paid || 0)), Number(p.total || 0) > Number(p.paid || 0) && Number.isFinite(new Date(p.date).getTime()) ? Math.max(0, Math.floor((Date.now() - new Date(p.date).getTime()) / 86400000)) : '', p.expiryDate || '', p.notes || '', (p.paymentHistory || []).map(payment => [payment.date ? new Date(payment.date).toLocaleString() : 'Date not recorded', 'Rs. ' + Number(payment.amount || 0).toFixed(2), payment.note || ''].join(' · ')).join(' | ')])];
     const csv = '\uFEFF' + rows.map(row => row.map(value => '"' + String(value ?? '').replaceAll('"', '""') + '"').join(',')).join('\r\n');
@@ -540,7 +554,7 @@ export default function FastFoodStock({ notify }) {
     </div>}
 
     {tab === 'purchases' && <div className="panel table-panel">
-      <div className="table-toolbar"><div><b>Supplier purchases & batches</b><div className="ff-muted">Purchase receipts create traceable batches; FIFO sales consume oldest recorded batches first.</div></div><button className="btn btn-primary" onClick={() => setShowPurchase(true)}><Plus size={16}/> Record purchase</button></div>
+      <div className="table-toolbar"><div><b>Supplier purchases & batches</b><div className="ff-muted">Purchase receipts create traceable batches; FIFO sales consume oldest recorded batches first.</div></div><div className="toolbar-right"><button className="btn btn-secondary" onClick={exportBatches}>Export batch report</button><button className="btn btn-primary" onClick={() => setShowPurchase(true)}><Plus size={16}/> Record purchase</button></div></div>
       <div className="ff-stat-grid"><div className="ff-stat"><span>Purchase invoices</span><b>{purchases.length}</b><small>{purchases.filter(p=>Math.max(0,Number(p.total||0)-Number(p.paid||0))>0).length} outstanding</small></div><div className="ff-stat"><span>Total purchase value</span><b>{moneyStock(totalPurchaseSpend)}</b></div><div className="ff-stat"><span>Paid to suppliers</span><b>{moneyStock(purchases.reduce((n,p)=>n+Math.min(Number(p.total||0),Math.max(0,Number(p.paid||0))),0))}</b></div><div className="ff-stat"><span>Outstanding balance</span><b>{moneyStock(supplierDues)}</b></div></div>
       {(expiredBatches.length > 0 || expiringSoonBatches.length > 0) && <div className="ff-alert"><b>Expiry attention:</b> {expiredBatches.length} expired batch(es), {expiringSoonBatches.length} expiring within 7 days. Review remaining quantities below.</div>}
       <div className="ff-stat-grid">
