@@ -438,6 +438,10 @@ export default function FastFoodStock({ notify }) {
     const next = editingIngredient ? ingredients.map(x => String(x.id)===String(editingIngredient.id)?item:x) : [item, ...ingredients]; setIngredients(next); save('ingredients', next);
     setIngredientDraft({ name: '', sku: '', category: 'Food', unit: 'g', stock: '0', reorder: '0', cost: '0', supplier: '' }); setShowIngredient(false); setEditingIngredient(null);
     if (!editingIngredient) setMovements(old => { const m = [{ id: Date.now() + 1, date: new Date().toISOString(), ingredientId: item.id, ingredientName: item.name, type: 'opening', qty: item.stock, unit: item.unit, reference: 'Opening balance', note: 'Opening stock' }, ...old]; save('movements', m); return m; });
+    else {
+      const previousStock = Number(editingIngredient.stock || 0), difference = item.stock - previousStock;
+      if (difference !== 0) setMovements(old => { const m = [{ id: Date.now() + 1, date: new Date().toISOString(), ingredientId: item.id, ingredientName: item.name, type: 'adjustment', qty: difference, unit: item.unit, reference: 'Manual stock adjustment', note: 'On-hand stock changed from ' + previousStock + ' to ' + item.stock + ' ' + item.unit }, ...old]; save('movements', m); return m; });
+    }
     notify(editingIngredient ? 'Ingredient updated' : 'Ingredient added');
   }
   function saveRecipe(e) {
