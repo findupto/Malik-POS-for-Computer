@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { calculateWeightedAverageCost } from './stockMath.mjs';
 import { Boxes, BookOpen, ClipboardList, Plus, Search, ShoppingCart, Trash2, TrendingDown, TrendingUp, Utensils, X } from 'lucide-react';
 
 const readStock = (key, fallback) => {
@@ -742,7 +743,7 @@ export default function FastFoodStock({ notify }) {
     const initialPaid = Number(purchaseDraft.paid || 0);
     if (!Number.isFinite(initialPaid) || initialPaid < 0 || initialPaid > total) { notify('Amount paid must be between Rs. 0 and the purchase total (' + moneyStock(total) + ')'); return; }
     const oldStock = Number(ingredient.stock || 0), oldCost = Number(ingredient.cost || 0);
-    const weightedCost = oldStock + baseQty > 0 ? ((oldStock * oldCost) + total) / (oldStock + baseQty) : total / baseQty;
+    const weightedCost = calculateWeightedAverageCost(oldStock, oldCost, baseQty, total);
     const nextIngredients = ingredients.map(x => String(x.id) === String(ingredient.id) ? { ...x, stock: oldStock + baseQty, cost: weightedCost, supplier: supplierName } : x);
     const selectedPurchaseDate = String(purchaseDraft.purchaseDate || stockDateKey());
     const validDateOnly = value => /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(new Date(value + 'T12:00:00').getTime()) && new Date(value + 'T12:00:00').toISOString().slice(0, 10) === value;
