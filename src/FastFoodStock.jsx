@@ -396,10 +396,12 @@ export default function FastFoodStock({ notify }) {
     const qty = Number(purchaseDraft.purchaseQty), conversion = Number(purchaseDraft.conversion), unitCost = Number(purchaseDraft.unitCost);
     if (!ingredient || qty <= 0 || conversion <= 0 || unitCost < 0 || !purchaseDraft.supplier.trim()) { notify('Enter supplier, ingredient, quantity, conversion and cost'); return; }
     const baseQty = qty * conversion, total = qty * unitCost;
+    const initialPaid = Number(purchaseDraft.paid || 0);
+    if (!Number.isFinite(initialPaid) || initialPaid < 0 || initialPaid > total) { notify('Amount paid must be between Rs. 0 and the purchase total (' + moneyStock(total) + ')'); return; }
     const oldStock = Number(ingredient.stock || 0), oldCost = Number(ingredient.cost || 0);
     const weightedCost = oldStock + baseQty > 0 ? ((oldStock * oldCost) + total) / (oldStock + baseQty) : total / baseQty;
     const nextIngredients = ingredients.map(x => String(x.id) === String(ingredient.id) ? { ...x, stock: oldStock + baseQty, cost: weightedCost, supplier: purchaseDraft.supplier.trim() } : x);
-    const purchase = { id: 'PUR-' + Date.now().toString().slice(-7), date: new Date().toISOString(), supplier: purchaseDraft.supplier.trim(), invoice: purchaseDraft.invoice, ingredientId: ingredient.id, ingredientName: ingredient.name, purchaseQty: qty, purchaseUnit: purchaseDraft.purchaseUnit || ingredient.unit, conversion, baseQty, unit: ingredient.unit, unitCost, total, paid: Math.min(total, Math.max(0, Number(purchaseDraft.paid) || 0)), expiryDate: purchaseDraft.expiryDate || '', notes: purchaseDraft.notes };
+    const purchase = { id: 'PUR-' + Date.now().toString().slice(-7), date: new Date().toISOString(), supplier: purchaseDraft.supplier.trim(), invoice: purchaseDraft.invoice, ingredientId: ingredient.id, ingredientName: ingredient.name, purchaseQty: qty, purchaseUnit: purchaseDraft.purchaseUnit || ingredient.unit, conversion, baseQty, unit: ingredient.unit, unitCost, total, paid: initialPaid, expiryDate: purchaseDraft.expiryDate || '', notes: purchaseDraft.notes };
     const batch = { id: 'BAT-' + Date.now().toString().slice(-7), purchaseId: purchase.id, receivedAt: purchase.date, date: purchase.date, expiryDate: purchaseDraft.expiryDate || '', ingredientId: ingredient.id, ingredientName: ingredient.name, supplier: purchase.supplier, invoice: purchase.invoice, receivedQty: baseQty, remainingQty: baseQty, unit: ingredient.unit, unitCost: conversion > 0 ? unitCost / conversion : 0 };
     const nextPurchases = [purchase, ...purchases];
     const nextBatches = [batch, ...batches];
