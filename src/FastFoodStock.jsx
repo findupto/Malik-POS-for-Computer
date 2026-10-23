@@ -517,6 +517,7 @@ export default function FastFoodStock({ notify }) {
 
     {tab === 'purchases' && <div className="panel table-panel">
       <div className="table-toolbar"><div><b>Supplier purchases & batches</b><div className="ff-muted">Purchase receipts create traceable batches; FIFO sales consume oldest recorded batches first.</div></div><button className="btn btn-primary" onClick={() => setShowPurchase(true)}><Plus size={16}/> Record purchase</button></div>
+      <div className="ff-stat-grid"><div className="ff-stat"><span>Purchase invoices</span><b>{purchases.length}</b><small>{purchases.filter(p=>Math.max(0,Number(p.total||0)-Number(p.paid||0))>0).length} outstanding</small></div><div className="ff-stat"><span>Total purchase value</span><b>{moneyStock(totalPurchaseSpend)}</b></div><div className="ff-stat"><span>Paid to suppliers</span><b>{moneyStock(purchases.reduce((n,p)=>n+Math.min(Number(p.total||0),Math.max(0,Number(p.paid||0))),0))}</b></div><div className="ff-stat"><span>Outstanding balance</span><b>{moneyStock(supplierDues)}</b></div></div>
       {(expiredBatches.length > 0 || expiringSoonBatches.length > 0) && <div className="ff-alert"><b>Expiry attention:</b> {expiredBatches.length} expired batch(es), {expiringSoonBatches.length} expiring within 7 days. Review remaining quantities below.</div>}
       <div className="ff-stat-grid">
         <div className="ff-stat"><span>Purchase value</span><b>{moneyStock(totalPurchaseSpend)}</b><small>All recorded supplier invoices</small></div>
