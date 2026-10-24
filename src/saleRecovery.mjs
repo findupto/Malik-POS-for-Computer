@@ -14,7 +14,7 @@ export function applySaleToCustomerAccounts(customers, { orderId, customerName, 
       spent: Number(customer.spent || 0) + (isCustomerDue ? 0 : total),
       dueBalance: Number(customer.dueBalance || 0) + (isCustomerDue ? total : 0),
       visits: Number(customer.visits || 0) + 1,
-      processedSaleOrderIds: [...processed, saleId].slice(-5000)
+      processedSaleOrderIds: [...processed, saleId]
     };
   });
 }
