@@ -169,3 +169,18 @@ export async function recordInventoryAdjustment({ baseUrl, token, product, quant
   if (!response.ok) throw new Error(data.error || 'The server rejected the stock adjustment.');
   return data;
 }
+
+
+export async function fetchInventoryMovements({ baseUrl, token, limit = 50, productId, fetchImpl = globalThis.fetch }) {
+  if (!baseUrl || !token) throw new Error('Connect this register to the Malik POS API first.');
+  const url = new URL('/api/inventory/movements', baseUrl);
+  url.searchParams.set('limit', String(Math.min(200, Math.max(1, Math.trunc(Number(limit) || 50))));
+  if (productId) url.searchParams.set('productId', String(productId));
+  const response = await fetchImpl(url.toString(), {
+    headers: { authorization: 'Bearer ' + token }
+  });
+  let data = {};
+  try { data = await response.json(); } catch {}
+  if (!response.ok) throw new Error(data.error || 'Could not load inventory movement history.');
+  return Array.isArray(data.movements) ? data.movements : [];
+}
