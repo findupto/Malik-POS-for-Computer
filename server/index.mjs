@@ -149,6 +149,93 @@ const server = http.createServer(async (req, res) => {
       const result = await pool.query('SELECT entity,record_id,payload,revision,updated_at FROM pos_records WHERE location_id=$1 AND entity=$2 ORDER BY updated_at DESC LIMIT 5000', [user.locationId, entity]);
       return send(res, 200, { records: result.rows });
     }
+    if (req.method === 'POST' && url.pathname === '/api/transactions') {
+      if (!['admin','manager','cashier'].includes(user.role)) return send(res, 403, { error: 'Your role cannot create sales.' });
+      const input = await bodyJson(req, 1_000_000);
+      const idempotencyKey = String(input.idempotencyKey || '');
+      const orderId = String(input.orderId || '').trim();
+      const items = input.items;
+      const tenders = input.tenders === undefined ? [] : input.tenders;
+      if (!isUuid(idempotencyKey)) return send(res, 400, { error: 'A UUID idempotencyKey is required and must be reused for retries.' });
+      if (!orderId || orderId.length > 200) return send(res, 400, { error: 'A valid orderId is required (maximum 200 characters).' });
+      if (!Array.isArray(items) || items.length < 1 || items.length > 200) return send(res, 400, { error: 'A sale must contain between 1 and 200 line items.' });
+      if (!Array.isArray(tenders) || tenders.length > 20) return send(res, 400, { error: 'Tenders must be an array of at most 20 payments.' });
+      const moneyValue = (value, field) => {
+        const n = Number(value);
+        if (!Number.isFinite(n) || n < 0 || n > 1_000_000_000) throw Object.assign(new Error(field + ' must be a non-negative amount.'), { status: 400 });
+        return Math.round((n + Number.EPSILON) * 100) / 100;
+      };
+      const lines = [];
+      let subtotal = 0;
+      for (const item of items) {
+        const productName = String(item?.productName || '').trim();
+        const productId = String(item?.productId ?? '').trim();
+        const sku = String(item?.sku ?? '').trim();
+        const quantity = Number(item?.quantity);
+        if (!productName || productName.length > 200 || productId.length > 200 || sku.length > 100 || !Number.isFinite(quantity) || quantity <= 0 || quantity > 1_000_000 || !Number.isFinite(Number(quantity.toFixed(3)))) {
+          return send(res, 400, { error: 'Each line needs a product name, valid identifiers, and a positive quantity.' });
+        }
+        const unitPrice = moneyValue(item?.unitPrice, 'unitPrice');
+        const lineTotal = Math.round((quantity * unitPrice + Number.EPSILON) * 100) / 100;
+        subtotal = Math.round((subtotal + lineTotal + Number.EPSILON) * 100) / 100;
+        lines.push({ productId, sku, productName, quantity: Number(quantity.toFixed(3)), unitPrice, lineTotal });
+      }
+      const discountAmount = moneyValue(input.discountAmount ?? 0, 'discountAmount');
+      const taxAmount = moneyValue(input.taxAmount ?? 0, 'taxAmount');
+      const serviceChargeAmount = moneyValue(input.serviceChargeAmount ?? 0, 'serviceChargeAmount');
+      const deliveryFee = moneyValue(input.deliveryFee ?? 0, 'deliveryFee');
+      if (discountAmount > subtotal) return send(res, 400, { error: 'Discount cannot exceed the subtotal.' });
+      const total = Math.round((subtotal - discountAmount + taxAmount + serviceChargeAmount + deliveryFee + Number.EPSILON) * 100) / 100;
+      const tenderRows = [];
+      for (const tender of tenders) {
+        const method = String(tender?.method || '');
+        if (!['Cash','Card','Bank Transfer','Mobile Wallet','Credit','Other'].includes(method)) return send(res, 400, { error: 'Unsupported tender method.' });
+        const amount = moneyValue(tender?.amount, 'tender amount');
+        const reference = String(tender?.reference || '').trim();
+        if (reference.length > 200) return send(res, 400, { error: 'Tender reference must be at most 200 characters.' });
+        tenderRows.push({ method, amount, reference });
+      }
+      const customerName = String(input.customerName || 'Walk-in Customer').trim().slice(0, 200) || 'Walk-in Customer';
+      const notes = String(input.notes || '').slice(0, 2000);
+      const occurredAt = input.occurredAt && Number.isFinite(Date.parse(input.occurredAt)) ? new Date(input.occurredAt).toISOString() : null;
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [user.locationId + ':transaction:' + idempotencyKey]);
+        const existing = await client.query('SELECT id,order_id,total,created_at FROM pos_transactions WHERE location_id=$1 AND idempotency_key=$2', [user.locationId, idempotencyKey]);
+        if (existing.rowCount) {
+          await client.query('COMMIT');
+          return send(res, 200, { status: 'duplicate', transaction: existing.rows[0] });
+        }
+        const inserted = await client.query(
+          'INSERT INTO pos_transactions(location_id,idempotency_key,order_id,customer_name,subtotal,discount_amount,tax_amount,service_charge_amount,delivery_fee,total,notes,payload,created_by,occurred_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id,order_id,total,created_at',
+          [user.locationId,idempotencyKey,orderId,customerName,subtotal,discountAmount,taxAmount,serviceChargeAmount,deliveryFee,total,notes,JSON.stringify({ serviceType: String(input.serviceType || '').slice(0,40), tableNumber: String(input.tableNumber || '').slice(0,40) }),user.sub,occurredAt]
+        );
+        const transaction = inserted.rows[0];
+        for (const line of lines) {
+          await client.query('INSERT INTO pos_transaction_lines(transaction_id,product_id,sku,product_name,quantity,unit_price,line_total) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+            [transaction.id,line.productId,line.sku,line.productName,line.quantity,line.unitPrice,line.lineTotal]);
+        }
+        for (const tender of tenderRows) {
+          await client.query('INSERT INTO pos_tenders(transaction_id,method,amount,reference) VALUES ($1,$2,$3,$4)', [transaction.id,tender.method,tender.amount,tender.reference]);
+        }
+        await client.query('INSERT INTO audit_events(location_id,actor_id,action,entity,record_id,details) VALUES ($1,$2,$3,$4,$5,$6)',
+          [user.locationId,user.sub,'sale.created','pos_transactions',transaction.id,JSON.stringify({ orderId, total, lineCount: lines.length, tenderCount: tenderRows.length })]);
+        await client.query('COMMIT');
+        return send(res, 201, { status: 'created', transaction: { ...transaction, subtotal, discountAmount, taxAmount, serviceChargeAmount, deliveryFee, currency: 'PKR' } });
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+    }
+    if (req.method === 'GET' && url.pathname === '/api/transactions') {
+      const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') || 50)));
+      if (!Number.isInteger(limit)) return send(res, 400, { error: 'limit must be an integer from 1 to 200.' });
+      const result = await pool.query('SELECT id,order_id,customer_name,subtotal,discount_amount,tax_amount,service_charge_amount,delivery_fee,total,created_by,occurred_at,created_at FROM pos_transactions WHERE location_id=$1 ORDER BY created_at DESC LIMIT $2', [user.locationId,limit]);
+      return send(res, 200, { transactions: result.rows });
+    }
     if (req.method === 'POST' && url.pathname === '/api/sync/push') {
       if (!roles[user.role]) return send(res, 403, { error: 'A recognized staff role is required.' });
       const input = await bodyJson(req);
