@@ -40,7 +40,7 @@ Use a strong unique `POSTGRES_PASSWORD`, `JWT_SECRET` (at least 32 characters), 
 - `GET /api/records?entity=orders` — records for the signed-in user's location.
 - `POST /api/sync/push` — atomically ingests up to 500 events, deduplicated by event UUID. Admins/managers can sync all entity types; cashiers are restricted to orders, time charges, cash entries, audit trail, and attendance.
 - `POST /api/transactions` — records a sale, its line items, tenders, and audit event in one PostgreSQL transaction. The server recalculates totals and uses a location-scoped UUID idempotency key so network retries do not create a second sale.
-- `GET /api/transactions?limit=50` — lists recent transactions for the authenticated user's location. Add `orderId=<local-order-id>` for an exact location-scoped lookup used by recovery.
+- `GET /api/transactions?limit=50` — lists recent transactions for the authenticated user's location. Add `orderId=<local-order-id>` for an exact location-scoped lookup used by recovery; that exact-order response includes the idempotency key so a register only reconciles an outbox entry when both the order ID and original key match.
 - `POST /api/inventory/initialize` — admin/manager-only, initializes a product's opening stock only if no location-scoped balance exists; repeated calls preserve the existing balance.
 - `POST /api/inventory/adjustments` — admin/manager-only, idempotent stock adjustment. Use a positive `quantityDelta` for opening stock/receipts and a negative delta for wastage or corrections; a required reason is audited.
 - `GET /api/inventory` — lists location-scoped tracked product balances.
