@@ -10,7 +10,9 @@ if [ "${CONFIRM_RESTORE:-}" != "YES" ]; then
 fi
 [ -f "$ARCHIVE" ] || { echo "Backup archive not found: $ARCHIVE" >&2; exit 2; }
 if [ -f "$ARCHIVE.sha256" ]; then
-  sha256sum --check "$ARCHIVE.sha256"
+  archive_dir="$(dirname "$ARCHIVE")"
+  archive_name="$(basename "$ARCHIVE")"
+  (cd "$archive_dir" && sha256sum --check "$archive_name.sha256")
 fi
 pg_restore --list "$ARCHIVE" >/dev/null
 pg_restore --clean --if-exists --exit-on-error --no-owner --no-acl --dbname="$DATABASE_URL" "$ARCHIVE"
