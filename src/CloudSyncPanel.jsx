@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
-import { Cloud, RefreshCw, ShieldCheck, LogIn, LogOut } from 'lucide-react';
-import { loginToSyncApi, syncSnapshot } from './syncClient.mjs';
+import React, { useEffect, useRef, useState } from 'react';
+import { Cloud, RefreshCw, ShieldCheck, LogIn, LogOut, AlertTriangle, Check } from 'lucide-react';
+import { loginToSyncApi, syncSnapshot, resolveSyncConflict } from './syncClient.mjs';
+
+const CONFLICTS_KEY = 'malik-syncConflicts';
 
 export default function CloudSyncPanel() {
   const [baseUrl, setBaseUrl] = useState(() => localStorage.getItem('malik-syncBaseUrl') || 'http://127.0.0.1:8787');
@@ -10,41 +12,78 @@ export default function CloudSyncPanel() {
     try { return JSON.parse(localStorage.getItem('malik-syncSession') || 'null'); } catch { return null; }
   });
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
+  const [conflicts, setConflicts] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(CONFLICTS_KEY) || '[]'); } catch { return []; }
+  });
+
+  async function runSync({ automatic = false } = {}) {
+    if (!session || busyRef.current || !navigator.onLine) return;
+    busyRef.current = true;
+    setBusy(true);
+    if (!automatic) { setError(''); setStatus('Checking server changes and uploading local changes…'); }
+    try {
+      const result = await syncSnapshot({ baseUrl: session.baseUrl, token: session.token, storage: localStorage, role: session.user.role });
+      const latest = (() => { try { return JSON.parse(localStorage.getItem(CONFLICTS_KEY) || '[]'); } catch { return []; } })();
+      setConflicts(latest);
+      setStatus(result.conflicts
+        ? 'Sync completed with ' + result.conflicts + ' conflict(s). Choose which version to keep below.'
+        : 'Sync complete. Uploaded ' + result.uploaded + ' changes and downloaded ' + result.downloaded + '.');
+      if (!automatic) setError('');
+    } catch (e) {
+      if (!automatic) { setError(e?.message || 'Sync failed. Local data is retained.'); setStatus(''); }
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!session) return undefined;
+    const attempt = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine) runSync({ automatic: true });
+    };
+    const timer = window.setInterval(attempt, 30000);
+    window.addEventListener('online', attempt);
+    return () => { window.clearInterval(timer); window.removeEventListener('online', attempt); };
+  }, [session]);
 
   async function connect(event) {
     event.preventDefault();
-    setBusy(true); setError(''); setStatus('');
+    setBusy(true); busyRef.current = true; setError(''); setStatus('');
     try {
       const next = await loginToSyncApi(baseUrl, username, password);
       localStorage.setItem('malik-syncBaseUrl', next.baseUrl);
       localStorage.setItem('malik-syncUsername', username.trim());
       localStorage.setItem('malik-syncSession', JSON.stringify(next));
       setBaseUrl(next.baseUrl); setSession(next); setPassword('');
-      setStatus('Connected as ' + next.user.name + ' (' + next.user.role + ').');
+      setStatus('Connected as ' + next.user.name + '. Automatic sync runs every 30 seconds while this panel is open and online.');
     } catch (e) { setError(e?.message || 'Could not connect to the sync server.'); }
-    finally { setBusy(false); }
+    finally { busyRef.current = false; setBusy(false); }
   }
 
-  async function syncNow() {
-    setBusy(true); setError(''); setStatus('Downloading server changes, then uploading local records…');
+  function chooseConflict(conflict, choice) {
     try {
-      const result = await syncSnapshot({ baseUrl: session.baseUrl, token: session.token, storage: localStorage, role: session.user.role });
-      setStatus('Sync finished. Uploaded ' + result.uploaded + ' events; downloaded ' + result.downloaded + '. Reload this register to apply changes to the open screen.');
-    } catch (e) { setError(e?.message || 'Sync failed. Your local data has not been cleared.'); setStatus(''); }
-    finally { setBusy(false); }
+      resolveSyncConflict(localStorage, conflict.id, choice);
+      setConflicts(JSON.parse(localStorage.getItem(CONFLICTS_KEY) || '[]'));
+      setStatus(choice === 'local'
+        ? 'Kept this computer’s version. It will upload on the next sync.'
+        : 'Kept the server version on this computer.');
+      setError('');
+    } catch (e) { setError(e?.message || 'Could not resolve conflict.'); }
   }
 
   function disconnect() {
     localStorage.removeItem('malik-syncSession');
-    setSession(null); setStatus('Disconnected from cloud sync. Local POS data remains on this device.');
+    setSession(null); setStatus('Disconnected. Local POS data remains on this device.');
     setError('');
   }
 
   return <div className="panel settings-panel cloud-sync-panel">
     <div className="panel-head"><div><h2><Cloud size={18} style={{verticalAlign:'middle',marginRight:8}}/>Multi-computer sync</h2><p>Connect this register to your private Malik POS API.</p></div><ShieldCheck size={19}/></div>
-    <div className="settings-note"><ShieldCheck size={17}/><div><b>Local-first, early sync implementation</b><p>Local data remains available. Sync is manual; conflicting edits are not yet reviewed automatically. Back up the database before using across live registers.</p></div></div>
+    <div className="settings-note"><ShieldCheck size={17}/><div><b>Automatic retry and conflict review enabled</b><p>Changes are checked every 30 seconds while this panel is open and the computer is online. Pending changes remain local after network failures. Keep regular backups; this is not yet a production-grade offline POS database.</p></div></div>
     {!session ? <form onSubmit={connect}>
       <label className="field-label">SYNC API URL</label>
       <input className="form-input" type="url" required value={baseUrl} onChange={e=>setBaseUrl(e.target.value)} placeholder="https://your-private-pos-api.example.com"/>
@@ -56,11 +95,24 @@ export default function CloudSyncPanel() {
     </form> : <>
       <div className="stock-row"><div className="stock-row-info"><b>{session.user.name}</b><small>{session.user.role} · {session.user.locationId}</small></div><span className="status-pill status-good">Connected</span></div>
       <label className="field-label">SERVER</label><p className="settings-description">{session.baseUrl}</p>
-      <button className="btn btn-primary full-btn" onClick={syncNow} disabled={busy}><RefreshCw size={16}/>{busy?'Syncing…':'Sync now'}</button>
+      <button className="btn btn-primary full-btn" onClick={()=>runSync()} disabled={busy}><RefreshCw size={16}/>{busy?'Syncing…':'Sync now'}</button>
       <button className="btn btn-secondary full-btn" onClick={()=>window.location.reload()} disabled={busy}>Reload register after sync</button>
       <button className="btn btn-secondary full-btn" onClick={disconnect} disabled={busy}><LogOut size={16}/> Disconnect</button>
     </>}
     {status&&<p className="settings-description" role="status">{status}</p>}
     {error&&<p className="settings-description" role="alert" style={{color:'var(--danger,#b42318)'}}>{error}</p>}
+    {conflicts.length>0&&<div className="sync-conflicts">
+      <h3><AlertTriangle size={17} style={{verticalAlign:'middle',marginRight:6}}/>Conflicts need your choice ({conflicts.length})</h3>
+      <p className="settings-description">The same record changed locally and on the server. Select the version to keep; this choice applies to that record only.</p>
+      {conflicts.map(conflict=><div className="settings-note" key={conflict.id}>
+        <div style={{width:'100%'}}>
+          <b>{conflict.entity} · {conflict.recordId}</b>
+          <p><b>This computer:</b> <code>{JSON.stringify(conflict.local ?? '(deleted)').slice(0,180)}</code></p>
+          <p><b>Server:</b> <code>{JSON.stringify(conflict.remote ?? '(deleted)').slice(0,180)}</code></p>
+          <button className="btn btn-secondary" onClick={()=>chooseConflict(conflict,'local')}><Check size={14}/> Keep this computer</button>{' '}
+          <button className="btn btn-secondary" onClick={()=>chooseConflict(conflict,'remote')}><Check size={14}/> Keep server</button>
+        </div>
+      </div>)}
+    </div>}
   </div>;
 }
