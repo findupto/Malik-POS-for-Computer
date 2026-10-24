@@ -225,6 +225,9 @@ const server = http.createServer(async (req, res) => {
         return send(res, 201, { status: 'created', transaction: { ...transaction, subtotal, discountAmount, taxAmount, serviceChargeAmount, deliveryFee, currency: 'PKR' } });
       } catch (error) {
         await client.query('ROLLBACK');
+        if (error.code === '23505' && error.constraint === 'pos_transactions_location_id_order_id_key') {
+          return send(res, 409, { error: 'An order with this orderId already exists at this location. Retry with the original idempotency key for duplicate submissions.' });
+        }
         throw error;
       } finally {
         client.release();
