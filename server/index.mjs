@@ -154,6 +154,8 @@ const server = http.createServer(async (req, res) => {
           const priorEvent = await client.query('SELECT sequence FROM sync_events WHERE event_id=$1', [event.eventId]);
           if (priorEvent.rowCount) { results.push({ eventId: event.eventId, status: 'duplicate', sequence: Number(priorEvent.rows[0].sequence) }); continue; }
           if (Object.hasOwn(event, 'expectedSequence')) {
+            // Serialize writers for this location/entity/record so the compare-and-write check is atomic.
+            await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [user.locationId + ':' + event.entity + ':' + event.recordId]);
             const latest = await client.query('SELECT sequence FROM sync_events WHERE location_id=$1 AND entity=$2 AND record_id=$3 ORDER BY sequence DESC LIMIT 1', [user.locationId,event.entity,event.recordId]);
             const expectedSequence = event.expectedSequence === null ? null : Number(event.expectedSequence);
             const actualSequence = latest.rowCount ? Number(latest.rows[0].sequence) : null;
