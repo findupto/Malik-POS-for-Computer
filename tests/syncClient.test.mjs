@@ -1,0 +1,58 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { applyPulledEvents, buildSnapshotEvents, loginToSyncApi } from '../src/syncClient.mjs';
+
+function fakeStorage(initial = {}) {
+  const values = new Map(Object.entries(initial));
+  return {
+    getItem: key => values.has(key) ? values.get(key) : null,
+    setItem: (key, value) => values.set(key, String(value)),
+    removeItem: key => values.delete(key),
+    inspect: key => values.get(key)
+  };
+}
+
+test('snapshot excludes staff secrets and cashier catalog writes', () => {
+  const storage = fakeStorage({
+    'malik-orders': JSON.stringify([{ id: 'o-1', total: 500 }]),
+    'malik-products': JSON.stringify([{ id: 'p-1', name: 'Tea' }]),
+    'malik-staff': JSON.stringify([{ id: 1, pin: '1234' }])
+  });
+  const events = buildSnapshotEvents(storage, 'cashier');
+  assert.equal(events.length, 1);
+  assert.equal(events[0].entity, 'orders');
+  assert.equal(events[0].recordId, 'o-1');
+  assert.equal(JSON.stringify(events).includes('1234'), false);
+});
+
+test('snapshot includes catalog for managers but never staff records', () => {
+  const storage = fakeStorage({
+    'malik-products': JSON.stringify([{ id: 'p-1', name: 'Tea' }]),
+    'malik-staff': JSON.stringify([{ id: 1, pin: '1234' }])
+  });
+  const events = buildSnapshotEvents(storage, 'manager');
+  assert.equal(events.length, 1);
+  assert.equal(events[0].entity, 'products');
+});
+
+test('pulled upserts merge by id and advance the event cursor', () => {
+  const storage = fakeStorage({ 'malik-orders': JSON.stringify([{ id: 'o-1', total: 10 }]) });
+  const cursor = applyPulledEvents(storage, [
+    { sequence: '4', entity: 'orders', record_id: 'o-1', operation: 'upsert', payload: { id: 'o-1', total: 20 } },
+    { sequence: '5', entity: 'orders', record_id: 'o-2', operation: 'upsert', payload: { id: 'o-2', total: 30 } }
+  ]);
+  assert.equal(cursor, 5);
+  assert.deepEqual(JSON.parse(storage.inspect('malik-orders')), [{ id: 'o-1', total: 20 }, { id: 'o-2', total: 30 }]);
+});
+
+test('pulled deletes remove records by id', () => {
+  const storage = fakeStorage({ 'malik-orders': JSON.stringify([{ id: 'o-1' }, { id: 'o-2' }]) });
+  applyPulledEvents(storage, [{ sequence: '8', entity: 'orders', record_id: 'o-1', operation: 'delete' }]);
+  assert.deepEqual(JSON.parse(storage.inspect('malik-orders')), [{ id: 'o-2' }]);
+});
+
+test('login rejects an invalid API URL before making a request', async () => {
+  await assert.rejects(() => loginToSyncApi('not-a-url', 'owner', 'secret', async () => {
+    throw new Error('fetch should not be called');
+  }), /API URL/);
+});
