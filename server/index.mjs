@@ -218,6 +218,24 @@ const server = http.createServer(async (req, res) => {
       }
       return send(res, 405, { error: 'Method not allowed.' });
     }
+    const roleChangeMatch = url.pathname.match(/^\/api\/admin\/users\/([0-9a-f-]{36})\/role$/i);
+    if (req.method === 'POST' && roleChangeMatch) {
+      if (user.role !== 'admin') return send(res, 403, { error: 'Administrator role required.' });
+      const [, targetId] = roleChangeMatch;
+      if (!isUuid(targetId)) return send(res, 400, { error: 'A valid user ID is required.' });
+      const input = await bodyJson(req, 16_000);
+      const role = String(input.role || '');
+      if (!['admin','manager','cashier'].includes(role)) return send(res, 400, { error: 'Role must be admin, manager or cashier.' });
+      const targetResult = await pool.query('SELECT id,role,active FROM staff_users WHERE id=$1 AND location_id=$2', [targetId, user.locationId]);
+      const target = targetResult.rows[0];
+      if (!target) return send(res, 404, { error: 'Staff account not found at this location.' });
+      if (target.active && target.role === 'admin' && role !== 'admin') {
+        const count = await pool.query("SELECT count(*)::int AS n FROM staff_users WHERE location_id=$1 AND role='admin' AND active=true", [user.locationId]);
+        if (count.rows[0].n <= 1) return send(res, 409, { error: 'Keep at least one active administrator at this location.' });
+      }
+      const updated = await pool.query('UPDATE staff_users SET role=$1,updated_at=now() WHERE id=$2 AND location_id=$3 RETURNING id,username,display_name,role,active,created_at', [role,targetId,user.locationId]);
+      return send(res, 200, { user: updated.rows[0] });
+    }
     const userActionMatch = url.pathname.match(/^\/api\/admin\/users\/([0-9a-f-]{36})\/(deactivate|activate|reset-password)$/i);
     if (req.method === 'POST' && userActionMatch) {
       if (user.role !== 'admin') return send(res, 403, { error: 'Administrator role required.' });
