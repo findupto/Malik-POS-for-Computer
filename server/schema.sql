@@ -103,3 +103,58 @@ CREATE TABLE IF NOT EXISTS audit_events (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS audit_events_location_created_idx ON audit_events(location_id, created_at DESC);
+
+
+-- Inventory is explicitly tracked per location. A balance row must be initialized
+-- through an adjustment before sales affect that product's on-hand quantity.
+CREATE TABLE IF NOT EXISTS inventory_balances (
+  location_id uuid NOT NULL REFERENCES locations(id),
+  product_id text NOT NULL,
+  sku text NOT NULL DEFAULT '',
+  product_name text NOT NULL,
+  quantity numeric(14,3) NOT NULL DEFAULT 0 CHECK (quantity >= 0),
+  updated_by uuid REFERENCES staff_users(id),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (location_id, product_id)
+);
+
+CREATE TABLE IF NOT EXISTS inventory_movements (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  location_id uuid NOT NULL REFERENCES locations(id),
+  idempotency_key uuid NOT NULL,
+  product_id text NOT NULL,
+  sku text NOT NULL DEFAULT '',
+  product_name text NOT NULL,
+  quantity_delta numeric(14,3) NOT NULL CHECK (quantity_delta <> 0),
+  quantity_after numeric(14,3) NOT NULL CHECK (quantity_after >= 0),
+  reason text NOT NULL,
+  reference_type text NOT NULL DEFAULT 'adjustment' CHECK (reference_type IN ('adjustment','sale','refund')),
+  reference_id uuid,
+  actor_id uuid REFERENCES staff_users(id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (location_id, idempotency_key)
+);
+CREATE INDEX IF NOT EXISTS inventory_movements_location_created_idx ON inventory_movements(location_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS pos_refunds (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  location_id uuid NOT NULL REFERENCES locations(id),
+  transaction_id uuid NOT NULL REFERENCES pos_transactions(id) ON DELETE RESTRICT,
+  idempotency_key uuid NOT NULL,
+  amount numeric(14,2) NOT NULL CHECK (amount > 0),
+  method text NOT NULL CHECK (method IN ('Cash','Card','Bank Transfer','Mobile Wallet','Other')),
+  reason text NOT NULL,
+  restocked boolean NOT NULL DEFAULT false,
+  created_by uuid REFERENCES staff_users(id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (location_id, idempotency_key)
+);
+CREATE INDEX IF NOT EXISTS pos_refunds_transaction_idx ON pos_refunds(transaction_id, created_at);
+
+CREATE TABLE IF NOT EXISTS pos_refund_lines (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  refund_id uuid NOT NULL REFERENCES pos_refunds(id) ON DELETE RESTRICT,
+  product_id text NOT NULL DEFAULT '',
+  product_name text NOT NULL,
+  quantity numeric(14,3) NOT NULL CHECK (quantity > 0)
+);
