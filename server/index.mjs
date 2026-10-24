@@ -317,11 +317,12 @@ const server = http.createServer(async (req, res) => {
         const remaining = Number(sale.rows[0].total) - Number(refunded.rows[0].amount);
         if (amount > remaining + 0.000001) { await client.query('ROLLBACK'); return send(res, 409, { error: 'Refund exceeds the remaining refundable amount of ' + Math.max(0, remaining).toFixed(2) + '.' }); }
         const saleLines = await client.query('SELECT product_id,product_name,quantity FROM pos_transaction_lines WHERE transaction_id=$1', [transactionId]);
-        for (const item of items) {
-          const sold = saleLines.rows.filter(line => line.product_id === String(item.productId)).reduce((sum,line) => sum + Number(line.quantity),0);
-          const already = await client.query('SELECT COALESCE(sum(rl.quantity),0)::numeric AS quantity FROM pos_refund_lines rl JOIN pos_refunds r ON r.id=rl.refund_id WHERE r.transaction_id=$1 AND rl.product_id=$2', [transactionId,String(item.productId)]);
-          const requested = Number(item.quantity);
-          if (requested > sold - Number(already.rows[0].quantity) + 0.000001) { await client.query('ROLLBACK'); return send(res, 409, { error: 'Refund quantity exceeds the unrefunded sold quantity for ' + item.productName + '.' }); }
+        const refundQuantities = new Map();
+        for (const item of items) refundQuantities.set(String(item.productId), (refundQuantities.get(String(item.productId)) || 0) + Number(item.quantity));
+        for (const [productId, requested] of refundQuantities) {
+          const sold = saleLines.rows.filter(line => line.product_id === productId).reduce((sum,line) => sum + Number(line.quantity),0);
+          const already = await client.query('SELECT COALESCE(sum(rl.quantity),0)::numeric AS quantity FROM pos_refund_lines rl JOIN pos_refunds r ON r.id=rl.refund_id WHERE r.transaction_id=$1 AND rl.product_id=$2', [transactionId,productId]);
+          if (requested > sold - Number(already.rows[0].quantity) + 0.000001) { await client.query('ROLLBACK'); return send(res, 409, { error: 'Refund quantity exceeds the unrefunded sold quantity for product ' + productId + '.' }); }
         }
         const inserted = await client.query('INSERT INTO pos_refunds(location_id,transaction_id,idempotency_key,amount,method,reason,restocked,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id,transaction_id,amount,method,reason,restocked,created_at', [user.locationId,transactionId,idempotencyKey,amount,method,reason,restock,user.sub]);
         const refund = inserted.rows[0];
@@ -333,11 +334,10 @@ const server = http.createServer(async (req, res) => {
           if (restock) {
             await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [user.locationId + ':inventory:' + productId]);
             const balance = await client.query('SELECT quantity,sku,product_name FROM inventory_balances WHERE location_id=$1 AND product_id=$2 FOR UPDATE', [user.locationId,productId]);
-            if (balance.rowCount) {
-              const after = Math.round((Number(balance.rows[0].quantity) + quantity + Number.EPSILON) * 1000) / 1000;
-              await client.query('UPDATE inventory_balances SET quantity=$1,updated_by=$2,updated_at=now() WHERE location_id=$3 AND product_id=$4', [after,user.sub,user.locationId,productId]);
-              await client.query('INSERT INTO inventory_movements(location_id,idempotency_key,product_id,sku,product_name,quantity_delta,quantity_after,reason,reference_type,reference_id,actor_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,\'refund\',$9,$10)', [user.locationId,crypto.randomUUID(),productId,balance.rows[0].sku,productName,quantity,after,'Refund '+refund.id,'refund',refund.id,user.sub]);
-            }
+            if (!balance.rowCount) throw Object.assign(new Error('Cannot restock ' + productName + ' because inventory tracking has not been initialized for this product.'), { status: 409 });
+            const after = Math.round((Number(balance.rows[0].quantity) + quantity + Number.EPSILON) * 1000) / 1000;
+            await client.query('UPDATE inventory_balances SET quantity=$1,updated_by=$2,updated_at=now() WHERE location_id=$3 AND product_id=$4', [after,user.sub,user.locationId,productId]);
+            await client.query('INSERT INTO inventory_movements(location_id,idempotency_key,product_id,sku,product_name,quantity_delta,quantity_after,reason,reference_type,reference_id,actor_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,\\'refund\\',$9,$10)', [user.locationId,crypto.randomUUID(),productId,balance.rows[0].sku,productName,quantity,after,'Refund '+refund.id,'refund',refund.id,user.sub]);
           }
         }
         await client.query('INSERT INTO audit_events(location_id,actor_id,action,entity,record_id,details) VALUES ($1,$2,$3,$4,$5,$6)', [user.locationId,user.sub,'sale.refunded','pos_refunds',refund.id,JSON.stringify({ transactionId, amount, method, reason, restock, itemCount: items.length })]);
