@@ -337,7 +337,7 @@ const server = http.createServer(async (req, res) => {
             if (!balance.rowCount) throw Object.assign(new Error('Cannot restock ' + productName + ' because inventory tracking has not been initialized for this product.'), { status: 409 });
             const after = Math.round((Number(balance.rows[0].quantity) + quantity + Number.EPSILON) * 1000) / 1000;
             await client.query('UPDATE inventory_balances SET quantity=$1,updated_by=$2,updated_at=now() WHERE location_id=$3 AND product_id=$4', [after,user.sub,user.locationId,productId]);
-            await client.query('INSERT INTO inventory_movements(location_id,idempotency_key,product_id,sku,product_name,quantity_delta,quantity_after,reason,reference_type,reference_id,actor_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,\\'refund\\',$9,$10)', [user.locationId,crypto.randomUUID(),productId,balance.rows[0].sku,productName,quantity,after,'Refund '+refund.id,'refund',refund.id,user.sub]);
+            await client.query('INSERT INTO inventory_movements(location_id,idempotency_key,product_id,sku,product_name,quantity_delta,quantity_after,reason,reference_type,reference_id,actor_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)', [user.locationId,crypto.randomUUID(),productId,balance.rows[0].sku,productName,quantity,after,'Refund '+refund.id,'refund',refund.id,user.sub]);
           }
         }
         await client.query('INSERT INTO audit_events(location_id,actor_id,action,entity,record_id,details) VALUES ($1,$2,$3,$4,$5,$6)', [user.locationId,user.sub,'sale.refunded','pos_refunds',refund.id,JSON.stringify({ transactionId, amount, method, reason, restock, itemCount: items.length })]);
