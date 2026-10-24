@@ -134,8 +134,7 @@ export async function recordSaleTransaction({ baseUrl, token, order, payment, st
     }
     throw new Error(result.error || 'The server did not record this sale. The order remains pending; retry payment to safely retry the same sale.');
   }
-  delete outbox[String(order.id)];
-  storage.setItem(SALE_OUTBOX_KEY, JSON.stringify(outbox));
+  // Keep the queue entry until the caller has durably persisted the local paid order.
   return result;
 }
 
