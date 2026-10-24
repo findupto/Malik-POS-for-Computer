@@ -7,8 +7,7 @@ const DEFAULT_SYNC_ENTITIES = [
   { key: 'timeChargeSessions', entity: 'timechargesessions', collection: true },
   { key: 'attendance', entity: 'attendance', collection: true },
   { key: 'auditTrail', entity: 'audittrail', collection: true },
-  { key: 'suppliers', entity: 'suppliers', collection: true },
-  { key: 'staff', entity: 'staff', collection: true }
+  { key: 'suppliers', entity: 'suppliers', collection: true }
 ];
 
 const uuid = () => {
@@ -99,9 +98,10 @@ export async function syncSnapshot({ baseUrl, token, storage, role = 'admin', fe
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || 'Download failed.');
     const batch = data.events || [];
+    const previousCursor = cursor;
     cursor = applyPulledEvents(storage, batch);
     downloaded += batch.length;
-    if (batch.length < 500 || Number(data.nextAfter) <= cursor - 0) break;
+    if (batch.length < 500 || cursor <= previousCursor) break;
   }
   return { uploaded, downloaded, cursor };
 }
