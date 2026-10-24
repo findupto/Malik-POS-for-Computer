@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { recordSaleTransaction, recordRefundTransaction, initializeServerInventory, fetchServerInventory, fetchInventoryMovements, recordInventoryAdjustment } from '../src/transactionLedger.mjs';
+import { recordSaleTransaction, recordRefundTransaction, initializeServerInventory, fetchServerInventory, fetchInventoryMovements, recordInventoryAdjustment, getPendingSaleTransactions } from '../src/transactionLedger.mjs';
 
 function fakeStorage(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -59,6 +59,22 @@ test('uncertain shared sale is durably queued and retries the exact original pay
   await recordSaleTransaction({ ...args, order: changedOrder, payment: 'Card' });
   assert.deepEqual(calls[1].body, calls[0].body);
   assert.deepEqual(JSON.parse(storage.inspect('malik-transactionOutbox')), {});
+});
+
+test('pending shared sale summary lists only safe retry metadata', async () => {
+  const storage = fakeStorage({
+    'malik-transactionOutbox': JSON.stringify({
+      'MP-PENDING': {
+        orderId: 'MP-PENDING', idempotencyKey: 'key-1', occurredAt: '2026-10-24T10:00:00.000Z',
+        items: [{ productName: 'Tea' }, { productName: 'Cake' }],
+        tenders: [{ amount: 25 }]
+      },
+      'bad-entry': { orderId: 'different-id', idempotencyKey: 'key-2', items: [], tenders: [] }
+    })
+  });
+  assert.deepEqual(getPendingSaleTransactions(storage), [{
+    orderId: 'MP-PENDING', occurredAt: '2026-10-24T10:00:00.000Z', itemCount: 2, total: 25
+  }]);
 });
 
 test('customer due is recorded without a false cash tender', async () => {
