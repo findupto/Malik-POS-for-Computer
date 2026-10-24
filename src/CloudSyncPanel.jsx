@@ -42,14 +42,15 @@ export default function CloudSyncPanel() {
   }
 
   useEffect(() => {
-    if (!session) return undefined;
-    const attempt = () => {
-      if (document.visibilityState === 'visible' && navigator.onLine) runSync({ automatic: true });
+    const refreshFromBackground = () => {
+      try { setConflicts(JSON.parse(localStorage.getItem(CONFLICTS_KEY) || '[]')); } catch { setConflicts([]); }
+      const lastError = localStorage.getItem('malik-syncLastError');
+      if (lastError) { setError(lastError); setStatus('Background sync needs attention.'); }
+      else if (localStorage.getItem('malik-syncLastSuccess')) { setError(''); }
     };
-    const timer = window.setInterval(attempt, 30000);
-    window.addEventListener('online', attempt);
-    return () => { window.clearInterval(timer); window.removeEventListener('online', attempt); };
-  }, [session]);
+    window.addEventListener('malik-sync-updated', refreshFromBackground);
+    return () => window.removeEventListener('malik-sync-updated', refreshFromBackground);
+  }, []);
 
   async function connect(event) {
     event.preventDefault();
@@ -60,7 +61,8 @@ export default function CloudSyncPanel() {
       localStorage.setItem('malik-syncUsername', username.trim());
       localStorage.setItem('malik-syncSession', JSON.stringify(next));
       setBaseUrl(next.baseUrl); setSession(next); setPassword('');
-      setStatus('Connected as ' + next.user.name + '. Automatic sync runs every 30 seconds while this panel is open and online.');
+      setStatus('Connected as ' + next.user.name + '. Background sync runs every 30 seconds while the app is open and online.');
+      window.dispatchEvent(new Event('malik-sync-session-changed'));
     } catch (e) { setError(e?.message || 'Could not connect to the sync server.'); }
     finally { busyRef.current = false; setBusy(false); }
   }
@@ -78,7 +80,7 @@ export default function CloudSyncPanel() {
 
   function disconnect() {
     localStorage.removeItem('malik-syncSession');
-    setSession(null); setStatus('Disconnected. Local POS data remains on this device.');
+    setSession(null); window.dispatchEvent(new Event('malik-sync-session-changed')); setStatus('Disconnected. Local POS data remains on this device.');
     setError('');
   }
 
