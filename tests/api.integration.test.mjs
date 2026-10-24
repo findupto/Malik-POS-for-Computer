@@ -181,7 +181,12 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
       ...saleBody,
       idempotencyKey: crypto.randomUUID(),
       orderId: 'insufficient-stock-' + crypto.randomUUID(),
-      items: [{ productId: 'tea-1', sku: 'TEA-1', productName: 'Tea', quantity: 99, unitPrice: 1 }]
+      items: [{ productId: 'tea-1', sku: 'TEA-1', productName: 'Tea', quantity: 99, unitPrice: 100 }],
+      discountAmount: 0,
+      taxAmount: 0,
+      serviceChargeAmount: 0,
+      deliveryFee: 0,
+      tenders: [{ method: 'Cash', amount: 9900 }]
     }
   });
   assert.equal(insufficientStock.status, 409);
