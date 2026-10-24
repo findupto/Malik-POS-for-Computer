@@ -85,6 +85,25 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   assert.equal(cashierLogin.status, 200);
   cashierToken = cashierLogin.data.token;
 
+  const initKey = crypto.randomUUID();
+  const firstInitialization = await request('/api/inventory/initialize', {
+    token: adminToken, method: 'POST',
+    body: { productId: 'init-once-' + crypto.randomUUID(), sku: 'INIT', productName: 'Initialization Test', quantity: 7 }
+  });
+  assert.equal(firstInitialization.status, 201);
+  const existingInitialization = await request('/api/inventory/initialize', {
+    token: adminToken, method: 'POST',
+    body: { productId: firstInitialization.data.inventory.product_id, sku: 'INIT', productName: 'Initialization Test', quantity: 99 }
+  });
+  assert.equal(existingInitialization.status, 200);
+  assert.equal(existingInitialization.data.status, 'already_initialized');
+  assert.equal(Number(existingInitialization.data.inventory.quantity), 7);
+  const cashierInitialization = await request('/api/inventory/initialize', {
+    token: cashierToken, method: 'POST',
+    body: { productId: 'cashier-init', sku: 'NO', productName: 'Not allowed', quantity: 1 }
+  });
+  assert.equal(cashierInitialization.status, 403);
+
   const teaOpening = await request('/api/inventory/adjustments', {
     token: adminToken, method: 'POST',
     body: { idempotencyKey: crypto.randomUUID(), productId: 'tea-1', sku: 'TEA-1', productName: 'Tea', quantityDelta: 5, reason: 'Integration test opening stock' }
