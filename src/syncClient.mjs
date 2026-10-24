@@ -97,7 +97,7 @@ export function applyPulledEvents(storage, events, cursorKey = CURSOR_KEY, defin
   return nextCursor;
 }
 
-export function resolveSyncConflict(storage, conflictId, choice, definitions = DEFAULT_SYNC_ENTITIES) {
+export function resolveSyncConflict(storage, conflictId, choice, role = 'admin', definitions = DEFAULT_SYNC_ENTITIES) {
   const conflicts = readJson(storage, CONFLICTS_KEY, []);
   const conflict = conflicts.find(item => item.id === conflictId);
   if (!conflict) throw new Error('This sync conflict no longer exists.');
@@ -105,7 +105,7 @@ export function resolveSyncConflict(storage, conflictId, choice, definitions = D
   if (choice === 'remote') {
     const event = conflict.remoteEvent;
     applyPulledEvents(storage, [{ ...event, sequence: Number(storage.getItem(CURSOR_KEY) || 0) }], CURSOR_KEY, definitions);
-    captureBaseline(storage, definitions);
+    captureBaseline(storage, definitions, new Set(), role);
   }
   storage.setItem(CONFLICTS_KEY, JSON.stringify(conflicts.filter(item => item.id !== conflictId)));
   return conflict;
