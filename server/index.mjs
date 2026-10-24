@@ -39,7 +39,7 @@ async function verifyPassword(password, encoded) {
 }
 function tokenFor(user) {
   const header = b64(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const payload = b64(JSON.stringify({ sub: user.id, username: user.username, role: user.role, locationId: user.location_id, exp: Math.floor(Date.now() / 1000) + 8 * 60 * 60 }));
+  const payload = b64(JSON.stringify({ sub: user.id, username: user.username, role: user.role, locationId: user.location_id, iatMs: Date.now(), exp: Math.floor(Date.now() / 1000) + 8 * 60 * 60 }));
   const unsigned = header + '.' + payload;
   return unsigned + '.' + sign(unsigned);
 }
@@ -130,9 +130,19 @@ const server = http.createServer(async (req, res) => {
       loginAttempts.delete(ip);
       return send(res, 200, { token: tokenFor(user), user: { id: user.id, username: user.username, name: user.display_name, role: user.role, locationId: user.location_id } });
     }
-    const user = authFrom(req);
-    if (!user) return send(res, 401, { error: 'Authentication required or session expired.' });
-    if (req.method === 'GET' && url.pathname === '/api/me') return send(res, 200, { id: user.sub, username: user.username, role: user.role, locationId: user.locationId });
+    const claims = authFrom(req);
+    if (!claims) return send(res, 401, { error: 'Authentication required or session expired.' });
+    const activeUserResult = await pool.query('SELECT id,username,display_name,role,location_id,active,updated_at FROM staff_users WHERE id=$1', [claims.sub]);
+    const activeUser = activeUserResult.rows[0];
+    if (!activeUser || !activeUser.active || activeUser.location_id !== claims.locationId) {
+      return send(res, 401, { error: 'This staff account is inactive or no longer valid. Sign in again.' });
+    }
+    if (claims.iatMs && new Date(activeUser.updated_at).getTime() > Number(claims.iatMs)) {
+      return send(res, 401, { error: 'Your staff account or password changed. Sign in again.' });
+    }
+    // Always authorize with current database role, not the role captured in a long-lived token.
+    const user = { ...claims, username: activeUser.username, role: activeUser.role, locationId: activeUser.location_id };
+    if (req.method === 'GET' && url.pathname === '/api/me') return send(res, 200, { id: user.sub, username: user.username, name: activeUser.display_name, role: user.role, locationId: user.locationId });
     if (req.method === 'GET' && url.pathname === '/api/records') {
       const entity = String(url.searchParams.get('entity') || '').trim();
       if (!/^[a-z][a-z0-9_-]{0,63}$/.test(entity)) return send(res, 400, { error: 'A valid entity filter is required.' });
