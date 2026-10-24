@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { recordSaleTransaction, reconcilePendingSaleTransactions, recordRefundTransaction, initializeServerInventory, fetchServerInventory, fetchInventoryMovements, recordInventoryAdjustment, getPendingSaleTransactions } from '../src/transactionLedger.mjs';
+import { recordSaleTransaction, reconcilePendingSaleTransactions, clearReconciledSaleTransactions, recordRefundTransaction, initializeServerInventory, fetchServerInventory, fetchInventoryMovements, recordInventoryAdjustment, getPendingSaleTransactions } from '../src/transactionLedger.mjs';
 
 function fakeStorage(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -85,6 +85,11 @@ test('reconciliation clears only queued sales confirmed by exact server order lo
   assert.equal(reconciled.length, 1);
   assert.equal(reconciled[0].orderId, 'MP-FOUND');
   assert.equal(reconciled[0].payment, 'Cash');
+  assert.deepEqual(JSON.parse(storage.inspect('malik-transactionOutbox')), {
+    'MP-FOUND': { orderId: 'MP-FOUND', idempotencyKey: 'key-found', occurredAt: '2026-10-24T10:00:00.000Z', tenders: [{ method: 'Cash', amount: 25 }] },
+    'MP-MISSING': { orderId: 'MP-MISSING', idempotencyKey: 'key-missing', tenders: [] }
+  });
+  clearReconciledSaleTransactions(['MP-FOUND'], storage);
   assert.deepEqual(JSON.parse(storage.inspect('malik-transactionOutbox')), {
     'MP-MISSING': { orderId: 'MP-MISSING', idempotencyKey: 'key-missing', tenders: [] }
   });
