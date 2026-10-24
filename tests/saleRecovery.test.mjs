@@ -30,3 +30,21 @@ test('walk-in sales do not modify named customer accounts', () => {
     orderId: 'MP-3', customerName: 'Walk-in Customer', payment: 'Cash', amount: 25
   }), customers);
 });
+
+test('missing local array storage uses the supplied in-memory fallback', async () => {
+  const { readStoredArray } = await import('../src/saleRecovery.mjs');
+  const fallback = [{ id: 'MP-4' }];
+  assert.equal(readStoredArray({ getItem: () => null }, 'malik-orders', fallback), fallback);
+});
+
+test('malformed local array storage is rejected instead of being replaced with an empty array', async () => {
+  const { readStoredArray } = await import('../src/saleRecovery.mjs');
+  assert.throws(
+    () => readStoredArray({ getItem: () => '{broken' }, 'malik-customers', []),
+    /invalid JSON/
+  );
+  assert.throws(
+    () => readStoredArray({ getItem: () => '{"customer":"A"}' }, 'malik-customers', []),
+    /must be an array/
+  );
+});
