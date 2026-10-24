@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
+import { canPushEntity } from './syncPolicy.mjs';
 
 const { Pool } = pg;
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -124,13 +125,14 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { records: result.rows });
     }
     if (req.method === 'POST' && url.pathname === '/api/sync/push') {
-      if (roles[user.role] < roles.manager) return send(res, 403, { error: 'Manager or administrator role required.' });
+      if (!roles[user.role]) return send(res, 403, { error: 'A recognized staff role is required.' });
       const input = await bodyJson(req);
       if (!Array.isArray(input.events) || input.events.length > 500) return send(res, 400, { error: 'Send an events array containing at most 500 events.' });
       const client = await pool.connect(); const results = [];
       try {
         await client.query('BEGIN');
         for (const event of input.events) {
+          if (!canPushEntity(user.role, String(event.entity || ''))) throw Object.assign(new Error('Your role cannot sync this record type.'), { status: 403 });
           if (!isUuid(event.eventId) || !/^[a-z][a-z0-9_-]{0,63}$/.test(String(event.entity || '')) || !String(event.recordId || '').trim() || String(event.recordId).length > 200 || !['upsert','delete'].includes(event.operation)) {
             throw Object.assign(new Error('Each event needs a UUID eventId, valid entity/recordId and upsert/delete operation.'), { status: 400 });
           }
