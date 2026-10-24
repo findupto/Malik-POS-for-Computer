@@ -19,6 +19,6 @@ test('order IDs retry if a generated ID already exists locally', () => {
 
 test('order IDs remain unique for orders created at the same millisecond', () => {
   const first = createOrderId([], { now: () => 1_800_000_000_000, makeId: () => 'register1' });
-  const second = createOrderId([ { id: first } ], { now: () => 1_800_000_000_000, makeId: () => 'register2' });
+  const second = createOrderId([ { id: first } ], { now: () => 1_800_000_000_000, makeId: () => 'terminal2' });
   assert.notEqual(first, second);
 });
