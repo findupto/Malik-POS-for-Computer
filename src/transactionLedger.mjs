@@ -93,8 +93,12 @@ export async function recordRefundTransaction({ baseUrl, token, order, refund, s
       amount: Number(refund.amount),
       method,
       reason: String(refund.reason || '').trim() + (refund.reference ? ' · Reference: ' + String(refund.reference).trim() : ''),
-      restock: false,
-      items: []
+      restock: refund.restock === true,
+      items: (Array.isArray(refund.returnItems) ? refund.returnItems : []).filter(item => Number(item.quantity) > 0).map(item => ({
+        productId: String(item.productId ?? ''),
+        productName: String(item.productName || ''),
+        quantity: Number(item.quantity)
+      }))
     })
   });
   let resultData = {};
