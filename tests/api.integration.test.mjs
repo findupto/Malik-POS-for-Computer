@@ -217,12 +217,16 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   });
   assert.equal(cashierRefund.status, 403);
   const duplicateSale = await request('/api/transactions', {
-    token: cashierToken, method: 'POST',
-    body: { ...saleBody, items: [{ productId: 'tea-1', sku: 'TEA-1', productName: 'Changed retry payload', quantity: 2, unitPrice: 100 }, { productId: 'bread-1', sku: 'BREAD-1', productName: 'Bread', quantity: 1, unitPrice: 50 }] }
+    token: cashierToken, method: 'POST', body: saleBody
   });
   assert.equal(duplicateSale.status, 200);
   assert.equal(duplicateSale.data.status, 'duplicate');
   assert.equal(duplicateSale.data.transaction.id, sale.data.transaction.id);
+  const changedSalePayload = await request('/api/transactions', {
+    token: cashierToken, method: 'POST',
+    body: { ...saleBody, items: [{ ...saleBody.items[0], productName: 'Changed retry payload' }, saleBody.items[1]] }
+  });
+  assert.equal(changedSalePayload.status, 409, 'same key with changed line details must be rejected');
   const inventoryAfterDuplicateSale = await request('/api/inventory', { token: cashierToken });
   assert.equal(Number(inventoryAfterDuplicateSale.data.inventory.find(item => item.product_id === 'tea-1').quantity), 4);
   const insufficientStock = await request('/api/transactions', {
