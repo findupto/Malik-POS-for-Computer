@@ -156,6 +156,18 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   assert.equal(duplicateRefund.data.status, 'duplicate');
   const inventoryAfterRefund = await request('/api/inventory', { token: cashierToken });
   assert.equal(Number(inventoryAfterRefund.data.inventory.find(item => item.product_id === 'tea-1').quantity), 4);
+
+  const movementHistory = await request('/api/inventory/movements?limit=500', { token: cashierToken });
+  assert.equal(movementHistory.status, 200);
+  assert.ok(movementHistory.data.movements.length <= 200);
+  const teaMovements = movementHistory.data.movements.filter(item => item.product_id === 'tea-1');
+  assert.ok(teaMovements.some(item => item.reference_type === 'sale' && Number(item.quantity_delta) === -2));
+  assert.ok(teaMovements.some(item => item.reference_type === 'refund' && Number(item.quantity_delta) === 1));
+  assert.ok(teaMovements.some(item => item.reference_type === 'adjustment' && item.reason === 'Integration test opening stock'));
+  const filteredMovements = await request('/api/inventory/movements?limit=10&productId=tea-1', { token: cashierToken });
+  assert.equal(filteredMovements.status, 200);
+  assert.ok(filteredMovements.data.movements.every(item => item.product_id === 'tea-1'));
+
   const excessiveRefund = await request('/api/transactions/' + sale.data.transaction.id + '/refunds', {
     token: adminToken, method: 'POST',
     body: { idempotencyKey: crypto.randomUUID(), amount: 220, method: 'Cash', reason: 'Must exceed remaining amount' }
