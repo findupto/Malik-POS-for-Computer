@@ -12,6 +12,7 @@ A desktop point-of-sale workspace built with React, Vite, and Electron.
 - Ingredient purchase receiving with pack-to-base-unit conversion, weighted average ingredient costing, stock movements, batch/expiry tracking, expired-stock write-offs, supplier invoice balances, payment history, due-date aging, supplier payment exports, and purchase price comparisons
 - Recipe and portion management, recipe library, waste recording, and stock movement reports
 - Cash drawer shifts with expected-vs-counted cash reconciliation and shift report export
+- Manual no-purchase seat/table timers with configurable hourly rates, a free grace period, rounded-up billable hours, and charges recorded as normal pending orders
 - Customer/product/report exports in CSV, plus JSON data backup
 - Editable company profile, PKR / Rs. currency formatting, and 58mm/80mm thermal paper preferences
 - Bluetooth Low Energy printer discovery and remembered-device reconnect where supported; classic Bluetooth SPP printers may require Windows pairing/driver and use the system print dialog
@@ -45,7 +46,7 @@ The installer is written to `release/`. Every push to `main` also starts the **B
 ## Data and production notes
 The current desktop app stores operational records in the local browser profile using `localStorage`. Export the JSON backup regularly and test restore procedures before relying on the app for critical operations. Data is not synchronized between computers, and the current app does not provide shared multi-user authentication or a production database/API. Supplier purchases, expense tracking and stock/recipe workflows exist in the app, but they are not a substitute for a server-side accounting or inventory system with centralized access controls. Currency formatting is fixed to PKR (Rs.). Product restock recommendations and ingredient cost/profit estimates are heuristics; accuracy depends on complete product history, correct recipes, and current costs. Bluetooth printer discovery depends on the printer exposing a supported BLE interface and cannot guarantee direct printing to every classic Bluetooth thermal printer.
 
-## Multi-computer architecture decision (planned; not yet implemented)
+## Multi-computer architecture and rollout gates
 
 Malik POS currently uses browser `localStorage` as its record store. Do not treat this build as shared-database or offline-synchronisation capable.
 
@@ -75,4 +76,4 @@ Malik POS currently uses browser `localStorage` as its record store. Do not trea
 A central cloud database by itself cannot satisfy the requirement that counters at a shop continue sharing live data when that shop loses internet. A local service/database is required at each physical shop for that requirement. The central service is for cross-location synchronisation and consolidated reporting, not a substitute for the local service.
 
 ### Current status
-This section records the architecture decision and rollout gates only. The backend, local database, authentication, event synchronisation, and offline recovery are **not yet implemented by this documentation change**. The current localStorage application remains the active system until each gate is implemented and verified.
+The PostgreSQL API foundation and idempotent event endpoints have been added, but the desktop client migration, per-location offline database/outbox, cross-location sync, conflict review, and disaster-recovery validation remain incomplete. The current localStorage application is still the active register. Treat multi-computer and multi-branch operation as **not production-ready** until each gate is implemented and verified.
