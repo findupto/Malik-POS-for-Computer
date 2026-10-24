@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Cloud, RefreshCw, ShieldCheck, LogIn, LogOut, AlertTriangle, Check } from 'lucide-react';
 import { loginToSyncApi, syncSnapshot, resolveSyncConflict } from './syncClient.mjs';
+import { getPendingSaleTransactions } from './transactionLedger.mjs';
 import StaffAccountsPanel from './StaffAccountsPanel.jsx';
 
 const CONFLICTS_KEY = 'malik-syncConflicts';
@@ -16,6 +17,10 @@ export default function CloudSyncPanel() {
   const busyRef = useRef(false);
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
+  const [pendingSales, setPendingSales] = useState(() => getPendingSaleTransactions(localStorage));
+  function refreshPendingSales() {
+    setPendingSales(getPendingSaleTransactions(localStorage));
+  }
   const [conflicts, setConflicts] = useState(() => {
     try { return JSON.parse(localStorage.getItem(CONFLICTS_KEY) || '[]'); } catch { return []; }
   });
@@ -29,6 +34,7 @@ export default function CloudSyncPanel() {
       const result = await syncSnapshot({ baseUrl: session.baseUrl, token: session.token, storage: localStorage, role: session.user.role });
       const latest = (() => { try { return JSON.parse(localStorage.getItem(CONFLICTS_KEY) || '[]'); } catch { return []; } })();
       setConflicts(latest);
+      refreshPendingSales();
       setStatus(result.conflicts
         ? 'Sync completed with ' + result.conflicts + ' conflict(s). Choose which version to keep below.'
         : 'Sync complete. Uploaded ' + result.uploaded + ' changes and downloaded ' + result.downloaded + '.');
@@ -44,6 +50,7 @@ export default function CloudSyncPanel() {
   useEffect(() => {
     const refreshFromBackground = () => {
       try { setConflicts(JSON.parse(localStorage.getItem(CONFLICTS_KEY) || '[]')); } catch { setConflicts([]); }
+      refreshPendingSales();
       const lastError = localStorage.getItem('malik-syncLastError');
       if (lastError) { setError(lastError); setStatus('Background sync needs attention.'); }
       else if (localStorage.getItem('malik-syncLastSuccess')) { setError(''); }
@@ -99,6 +106,14 @@ export default function CloudSyncPanel() {
       <div className="stock-row"><div className="stock-row-info"><b>{session.user.name}</b><small>{session.user.role} · {session.user.locationId}</small></div><span className="status-pill status-good">Connected</span></div>
       <label className="field-label">SERVER</label><p className="settings-description">{session.baseUrl}</p>
       <button className="btn btn-primary full-btn" onClick={()=>runSync()} disabled={busy}><RefreshCw size={16}/>{busy?'Syncing…':'Sync now'}</button>
+      {pendingSales.length>0&&<div className="sync-conflicts" role="status">
+        <h3><AlertTriangle size={17} style={{verticalAlign:'middle',marginRight:6}}/>Shared sales need retry ({pendingSales.length})</h3>
+        <p className="settings-description">These requests lost a reliable server response. Their original payloads are saved on this register. Open the matching pending order and retry its payment to safely replay the same request; do not create a replacement order.</p>
+        {pendingSales.map(sale=><div className="settings-note" key={sale.orderId}>
+          <div><b>{sale.orderId}</b><p>{sale.itemCount} item line(s) · {sale.total.toLocaleString(undefined,{maximumFractionDigits:2})} tendered · {sale.occurredAt?new Date(sale.occurredAt).toLocaleString():'time unavailable'}</p></div>
+        </div>)}
+        <button className="btn btn-secondary full-btn" onClick={refreshPendingSales}>Refresh pending sale status</button>
+      </div>}
       <button className="btn btn-secondary full-btn" onClick={()=>window.location.reload()} disabled={busy}>Reload register after sync</button>
       <button className="btn btn-secondary full-btn" onClick={disconnect} disabled={busy}><LogOut size={16}/> Disconnect</button>
     </>}
