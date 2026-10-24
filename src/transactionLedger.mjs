@@ -84,7 +84,7 @@ export async function recordRefundTransaction({ baseUrl, token, order, refund, s
   const transaction = (data.transactions || []).find(item => String(item.order_id) === String(order.id));
   if (!transaction) throw new Error('The original sale is not in the server ledger. No local refund was recorded.');
   const method = ({ 'Cash': 'Cash', 'Card reversal': 'Card', 'Bank transfer': 'Bank Transfer', 'Mobile wallet': 'Mobile Wallet', 'Customer account credit': 'Other' })[refund.method] || 'Other';
-  const idempotencyKey = refundKeyFor(storage, order.id, refund, makeId);
+  const idempotencyKey = String(refund.idempotencyKey || refundKeyFor(storage, order.id, refund, makeId));
   const result = await fetchImpl(new URL('/api/transactions/' + encodeURIComponent(transaction.id) + '/refunds', baseUrl).toString(), {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token },
