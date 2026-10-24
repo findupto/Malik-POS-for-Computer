@@ -8,6 +8,19 @@ function readKeys(storage, key = IDEMPOTENCY_KEY) {
   } catch { return {}; }
 }
 
+export function getPendingSaleTransactions(storage = globalThis.localStorage) {
+  if (!storage) return [];
+  const outbox = readKeys(storage, SALE_OUTBOX_KEY);
+  return Object.entries(outbox).filter(([orderId, payload]) =>
+    Boolean(orderId && payload && typeof payload === 'object' && payload.orderId === orderId && payload.idempotencyKey)
+  ).map(([orderId, payload]) => ({
+    orderId,
+    occurredAt: payload.occurredAt || '',
+    itemCount: Array.isArray(payload.items) ? payload.items.length : 0,
+    total: Array.isArray(payload.tenders) ? payload.tenders.reduce((sum, tender) => sum + Math.max(0, Number(tender.amount) || 0), 0) : 0
+  })).sort((a, b) => a.orderId.localeCompare(b.orderId));
+}
+
 function idempotencyKeyFor(storage, orderId, makeId) {
   const keys = readKeys(storage);
   if (typeof keys[orderId] === 'string' && keys[orderId]) return keys[orderId];
