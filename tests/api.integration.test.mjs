@@ -236,6 +236,13 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   const transactions = await request('/api/transactions?limit=10', { token: cashierToken });
   assert.equal(transactions.status, 200);
   assert.ok(transactions.data.transactions.some(item => item.order_id === saleOrderId));
+  const exactOrderLookup = await request('/api/transactions?limit=1&orderId=' + encodeURIComponent(saleOrderId), { token: cashierToken });
+  assert.equal(exactOrderLookup.status, 200);
+  assert.equal(exactOrderLookup.data.transactions.length, 1);
+  assert.equal(exactOrderLookup.data.transactions[0].order_id, saleOrderId);
+  const missingOrderLookup = await request('/api/transactions?limit=1&orderId=does-not-exist', { token: cashierToken });
+  assert.equal(missingOrderLookup.status, 200);
+  assert.equal(missingOrderLookup.data.transactions.length, 0);
 
   const recordId = 'integration-order-' + crypto.randomUUID();
   const firstEventId = crypto.randomUUID();
