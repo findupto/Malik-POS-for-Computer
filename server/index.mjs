@@ -208,16 +208,18 @@ const server = http.createServer(async (req, res) => {
           const priorLines = await client.query('SELECT product_id,sku,product_name,quantity,unit_price,line_total FROM pos_transaction_lines WHERE transaction_id=$1 ORDER BY id', [prior.id]);
           const priorTenders = await client.query('SELECT method,amount,reference FROM pos_tenders WHERE transaction_id=$1 ORDER BY id', [prior.id]);
           const sameNumber = (a, b) => Math.abs(Number(a || 0) - Number(b || 0)) < 0.000001;
-          const sameLines = priorLines.rows.length === lines.length && priorLines.rows.every((line, index) => {
-            const requested = lines[index];
-            return line.product_id === requested.productId && line.sku === requested.sku &&
-              line.product_name === requested.productName && sameNumber(line.quantity, requested.quantity) &&
-              sameNumber(line.unit_price, requested.unitPrice) && sameNumber(line.line_total, requested.lineTotal);
-          });
-          const sameTenders = priorTenders.rows.length === tenderRows.length && priorTenders.rows.every((tender, index) => {
-            const requested = tenderRows[index];
-            return tender.method === requested.method && sameNumber(tender.amount, requested.amount) && tender.reference === requested.reference;
-          });
+          const canonicalLines = rows => rows.map(line => [
+            String(line.product_id ?? line.productId), String(line.sku ?? ''),
+            String(line.product_name ?? line.productName), Number(line.quantity),
+            Number(line.unit_price ?? line.unitPrice), Number(line.line_total ?? line.lineTotal)
+          ]).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+          const canonicalTenders = rows => rows.map(tender => [
+            String(tender.method), Number(tender.amount), String(tender.reference ?? '')
+          ]).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+          const sameLines = priorLines.rows.length === lines.length &&
+            JSON.stringify(canonicalLines(priorLines.rows)) === JSON.stringify(canonicalLines(lines));
+          const sameTenders = priorTenders.rows.length === tenderRows.length &&
+            JSON.stringify(canonicalTenders(priorTenders.rows)) === JSON.stringify(canonicalTenders(tenderRows));
           const requestedPayload = { serviceType: String(input.serviceType || '').slice(0,40), tableNumber: String(input.tableNumber || '').slice(0,40) };
           const storedPayload = prior.payload && typeof prior.payload === 'object' ? prior.payload : {};
           const samePayload = prior.order_id === orderId && prior.customer_name === customerName &&
