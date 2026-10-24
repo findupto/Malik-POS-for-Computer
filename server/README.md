@@ -12,9 +12,10 @@ This is the first backend foundation for central PostgreSQL storage, staff authe
 
 1. Set a strong database password and create a database named `malik_pos` owned by a dedicated user.
 2. Copy `.env.example` to `.env` and fill in real values. Do not commit secrets.
-3. Export those environment variables in the shell running the service.
-4. Run `npm install`, then `npm run server`.
-5. Verify `GET /health`, then sign in with the bootstrap account using `POST /api/auth/login`.
+3. Copy `server/.env.example` to `server/.env` and replace every placeholder with strong, private values. The `server` script loads this file automatically.
+4. For local PostgreSQL via Docker, run `docker compose --env-file server/.env up -d db`. Keep the database bound to localhost for development.
+5. Run `npm install`, then `npm run server`.
+6. Verify `GET /health`, then sign in with the bootstrap account using `POST /api/auth/login`.
 
 The bootstrap administrator is created only when the username does not already exist. Store credentials in a secret manager, rotate the bootstrap password after first use, and terminate TLS at a trusted reverse proxy.
 
