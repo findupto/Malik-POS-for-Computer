@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Cloud, RefreshCw, ShieldCheck, LogIn, LogOut, AlertTriangle, Check } from 'lucide-react';
 import { loginToSyncApi, syncSnapshot, resolveSyncConflict } from './syncClient.mjs';
+import StaffAccountsPanel from './StaffAccountsPanel.jsx';
 
 const CONFLICTS_KEY = 'malik-syncConflicts';
 
@@ -114,5 +115,6 @@ export default function CloudSyncPanel() {
         </div>
       </div>)}
     </div>}
+    {session?.user?.role === 'admin' && <StaffAccountsPanel baseUrl={session.baseUrl} token={session.token} />}
   </div>;
 }
