@@ -168,7 +168,7 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   assert.equal(cashierRefund.status, 403);
   const duplicateSale = await request('/api/transactions', {
     token: cashierToken, method: 'POST',
-    body: { ...saleBody, items: [{ productId: 'tea-1', sku: 'TEA-1', productName: 'Changed retry payload', quantity: 1, unitPrice: 1 }] }
+    body: { ...saleBody, items: [{ productId: 'tea-1', sku: 'TEA-1', productName: 'Changed retry payload', quantity: 2, unitPrice: 100 }, { productId: 'bread-1', sku: 'BREAD-1', productName: 'Bread', quantity: 1, unitPrice: 50 }] }
   });
   assert.equal(duplicateSale.status, 200);
   assert.equal(duplicateSale.data.status, 'duplicate');
