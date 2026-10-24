@@ -13,6 +13,7 @@ const BASELINE_KEY = 'malik-syncBaseline';
 const CONFLICTS_KEY = 'malik-syncConflicts';
 const OUTBOX_KEY = 'malik-syncOutbox';
 const CURSOR_KEY = 'malik-syncCursor';
+const VERSIONS_KEY = 'malik-syncVersions';
 const uuid = () => {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
   throw new Error('This device cannot create secure sync event IDs. Update the browser or desktop app.');
@@ -60,6 +61,7 @@ function captureBaseline(storage, definitions = DEFAULT_SYNC_ENTITIES, preserve 
 export function buildSnapshotEvents(storage, role = 'admin', definitions = DEFAULT_SYNC_ENTITIES) {
   const baseline = readJson(storage, BASELINE_KEY, null);
   const priorOutbox = readJson(storage, OUTBOX_KEY, []);
+  const versions = readJson(storage, VERSIONS_KEY, {});
   const priorByKey = new Map(priorOutbox.map(event => [event.entity + ':' + event.recordId, event]));
   const desired = [];
   const permittedEntities = new Set(definitions.filter(def => roleAllowed(role, def.entity)).map(def => def.entity));
@@ -85,7 +87,7 @@ export function buildSnapshotEvents(storage, role = 'admin', definitions = DEFAU
     const reusable = prior && prior.operation === item.operation &&
       (item.operation === 'delete' || stable(prior.payload) === stable(item.payload));
     const event = reusable ? prior : {
-      eventId: uuid(), ...item, occurredAt: new Date().toISOString()
+      eventId: uuid(), ...item, expectedSequence: Object.hasOwn(versions, key) ? Number(versions[key]) : null, occurredAt: new Date().toISOString()
     };
     nextOutbox.push(event);
     return event;
@@ -99,9 +101,13 @@ export function applyPulledEvents(storage, events, cursorKey = CURSOR_KEY, defin
   const byEntity = new Map(definitions.map(def => [def.entity, def]));
   const grouped = new Map();
   let nextCursor = Number(storage.getItem(cursorKey) || 0);
+  const versions = readJson(storage, VERSIONS_KEY, {});
   for (const event of events || []) {
     const sequence = Number(event.sequence);
-    if (Number.isSafeInteger(sequence)) nextCursor = Math.max(nextCursor, sequence);
+    if (Number.isSafeInteger(sequence)) {
+      nextCursor = Math.max(nextCursor, sequence);
+      if (event.entity && event.record_id != null) versions[event.entity + ':' + String(event.record_id)] = sequence;
+    }
     const def = byEntity.get(event.entity);
     if (!def) continue;
     if (!grouped.has(def.key)) grouped.set(def.key, { def, records: currentRecords(storage, def) });
@@ -112,6 +118,7 @@ export function applyPulledEvents(storage, events, cursorKey = CURSOR_KEY, defin
   }
   for (const { def, records } of grouped.values()) writeCurrentRecords(storage, def, records);
   storage.setItem(cursorKey, String(nextCursor));
+  storage.setItem(VERSIONS_KEY, JSON.stringify(versions));
   return nextCursor;
 }
 
@@ -122,10 +129,11 @@ export function resolveSyncConflict(storage, conflictId, choice, role = 'admin',
   if (choice !== 'local' && choice !== 'remote') throw new Error('Choose local or remote data.');
   if (choice === 'remote') {
     const event = conflict.remoteEvent;
-    applyPulledEvents(storage, [{ ...event, sequence: Number(storage.getItem(CURSOR_KEY) || 0) }], CURSOR_KEY, definitions);
+    applyPulledEvents(storage, [{ ...event, sequence: Number(event.sequence || storage.getItem(CURSOR_KEY) || 0) }], CURSOR_KEY, definitions);
     captureBaseline(storage, definitions, new Set(), role);
-    storage.setItem(OUTBOX_KEY, JSON.stringify(readJson(storage, OUTBOX_KEY, []).filter(item => !(item.entity === conflict.entity && item.recordId === conflict.recordId))));
   }
+  // A local choice must create a fresh event against the newest remote sequence, not retry the stale event.
+  storage.setItem(OUTBOX_KEY, JSON.stringify(readJson(storage, OUTBOX_KEY, []).filter(item => !(item.entity === conflict.entity && item.recordId === conflict.recordId))));
   storage.setItem(CONFLICTS_KEY, JSON.stringify(conflicts.filter(item => item.id !== conflictId)));
   return conflict;
 }
@@ -202,6 +210,12 @@ export async function syncSnapshot({ baseUrl, token, storage, role = 'admin', fe
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || 'Upload failed.');
     uploaded += Number(data.accepted || 0);
+    const versions = readJson(storage, VERSIONS_KEY, {});
+    for (const result of data.results || []) {
+      const event = outgoing.find(item => item.eventId === result.eventId);
+      if (event && Number.isSafeInteger(Number(result.sequence))) versions[event.entity + ':' + event.recordId] = Number(result.sequence);
+    }
+    storage.setItem(VERSIONS_KEY, JSON.stringify(versions));
   }
   const sentIds = new Set(outgoing.map(event => event.eventId));
   storage.setItem(OUTBOX_KEY, JSON.stringify(readJson(storage, OUTBOX_KEY, []).filter(event => !sentIds.has(event.eventId))));
