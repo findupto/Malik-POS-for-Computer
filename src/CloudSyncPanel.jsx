@@ -86,7 +86,7 @@ export default function CloudSyncPanel() {
 
   return <div className="panel settings-panel cloud-sync-panel">
     <div className="panel-head"><div><h2><Cloud size={18} style={{verticalAlign:'middle',marginRight:8}}/>Multi-computer sync</h2><p>Connect this register to your private Malik POS API.</p></div><ShieldCheck size={19}/></div>
-    <div className="settings-note"><ShieldCheck size={17}/><div><b>Automatic retry and conflict review enabled</b><p>Changes are checked every 30 seconds while this panel is open and the computer is online. Pending changes remain local after network failures. Keep regular backups; this is not yet a production-grade offline POS database.</p></div></div>
+    <div className="settings-note"><ShieldCheck size={17}/><div><b>Automatic retry and conflict review enabled</b><p>Changes are checked every 30 seconds while the app is open and the computer is online, including when you leave Settings. Pending changes remain local after network failures. Keep regular backups; this is not yet a production-grade offline POS database.</p></div></div>
     {!session ? <form onSubmit={connect}>
       <label className="field-label">SYNC API URL</label>
       <input className="form-input" type="url" required value={baseUrl} onChange={e=>setBaseUrl(e.target.value)} placeholder="https://your-private-pos-api.example.com"/>
