@@ -174,3 +174,23 @@ test('pulled events preserve per-record server versions even when only cursor bo
   applyPulledEvents(storage, [{ sequence: '17', entity: 'orders', record_id: 'o-1', operation: 'upsert', payload: { id: 'o-1', total: 10 } }]);
   assert.equal(JSON.parse(storage.inspect('malik-syncVersions'))['orders:o-1'], 17);
 });
+
+
+test('sync drops a pending write when the server already has the identical record', async () => {
+  const { syncSnapshot } = await import('../src/syncClient.mjs');
+  const storage = fakeStorage({
+    'malik-orders': JSON.stringify([{ id: 'o-1', total: 20 }]),
+    'malik-syncBaseline': JSON.stringify({ orders: { 'o-1': { id: 'o-1', total: 10 } } }),
+    'malik-syncVersions': JSON.stringify({ 'orders:o-1': 1 })
+  });
+  let pushes = 0;
+  const fetchMock = async (url) => {
+    if (String(url).includes('/api/sync/pull')) return { ok: true, json: async () => ({ events: [{ sequence: 2, entity: 'orders', record_id: 'o-1', operation: 'upsert', payload: { id: 'o-1', total: 20 } }] }) };
+    pushes += 1;
+    return { ok: true, json: async () => ({ accepted: 0, results: [] }) };
+  };
+  const result = await syncSnapshot({ baseUrl: 'https://pos.example.test', token: 'token', storage, fetchImpl: fetchMock });
+  assert.equal(result.conflicts, 0);
+  assert.equal(pushes, 0);
+  assert.deepEqual(JSON.parse(storage.inspect('malik-syncOutbox')), []);
+});
