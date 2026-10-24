@@ -3,6 +3,7 @@ import { UserRoundCog, RefreshCw, UserPlus, KeyRound, UserCheck, UserX } from 'l
 
 export default function StaffAccountsPanel({ baseUrl, token }) {
   const [users, setUsers] = useState([]);
+  const [roleDrafts, setRoleDrafts] = useState({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -22,7 +23,7 @@ export default function StaffAccountsPanel({ baseUrl, token }) {
 
   const loadUsers = useCallback(async () => {
     setBusy(true); setError('');
-    try { const data = await request('/api/admin/users'); setUsers(data.users || []); }
+    try { const data = await request('/api/admin/users'); setUsers(data.users || []); setRoleDrafts(Object.fromEntries((data.users || []).map(user => [user.id, user.role]))); }
     catch (e) { setError(e.message || 'Could not load staff accounts.'); }
     finally { setBusy(false); }
   }, [request]);
@@ -36,6 +37,18 @@ export default function StaffAccountsPanel({ baseUrl, token }) {
       setDraft({ username: '', displayName: '', role: 'cashier', password: '' });
       setMessage('Staff account created.'); await loadUsers();
     } catch (e) { setError(e.message || 'Could not create staff account.'); }
+    finally { setBusy(false); }
+  }
+
+  async function saveRole(user) {
+    const role = roleDrafts[user.id] || user.role;
+    if (role === user.role) return;
+    setBusy(true); setError(''); setMessage('');
+    try {
+      await request('/api/admin/users/' + encodeURIComponent(user.id) + '/role', { method: 'POST', body: JSON.stringify({ role }) });
+      setMessage('Staff role updated. The account must sign in again.');
+      await loadUsers();
+    } catch (e) { setError(e.message || 'Could not update staff role.'); }
     finally { setBusy(false); }
   }
 
@@ -73,7 +86,7 @@ export default function StaffAccountsPanel({ baseUrl, token }) {
     {message&&<p className="settings-description" role="status">{message}</p>}
     {error&&<p className="settings-description" role="alert" style={{color:'var(--danger,#b42318)'}}>{error}</p>}
     <div className="responsive-table"><table><thead><tr><th>STAFF</th><th>ROLE</th><th>STATUS</th><th>ACTIONS</th></tr></thead><tbody>
-      {users.map(user=><tr key={user.id}><td><b>{user.display_name}</b><small style={{display:'block'}}>{user.username}</small></td><td>{user.role}</td><td>{user.active?'Active':'Inactive'}</td><td><div className="toolbar-right"><button className="btn btn-secondary" type="button" onClick={()=>{setResetTarget(user.id);setResetPassword('')}} disabled={busy}><KeyRound size={14}/> Reset password</button><button className="btn btn-secondary" type="button" onClick={()=>toggleUser(user)} disabled={busy}><>{user.active?<UserX size={14}/>:<UserCheck size={14}/>} {user.active?'Deactivate':'Activate'}</></button></div></td></tr>)}
+      {users.map(user=><tr key={user.id}><td><b>{user.display_name}</b><small style={{display:'block'}}>{user.username}</small></td><td><select className="form-input" value={roleDrafts[user.id]||user.role} onChange={e=>setRoleDrafts({...roleDrafts,[user.id]:e.target.value})} disabled={busy}><option value="cashier">Cashier</option><option value="manager">Manager</option><option value="admin">Administrator</option></select><button className="btn btn-secondary" type="button" onClick={()=>saveRole(user)} disabled={busy||(roleDrafts[user.id]||user.role)===user.role}>Save role</button></td><td>{user.active?'Active':'Inactive'}</td><td><div className="toolbar-right"><button className="btn btn-secondary" type="button" onClick={()=>{setResetTarget(user.id);setResetPassword('')}} disabled={busy}><KeyRound size={14}/> Reset password</button><button className="btn btn-secondary" type="button" onClick={()=>toggleUser(user)} disabled={busy}><>{user.active?<UserX size={14}/>:<UserCheck size={14}/>} {user.active?'Deactivate':'Activate'}</></button></div></td></tr>)}
       {!users.length&&<tr><td colSpan="4">{busy?'Loading staff accounts…':'No staff accounts found.'}</td></tr>}
     </tbody></table></div>
     {resetTarget&&<form className="settings-note" onSubmit={savePassword}><div style={{width:'100%'}}><b>Reset password</b><label className="field-label">NEW PASSWORD (MINIMUM 12 CHARACTERS)</label><input className="form-input" type="password" minLength={12} maxLength={1024} required autoComplete="new-password" value={resetPassword} onChange={e=>setResetPassword(e.target.value)}/><div className="modal-actions"><button className="btn btn-secondary" type="button" onClick={()=>{setResetTarget('');setResetPassword('')}}>Cancel</button><button className="btn btn-primary" type="submit" disabled={busy}>Save password</button></div></div></form>}
