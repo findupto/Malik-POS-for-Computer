@@ -196,6 +196,32 @@ const server = http.createServer(async (req, res) => {
       }
       return send(res, 405, { error: 'Method not allowed.' });
     }
+    const userActionMatch = url.pathname.match(/^\/api\/admin\/users\/([0-9a-f-]{36})\/(deactivate|activate|reset-password)$/i);
+    if (req.method === 'POST' && userActionMatch) {
+      if (user.role !== 'admin') return send(res, 403, { error: 'Administrator role required.' });
+      const [, targetId, action] = userActionMatch;
+      if (!isUuid(targetId)) return send(res, 400, { error: 'A valid user ID is required.' });
+      const targetResult = await pool.query('SELECT id,location_id,role,active FROM staff_users WHERE id=$1 AND location_id=$2', [targetId, user.locationId]);
+      const target = targetResult.rows[0];
+      if (!target) return send(res, 404, { error: 'Staff account not found at this location.' });
+      if (action === 'deactivate' || action === 'activate') {
+        const active = action === 'activate';
+        if (!active && target.id === user.sub) return send(res, 400, { error: 'You cannot deactivate your own account.' });
+        if (!active && target.active && target.role === 'admin') {
+          const count = await pool.query("SELECT count(*)::int AS n FROM staff_users WHERE location_id=$1 AND role='admin' AND active=true", [user.locationId]);
+          if (count.rows[0].n <= 1) return send(res, 409, { error: 'Keep at least one active administrator at this location.' });
+        }
+        const updated = await pool.query('UPDATE staff_users SET active=$1,updated_at=now() WHERE id=$2 AND location_id=$3 RETURNING id,username,display_name,role,active,created_at', [active, targetId, user.locationId]);
+        return send(res, 200, { user: updated.rows[0] });
+      }
+      if (action === 'reset-password') {
+        const input = await bodyJson(req, 16_000);
+        const password = String(input.password || '');
+        if (password.length < 12 || password.length > 1024) return send(res, 400, { error: 'Password must be at least 12 characters.' });
+        await pool.query('UPDATE staff_users SET password_hash=$1,updated_at=now() WHERE id=$2 AND location_id=$3', [await hashPassword(password), targetId, user.locationId]);
+        return send(res, 200, { ok: true });
+      }
+    }
     if (req.method === 'GET' && url.pathname === '/api/admin/locations') {
       if (user.role !== 'admin') return send(res, 403, { error: 'Administrator role required.' });
       const result = await pool.query('SELECT id,name,timezone,active,created_at FROM locations ORDER BY name');
