@@ -1,6 +1,6 @@
 # Malik POS API (foundation)
 
-This is the first backend foundation for central PostgreSQL storage, staff authentication, location-scoped records, and idempotent event ingestion. The React application now has an opt-in **Settings → Multi-computer sync** panel for API login and manual local-first snapshot transfer. Existing POS screens still use localStorage, so sync is not automatic or real-time; starting this service does **not** enable reliable offline operation or multi-branch synchronization.
+This is the first backend foundation for central PostgreSQL storage, staff authentication, location-scoped records, and idempotent event ingestion. The React application has a **Settings → Multi-computer sync** panel for API login, delta sync, delete tombstones, conflict review, and periodic retry while the panel is mounted and the app is online. Existing POS screens still use localStorage; this is not a server-authoritative register or reliable offline-first multi-branch system.
 
 ## Requirements
 
@@ -26,9 +26,9 @@ The bootstrap administrator is created only when the username does not already e
 - `GET /api/records?entity=orders` — records for the signed-in user's location.
 - `POST /api/sync/push` — atomically ingests up to 500 events, deduplicated by event UUID. Admins/managers can sync all entity types; cashiers are restricted to orders, time charges, cash entries, audit trail, and attendance.
 - `GET /api/sync/pull?after=0` — fetches the signed-in location's event stream.
-- `GET /api/admin/locations` — list locations for an administrator.
+- `GET /api/admin/locations` — list locations for an administrator.\n- `GET /api/admin/users` and `POST /api/admin/users` — list/create staff accounts for the administrator's current location; new passwords must be at least 12 characters.
 
-The service uses parameterized SQL, scrypt password hashes, short-lived HMAC-signed tokens, role-aware entity permissions on write ingestion, request-size limits, and database transactions. Configure CORS to the exact trusted client origin if browser clients need it.
+The service uses parameterized SQL, scrypt password hashes, 8-hour HMAC-signed tokens, role-aware entity permissions on write ingestion, request-size limits, database transactions, and basic in-memory per-IP login throttling. Configure CORS to the exact trusted client origin if browser clients need it. Login throttling is process-local and should be replaced with a shared reverse-proxy or datastore-backed limiter for multi-instance production.
 
 ## Not production-complete yet
 
