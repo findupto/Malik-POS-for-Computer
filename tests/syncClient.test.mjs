@@ -158,3 +158,19 @@ test('conflict review retains the newest server version from a multi-event pull'
   assert.deepEqual(conflicts[0].remote, { id: 'o-1', total: 30 });
   assert.equal(conflicts[0].remoteEvent.sequence, 2);
 });
+
+
+test('new sync events carry the last observed server sequence for optimistic concurrency', () => {
+  const storage = fakeStorage({
+    'malik-orders': JSON.stringify([{ id: 'o-1', total: 10 }]),
+    'malik-syncVersions': JSON.stringify({ 'orders:o-1': 42 })
+  });
+  const events = buildSnapshotEvents(storage, 'admin');
+  assert.equal(events[0].expectedSequence, 42);
+});
+
+test('pulled events preserve per-record server versions even when only cursor bookkeeping is needed', () => {
+  const storage = fakeStorage({ 'malik-orders': JSON.stringify([{ id: 'o-1', total: 10 }]) });
+  applyPulledEvents(storage, [{ sequence: '17', entity: 'orders', record_id: 'o-1', operation: 'upsert', payload: { id: 'o-1', total: 10 } }]);
+  assert.equal(JSON.parse(storage.inspect('malik-syncVersions'))['orders:o-1'], 17);
+});
