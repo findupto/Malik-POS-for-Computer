@@ -64,7 +64,7 @@ test('shared refund is recorded server-first and retries with the same key', asy
   const storage = fakeStorage();
   const calls = [];
   const order = { id: 'MP-7654321', total: 100, items: [] };
-  const refund = { amount: '25', method: 'Cash', reason: 'Wrong item', reference: 'receipt 1' };
+  const refund = { amount: '25', method: 'Cash', reason: 'Wrong item', reference: 'receipt 1', returnItems: [{ productId: 'tea-1', productName: 'Tea', quantity: '1' }], restock: true };
   const fetchImpl = async (url, options = {}) => {
     calls.push({ url, options });
     if (url.includes('/api/transactions?limit=200')) return { ok: true, json: async () => ({ transactions: [{ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', order_id: order.id, total: 100 }] }) };
@@ -77,7 +77,8 @@ test('shared refund is recorded server-first and retries with the same key', asy
   assert.equal(posts.length, 2);
   assert.equal(JSON.parse(posts[0].options.body).idempotencyKey, JSON.parse(posts[1].options.body).idempotencyKey);
   assert.equal(JSON.parse(posts[0].options.body).method, 'Cash');
-  assert.equal(JSON.parse(posts[0].options.body).restock, false);
+  assert.equal(JSON.parse(posts[0].options.body).restock, true);
+  assert.deepEqual(JSON.parse(posts[0].options.body).items, [{ productId: 'tea-1', productName: 'Tea', quantity: 1 }]);
 });
 
 test('inventory initialization never overwrites an existing server balance', async () => {
