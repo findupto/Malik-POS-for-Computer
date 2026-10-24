@@ -57,6 +57,7 @@ export async function reconcilePendingSaleTransactions({ baseUrl, token, storage
     const tenders = Array.isArray(payload.tenders) ? payload.tenders : [];
     reconciled.push({
       orderId,
+      idempotencyKey: payload.idempotencyKey,
       transaction,
       payment: tenders.length ? String(tenders[0].method || 'Other') : 'Customer Due',
       paidAt: transaction.occurred_at || payload.occurredAt || new Date().toISOString()
@@ -65,13 +66,16 @@ export async function reconcilePendingSaleTransactions({ baseUrl, token, storage
   return reconciled;
 }
 
-export function clearReconciledSaleTransactions(orderIds, storage = globalThis.localStorage) {
-  if (!storage || !Array.isArray(orderIds) || !orderIds.length) return;
+export function clearReconciledSaleTransactions(entries, storage = globalThis.localStorage) {
+  if (!storage || !Array.isArray(entries) || !entries.length) return;
   const outbox = readKeys(storage, SALE_OUTBOX_KEY);
   let changed = false;
-  for (const orderId of orderIds) {
-    if (Object.prototype.hasOwnProperty.call(outbox, String(orderId))) {
-      delete outbox[String(orderId)];
+  for (const entry of entries) {
+    if (!entry || typeof entry !== 'object' || !entry.orderId || !entry.idempotencyKey) continue;
+    const orderId = String(entry.orderId);
+    // Do not delete a newer/replaced request if the outbox changed while a server check was in flight.
+    if (outbox[orderId]?.idempotencyKey === String(entry.idempotencyKey)) {
+      delete outbox[orderId];
       changed = true;
     }
   }
@@ -139,7 +143,7 @@ export async function recordSaleTransaction({ baseUrl, token, order, payment, st
     throw new Error(result.error || 'The server did not record this sale. The order remains pending; retry payment to safely retry the same sale.');
   }
   // Keep the queue entry until the caller has durably persisted the local paid order.
-  return result;
+  return { ...result, idempotencyKey };
 }
 
 
