@@ -39,6 +39,8 @@ Use a strong unique `POSTGRES_PASSWORD`, `JWT_SECRET` (at least 32 characters), 
 - `GET /api/me` — current authenticated user.
 - `GET /api/records?entity=orders` — records for the signed-in user's location.
 - `POST /api/sync/push` — atomically ingests up to 500 events, deduplicated by event UUID. Admins/managers can sync all entity types; cashiers are restricted to orders, time charges, cash entries, audit trail, and attendance.
+- `POST /api/transactions` — records a sale, its line items, tenders, and audit event in one PostgreSQL transaction. The server recalculates totals and uses a location-scoped UUID idempotency key so network retries do not create a second sale.
+- `GET /api/transactions?limit=50` — lists recent transactions for the authenticated user's location.
 - `GET /api/sync/pull?after=0` — fetches the signed-in location's event stream.
 - `GET /api/admin/locations` — list locations for an administrator.\n- `GET /api/admin/users` and `POST /api/admin/users` — list/create staff accounts for the administrator's current location; new passwords must be at least 12 characters.
 - `POST /api/admin/users/:id/activate` and `/deactivate` — enable or disable a staff account; admins cannot deactivate themselves or the last active administrator at a location.
@@ -68,7 +70,7 @@ After restoring, verify `/health`, sign-in, record counts, and a controlled test
 
 ## Not production-complete yet
 
-- The desktop UI is not yet migrated to this API; current operational data remains in each browser profile. The API can now be deployed with Compose and the sync Settings panel includes staff account management for connected administrators.
+- The desktop UI is not yet migrated to the transaction API; current operational data remains in each browser profile. The transaction ledger is a backend foundation only: it does not yet reserve/deduct stock, process refunds, or replace the existing checkout path. The API can be deployed with Compose and the sync Settings panel includes staff account management for connected administrators.
 - The local durable database/outbox agent needed to keep multiple counters working when the shop internet is down is not yet implemented.
 - Cross-location synchronization, the local LAN database/outbox agent, central catalog ownership, token refresh, shared rate limiting, and disaster-recovery automation still require implementation and acceptance tests. Password resets and account changes invalidate previously issued tokens on the next request.
 - Before production, add HTTPS, firewall rules, off-device backups and tested restores, migrations, security review, audit monitoring, and shared rate limiting. PostgreSQL API integration tests now run in CI, but multi-register acceptance tests for simultaneous sales, refunds, inventory conflicts, and network/power loss are still required. Do not rely on this foundation as the sole record of real sales until the desktop migration and offline/recovery gates pass.
