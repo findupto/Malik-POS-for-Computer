@@ -158,6 +158,7 @@ export async function syncSnapshot({ baseUrl, token, storage, role = 'admin', fe
   const baseline = readJson(storage, BASELINE_KEY, null);
   const pending = buildSnapshotEvents(storage, role);
   const pendingByKey = new Map(pending.map(event => [event.entity + ':' + event.recordId, event]));
+  const observedRemote = new Map();
   const existingConflicts = readJson(storage, CONFLICTS_KEY, []);
   const conflictKeys = new Set(existingConflicts.map(item => item.entity + ':' + item.recordId));
   let cursor = Number(storage.getItem(CURSOR_KEY) || 0);
@@ -173,6 +174,7 @@ export async function syncSnapshot({ baseUrl, token, storage, role = 'admin', fe
     const safeBatch = [];
     for (const event of batch) {
       const key = event.entity + ':' + event.record_id;
+      observedRemote.set(key, event);
       const localEvent = pendingByKey.get(key);
       const remoteValue = event.operation === 'delete' ? undefined : event.payload;
       const localValue = localEvent?.operation === 'delete' ? undefined : localEvent?.payload;
@@ -210,7 +212,18 @@ export async function syncSnapshot({ baseUrl, token, storage, role = 'admin', fe
   }
   storage.setItem(CONFLICTS_KEY, JSON.stringify(nextConflicts));
 
-  const outgoing = pending.filter(event => !conflictKeys.has(event.entity + ':' + event.recordId));
+  const satisfiedEventIds = new Set();
+  const outgoing = pending.filter(event => {
+    const key = event.entity + ':' + event.recordId;
+    if (conflictKeys.has(key)) return false;
+    const remote = observedRemote.get(key);
+    const alreadyPresent = remote && (
+      (event.operation === 'delete' && remote.operation === 'delete') ||
+      (event.operation === 'upsert' && remote.operation === 'upsert' && stable(event.payload) === stable(remote.payload))
+    );
+    if (alreadyPresent) { satisfiedEventIds.add(event.eventId); return false; }
+    return true;
+  });
   let uploaded = 0;
   const headers = { ...authHeaders, 'Content-Type': 'application/json' };
   for (let offset = 0; offset < outgoing.length; offset += 100) {
@@ -226,7 +239,7 @@ export async function syncSnapshot({ baseUrl, token, storage, role = 'admin', fe
     storage.setItem(VERSIONS_KEY, JSON.stringify(versions));
   }
   const sentIds = new Set(outgoing.map(event => event.eventId));
-  storage.setItem(OUTBOX_KEY, JSON.stringify(readJson(storage, OUTBOX_KEY, []).filter(event => !sentIds.has(event.eventId))));
+  storage.setItem(OUTBOX_KEY, JSON.stringify(readJson(storage, OUTBOX_KEY, []).filter(event => !sentIds.has(event.eventId) && !satisfiedEventIds.has(event.eventId))));
   captureBaseline(storage, DEFAULT_SYNC_ENTITIES, conflictKeys, role);
   return { uploaded, downloaded, cursor, conflicts: nextConflicts.length };
 }
