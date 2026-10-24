@@ -32,6 +32,25 @@ The bootstrap administrator is created only when the username does not already e
 
 The service uses parameterized SQL, scrypt password hashes, 8-hour HMAC-signed tokens, role-aware entity permissions on write ingestion, request-size limits, database transactions, per-record optimistic concurrency checks for updated sync clients, and basic in-memory per-IP login throttling. Configure CORS to the exact trusted client origin if browser clients need it. Login throttling is process-local and should be replaced with a shared reverse-proxy or datastore-backed limiter for multi-instance production.
 
+## Database backup and restore
+
+The API repository now includes Linux shell scripts for verified PostgreSQL backups and guarded restores:
+
+```sh
+export DATABASE_URL='postgresql://user:password@host:5432/malik_pos'
+BACKUP_DIR=/secure/backups BACKUP_RETENTION_DAYS=14 sh server/backup.sh
+```
+
+The script creates a custom-format `.dump`, validates it with `pg_restore --list`, writes a SHA-256 checksum, and prunes old dump/checksum pairs. Schedule it with cron or your deployment scheduler; the script does not create a schedule automatically. Store backups off the POS host and encrypt storage/transport.
+
+To restore, first stop writers and verify the target database carefully. This command replaces matching database objects and is intentionally guarded:
+
+```sh
+CONFIRM_RESTORE=YES DATABASE_URL='postgresql://user:password@host:5432/malik_pos' sh server/restore.sh /secure/backups/malik-pos-YYYYMMDDTHHMMSSZ.dump
+```
+
+After restoring, verify `/health`, sign-in, record counts, and a controlled test sync before returning registers to service. This covers the PostgreSQL API database only; it does **not** back up the active register's localStorage data. Continue exporting the app's JSON backup and testing restores on a separate machine.
+
 ## Not production-complete yet
 
 - The desktop UI is not yet migrated to this API; current operational data remains in each browser profile.
