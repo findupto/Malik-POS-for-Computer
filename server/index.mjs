@@ -8,6 +8,7 @@ import pg from 'pg';
 const { Pool } = pg;
 const here = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || 8787);
+const host = process.env.HOST || '127.0.0.1';
 const databaseUrl = process.env.DATABASE_URL;
 const jwtSecret = process.env.JWT_SECRET;
 const bootstrapUser = process.env.BOOTSTRAP_ADMIN_USERNAME;
@@ -69,6 +70,7 @@ async function bodyJson(req, maxBytes = 2_000_000) {
 function isUuid(value) { return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '')); }
 const roles = { admin: 3, manager: 2, cashier: 1 };
 async function bootstrap() {
+  if (bootstrapPassword && bootstrapPassword.length < 12) throw new Error('BOOTSTRAP_ADMIN_PASSWORD must be at least 12 characters.');
   await pool.query(await readFile(path.join(here, 'schema.sql'), 'utf8'));
   const count = await pool.query('SELECT count(*)::int AS n FROM locations');
   let locationId;
@@ -166,6 +168,6 @@ const server = http.createServer(async (req, res) => {
     return send(res, error.status || 500, { error: error.status ? error.message : 'Internal server error.' });
   }
 });
-bootstrap().then(() => server.listen(port, '0.0.0.0', () => console.log('Malik POS API listening on port ' + port))).catch(error => { console.error('API startup failed:', error); process.exit(1); });
+bootstrap().then(() => server.listen(port, host, () => console.log('Malik POS API listening on ' + host + ':' + port))).catch(error => { console.error('API startup failed:', error); process.exit(1); });
 process.on('SIGTERM', async () => { server.close(); await pool.end(); process.exit(0); });
 process.on('SIGINT', async () => { server.close(); await pool.end(); process.exit(0); });
