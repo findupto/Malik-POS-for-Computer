@@ -21,7 +21,7 @@ The bootstrap administrator is created only when the username does not already e
 
 ## Docker Compose deployment
 
-The Compose stack now starts both PostgreSQL and the API. Copy `.env.example` to `.env` inside `server/`, replace all placeholder secrets, and run from the repository root:
+The Compose stack starts PostgreSQL and the API, plus a backup service that takes an immediate verified backup and repeats every 24 hours by default. Copy `.env.example` to `.env` inside `server/`, replace all placeholder secrets, and run from the repository root:
 
 ```sh
 docker compose --env-file server/.env up -d --build
@@ -56,7 +56,7 @@ export DATABASE_URL='postgresql://user:password@host:5432/malik_pos'
 BACKUP_DIR=/secure/backups BACKUP_RETENTION_DAYS=14 sh server/backup.sh
 ```
 
-The script creates a custom-format `.dump`, validates it with `pg_restore --list`, writes a SHA-256 checksum, and prunes old dump/checksum pairs. Schedule it with cron or your deployment scheduler; the script does not create a schedule automatically. Store backups off the POS host and encrypt storage/transport.
+The script creates a custom-format `.dump`, validates it with `pg_restore --list`, writes a SHA-256 checksum, and prunes old dump/checksum pairs. Compose runs it automatically via the `backup` service. Tune `BACKUP_INTERVAL_SECONDS` and `BACKUP_RETENTION_DAYS` in `server/.env`; inspect `docker compose --env-file server/.env logs backup`. Backups use a Docker volume on the same host by default, so configure that volume for encrypted external/off-device storage and test restores on a separate machine.
 
 To restore, first stop writers and verify the target database carefully. This command replaces matching database objects and is intentionally guarded:
 
@@ -71,4 +71,4 @@ After restoring, verify `/health`, sign-in, record counts, and a controlled test
 - The desktop UI is not yet migrated to this API; current operational data remains in each browser profile. The API can now be deployed with Compose and the sync Settings panel includes staff account management for connected administrators.
 - The local durable database/outbox agent needed to keep multiple counters working when the shop internet is down is not yet implemented.
 - Cross-location synchronization, the local LAN database/outbox agent, central catalog ownership, token refresh, shared rate limiting, and disaster-recovery automation still require implementation and acceptance tests. Password resets and account changes invalidate previously issued tokens on the next request.
-- Before production, add HTTPS, firewall rules, backups and tested restores, migrations, security review, audit monitoring, rate limiting, and automated integration tests. Do not rely on this foundation as the sole record of real sales until the desktop migration and offline/recovery gates pass.
+- Before production, add HTTPS, firewall rules, off-device backups and tested restores, migrations, security review, audit monitoring, and shared rate limiting. PostgreSQL API integration tests now run in CI, but multi-register acceptance tests for simultaneous sales, refunds, inventory conflicts, and network/power loss are still required. Do not rely on this foundation as the sole record of real sales until the desktop migration and offline/recovery gates pass.
