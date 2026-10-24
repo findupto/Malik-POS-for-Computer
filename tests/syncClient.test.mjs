@@ -56,3 +56,13 @@ test('login rejects an invalid API URL before making a request', async () => {
     throw new Error('fetch should not be called');
   }), /API URL/);
 });
+
+test('login trims trailing slashes from the API URL', async () => {
+  let requestedUrl = '';
+  const result = await loginToSyncApi('https://pos.example.test///', 'owner', 'secret', async (url) => {
+    requestedUrl = url;
+    return { ok: true, json: async () => ({ token: 'test-token', user: { name: 'Owner', role: 'admin' } }) };
+  });
+  assert.equal(requestedUrl, 'https://pos.example.test/api/auth/login');
+  assert.equal(result.baseUrl, 'https://pos.example.test');
+});
