@@ -19,6 +19,20 @@ This is the first backend foundation for central PostgreSQL storage, staff authe
 
 The bootstrap administrator is created only when the username does not already exist. Store credentials in a secret manager, rotate the bootstrap password after first use, and terminate TLS at a trusted reverse proxy.
 
+## Docker Compose deployment
+
+The Compose stack now starts both PostgreSQL and the API. Copy `.env.example` to `.env` inside `server/`, replace all placeholder secrets, and run from the repository root:
+
+```sh
+docker compose --env-file server/.env up -d --build
+docker compose --env-file server/.env ps
+curl http://127.0.0.1:8787/health
+```
+
+The API port is bound to loopback by default. To make it reachable by other computers, set `API_BIND_IP` to the host's private LAN address and configure the operating-system firewall to allow only the shop LAN. Do not expose this plain-HTTP port to the public internet: bearer tokens and passwords require HTTPS protection. Prefer a trusted TLS reverse proxy and set `CORS_ORIGIN` to the exact browser origin. For the desktop renderer, test the actual origin policy in the packaged app before deploying.
+
+Use a strong unique `POSTGRES_PASSWORD`, `JWT_SECRET` (at least 32 characters), and `BOOTSTRAP_ADMIN_PASSWORD` (at least 12 characters). Keep `server/.env` private and out of source control.
+
 ## API
 
 - `POST /api/auth/login` — username/password login; returns an 8-hour signed bearer token.
@@ -53,7 +67,7 @@ After restoring, verify `/health`, sign-in, record counts, and a controlled test
 
 ## Not production-complete yet
 
-- The desktop UI is not yet migrated to this API; current operational data remains in each browser profile.
+- The desktop UI is not yet migrated to this API; current operational data remains in each browser profile. The API can now be deployed with Compose and the sync Settings panel includes staff account management for connected administrators.
 - The local durable database/outbox agent needed to keep multiple counters working when the shop internet is down is not yet implemented.
 - Cross-location synchronization, the local LAN database/outbox agent, central catalog ownership, token revocation/refresh, shared rate limiting, and disaster-recovery automation still require implementation and acceptance tests.
 - Before production, add HTTPS, firewall rules, backups and tested restores, migrations, security review, audit monitoring, rate limiting, and automated integration tests. Do not rely on this foundation as the sole record of real sales until the desktop migration and offline/recovery gates pass.
