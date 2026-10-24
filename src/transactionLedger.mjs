@@ -1,8 +1,8 @@
 const IDEMPOTENCY_KEY = 'malik-transactionIdempotency';
 
-function readKeys(storage) {
+function readKeys(storage, key = IDEMPOTENCY_KEY) {
   try {
-    const value = JSON.parse(storage.getItem(IDEMPOTENCY_KEY) || '{}');
+    const value = JSON.parse(storage.getItem(key) || '{}');
     return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   } catch { return {}; }
 }
@@ -62,7 +62,7 @@ export async function recordSaleTransaction({ baseUrl, token, order, payment, st
 
 const REFUND_KEYS = 'malik-refundIdempotency';
 function refundKeyFor(storage, orderId, refundDraft, makeId) {
-  const keys = readKeys(storage);
+  const keys = readKeys(storage, REFUND_KEYS);
   const fingerprint = [String(orderId), Number(refundDraft.amount).toFixed(2), String(refundDraft.method), String(refundDraft.reason || '').trim(), String(refundDraft.reference || '')].join('|');
   if (keys[fingerprint]) return keys[fingerprint];
   const key = makeId();
