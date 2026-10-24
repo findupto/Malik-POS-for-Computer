@@ -139,6 +139,36 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   assert.equal(Number(inventoryAfterSale.data.inventory.find(item => item.product_id === 'tea-1').quantity), 3);
   assert.equal(Number(inventoryAfterSale.data.inventory.find(item => item.product_id === 'bread-1').quantity), 3);
 
+  // Two registers can retry the same uncertain sale at once; the shared idempotency key
+  // must create one transaction and deduct stock only once.
+  const retryProductId = 'retry-' + crypto.randomUUID();
+  const retryOpening = await request('/api/inventory/adjustments', {
+    token: adminToken, method: 'POST',
+    body: { idempotencyKey: crypto.randomUUID(), productId: retryProductId, sku: 'RETRY', productName: 'Idempotent Retry Test', quantityDelta: 5, reason: 'Concurrent idempotent retry test opening stock' }
+  });
+  assert.equal(retryOpening.status, 201);
+  const retryKey = crypto.randomUUID();
+  const retryOrderId = 'retry-sale-' + crypto.randomUUID();
+  const retryBody = {
+    idempotencyKey: retryKey,
+    orderId: retryOrderId,
+    customerName: 'Integration Customer',
+    items: [{ productId: retryProductId, sku: 'RETRY', productName: 'Idempotent Retry Test', quantity: 2, unitPrice: 10 }],
+    discountAmount: 0, taxAmount: 0, serviceChargeAmount: 0, deliveryFee: 0,
+    tenders: [{ method: 'Cash', amount: 20 }]
+  };
+  const retryResults = await Promise.all([
+    request('/api/transactions', { token: cashierToken, method: 'POST', body: retryBody }),
+    request('/api/transactions', { token: cashierToken, method: 'POST', body: retryBody })
+  ]);
+  assert.deepEqual(retryResults.map(result => result.status).sort(), [200, 201]);
+  assert.equal(retryResults.find(result => result.status === 200).data.status, 'duplicate');
+  const retryInventory = await request('/api/inventory', { token: cashierToken });
+  assert.equal(Number(retryInventory.data.inventory.find(item => item.product_id === retryProductId).quantity), 3);
+  const retryLedger = await request('/api/transactions?limit=10&orderId=' + encodeURIComponent(retryOrderId), { token: cashierToken });
+  assert.equal(retryLedger.status, 200);
+  assert.equal(retryLedger.data.transactions.length, 1);
+
   const refundKey = crypto.randomUUID();
   const refundBody = {
     idempotencyKey: refundKey, amount: 50, method: 'Cash', reason: 'Integration test return',
