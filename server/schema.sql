@@ -45,3 +45,61 @@ CREATE TABLE IF NOT EXISTS sync_events (
 );
 CREATE INDEX IF NOT EXISTS sync_events_location_sequence_idx ON sync_events(location_id, sequence);
 CREATE INDEX IF NOT EXISTS pos_records_location_entity_idx ON pos_records(location_id, entity);
+
+-- Immutable transaction ledger foundation. Register UI migration is a separate rollout gate.
+CREATE TABLE IF NOT EXISTS pos_transactions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  location_id uuid NOT NULL REFERENCES locations(id),
+  idempotency_key uuid NOT NULL,
+  order_id text NOT NULL,
+  kind text NOT NULL DEFAULT 'sale' CHECK (kind IN ('sale')),
+  currency text NOT NULL DEFAULT 'PKR' CHECK (currency = 'PKR'),
+  customer_name text NOT NULL DEFAULT 'Walk-in Customer',
+  subtotal numeric(14,2) NOT NULL CHECK (subtotal >= 0),
+  discount_amount numeric(14,2) NOT NULL DEFAULT 0 CHECK (discount_amount >= 0),
+  tax_amount numeric(14,2) NOT NULL DEFAULT 0 CHECK (tax_amount >= 0),
+  service_charge_amount numeric(14,2) NOT NULL DEFAULT 0 CHECK (service_charge_amount >= 0),
+  delivery_fee numeric(14,2) NOT NULL DEFAULT 0 CHECK (delivery_fee >= 0),
+  total numeric(14,2) NOT NULL CHECK (total >= 0),
+  notes text NOT NULL DEFAULT '',
+  payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_by uuid REFERENCES staff_users(id),
+  occurred_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (location_id, idempotency_key),
+  UNIQUE (location_id, order_id)
+);
+CREATE INDEX IF NOT EXISTS pos_transactions_location_created_idx ON pos_transactions(location_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS pos_transaction_lines (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  transaction_id uuid NOT NULL REFERENCES pos_transactions(id) ON DELETE RESTRICT,
+  product_id text NOT NULL DEFAULT '',
+  sku text NOT NULL DEFAULT '',
+  product_name text NOT NULL,
+  quantity numeric(14,3) NOT NULL CHECK (quantity > 0),
+  unit_price numeric(14,2) NOT NULL CHECK (unit_price >= 0),
+  line_total numeric(14,2) NOT NULL CHECK (line_total >= 0)
+);
+CREATE INDEX IF NOT EXISTS pos_transaction_lines_transaction_idx ON pos_transaction_lines(transaction_id);
+
+CREATE TABLE IF NOT EXISTS pos_tenders (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  transaction_id uuid NOT NULL REFERENCES pos_transactions(id) ON DELETE RESTRICT,
+  method text NOT NULL CHECK (method IN ('Cash','Card','Bank Transfer','Mobile Wallet','Credit','Other')),
+  amount numeric(14,2) NOT NULL CHECK (amount >= 0),
+  reference text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS audit_events (
+  id bigserial PRIMARY KEY,
+  location_id uuid NOT NULL REFERENCES locations(id),
+  actor_id uuid REFERENCES staff_users(id),
+  action text NOT NULL,
+  entity text NOT NULL,
+  record_id text NOT NULL,
+  details jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS audit_events_location_created_idx ON audit_events(location_id, created_at DESC);
