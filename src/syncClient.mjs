@@ -80,28 +80,33 @@ export async function loginToSyncApi(baseUrl, username, password, fetchImpl = fe
 }
 
 export async function syncSnapshot({ baseUrl, token, storage, role = 'admin', fetchImpl = fetch }) {
-  const base = String(baseUrl || '').trim().replace(/\/+$/, '');
+  const base = String(baseUrl || '').trim().replace(/\\/+$/, '');
   if (!token) throw new Error('Sign in to the sync server first.');
-  const headers = { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' };
-  let uploaded = 0;
+  const authHeaders = { Authorization: 'Bearer ' + token };
+  let cursor = Number(storage.getItem('malik-syncCursor') || 0);
+  let downloaded = 0;
+
+  // Pull first so newly discovered records are merged locally before the snapshot is uploaded.
+  // Same-ID conflicts currently use server-event order; full conflict review is not implemented.
+  for (let page = 0; page < 20; page++) {
+    const previousCursor = cursor;
+    const response = await fetchImpl(base + '/api/sync/pull?after=' + encodeURIComponent(cursor), { headers: authHeaders });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Download failed.');
+    const batch = data.events || [];
+    cursor = applyPulledEvents(storage, batch);
+    downloaded += batch.length;
+    if (batch.length < 500 || cursor <= previousCursor) break;
+  }
+
   const events = buildSnapshotEvents(storage, role);
+  let uploaded = 0;
+  const headers = { ...authHeaders, 'Content-Type': 'application/json' };
   for (let offset = 0; offset < events.length; offset += 100) {
     const response = await fetchImpl(base + '/api/sync/push', { method: 'POST', headers, body: JSON.stringify({ events: events.slice(offset, offset + 100) }) });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || 'Upload failed.');
     uploaded += Number(data.accepted || 0);
-  }
-  let cursor = Number(storage.getItem('malik-syncCursor') || 0);
-  let downloaded = 0;
-  for (let page = 0; page < 20; page++) {
-    const response = await fetchImpl(base + '/api/sync/pull?after=' + encodeURIComponent(cursor), { headers: { Authorization: headers.Authorization } });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || 'Download failed.');
-    const batch = data.events || [];
-    const previousCursor = cursor;
-    cursor = applyPulledEvents(storage, batch);
-    downloaded += batch.length;
-    if (batch.length < 500 || cursor <= previousCursor) break;
   }
   return { uploaded, downloaded, cursor };
 }
