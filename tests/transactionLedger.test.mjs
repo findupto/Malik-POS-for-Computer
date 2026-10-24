@@ -58,6 +58,8 @@ test('uncertain shared sale is durably queued and retries the exact original pay
   const changedOrder = { ...order, total: 999, items: [{ id: 99, name: 'Changed item', qty: 1, price: 999 }] };
   await recordSaleTransaction({ ...args, order: changedOrder, payment: 'Card' });
   assert.deepEqual(calls[1].body, calls[0].body);
+  assert.ok(JSON.parse(storage.inspect('malik-transactionOutbox'))[order.id], 'successful retry stays queued until local completion is persisted');
+  clearReconciledSaleTransactions([order.id], storage);
   assert.deepEqual(JSON.parse(storage.inspect('malik-transactionOutbox')), {});
 });
 
