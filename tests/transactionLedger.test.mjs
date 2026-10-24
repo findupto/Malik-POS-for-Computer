@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { recordSaleTransaction, recordRefundTransaction, initializeServerInventory, fetchServerInventory } from '../src/transactionLedger.mjs';
+import { recordSaleTransaction, recordRefundTransaction, initializeServerInventory, fetchServerInventory, recordInventoryAdjustment } from '../src/transactionLedger.mjs';
 
 function fakeStorage(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -104,4 +104,41 @@ test('fetch server inventory returns the server balances', async () => {
   });
   assert.equal(inventory.length, 1);
   assert.equal(inventory[0].quantity, '3');
+});
+
+
+test('shared inventory adjustment sends reason, signed delta and stable idempotency key', async () => {
+  const calls = [];
+  const result = await recordInventoryAdjustment({
+    baseUrl: 'http://localhost:8787',
+    token: 'token',
+    product: { id: 'tea-1', name: 'Tea', sku: 'TEA-1' },
+    quantityDelta: -1.5,
+    reason: 'Damaged stock',
+    idempotencyKey: '44444444-4444-4444-8444-444444444444',
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      return { ok: true, status: 201, json: async () => ({ status: 'created' }) };
+    }
+  });
+  assert.equal(result.status, 'created');
+  assert.equal(calls[0].url, 'http://localhost:8787/api/inventory/adjustments');
+  assert.equal(JSON.parse(calls[0].options.body).quantityDelta, -1.5);
+  assert.equal(JSON.parse(calls[0].options.body).reason, 'Damaged stock');
+  assert.equal(JSON.parse(calls[0].options.body).idempotencyKey, '44444444-4444-4444-8444-444444444444');
+});
+
+test('shared inventory adjustment surfaces server stock rejection', async () => {
+  await assert.rejects(
+    recordInventoryAdjustment({
+      baseUrl: 'http://localhost:8787',
+      token: 'token',
+      product: { id: 'tea-1', name: 'Tea' },
+      quantityDelta: -99,
+      reason: 'Count correction',
+      idempotencyKey: '44444444-4444-4444-8444-444444444444',
+      fetchImpl: async () => ({ ok: false, status: 409, json: async () => ({ error: 'Adjustment would make stock negative.' }) })
+    }),
+    /Adjustment would make stock negative/
+  );
 });
