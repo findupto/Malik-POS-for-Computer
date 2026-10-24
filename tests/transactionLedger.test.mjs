@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { recordSaleTransaction, recordRefundTransaction, initializeServerInventory, fetchServerInventory, fetchInventoryMovements, recordInventoryAdjustment, getPendingSaleTransactions } from '../src/transactionLedger.mjs';
+import { recordSaleTransaction, reconcilePendingSaleTransactions, recordRefundTransaction, initializeServerInventory, fetchServerInventory, fetchInventoryMovements, recordInventoryAdjustment, getPendingSaleTransactions } from '../src/transactionLedger.mjs';
 
 function fakeStorage(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -59,6 +59,35 @@ test('uncertain shared sale is durably queued and retries the exact original pay
   await recordSaleTransaction({ ...args, order: changedOrder, payment: 'Card' });
   assert.deepEqual(calls[1].body, calls[0].body);
   assert.deepEqual(JSON.parse(storage.inspect('malik-transactionOutbox')), {});
+});
+
+test('reconciliation clears only queued sales confirmed by exact server order lookup', async () => {
+  const storage = fakeStorage({
+    'malik-transactionOutbox': JSON.stringify({
+      'MP-FOUND': { orderId: 'MP-FOUND', idempotencyKey: 'key-found', occurredAt: '2026-10-24T10:00:00.000Z', tenders: [{ method: 'Cash', amount: 25 }] },
+      'MP-MISSING': { orderId: 'MP-MISSING', idempotencyKey: 'key-missing', tenders: [] }
+    })
+  });
+  const calls = [];
+  const reconciled = await reconcilePendingSaleTransactions({
+    baseUrl: 'http://localhost:8787', token: 'token', storage,
+    fetchImpl: async (url, options) => {
+      calls.push({ url: new URL(url), options });
+      const id = new URL(url).searchParams.get('orderId');
+      return { ok: true, status: 200, json: async () => ({
+        transactions: id === 'MP-FOUND' ? [{ order_id: id, total: 25, occurred_at: '2026-10-24T10:00:00.000Z' }] : []
+      }) };
+    }
+  });
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].options.headers.authorization, 'Bearer token');
+  assert.equal(calls[0].url.searchParams.get('orderId'), 'MP-FOUND');
+  assert.equal(reconciled.length, 1);
+  assert.equal(reconciled[0].orderId, 'MP-FOUND');
+  assert.equal(reconciled[0].payment, 'Cash');
+  assert.deepEqual(JSON.parse(storage.inspect('malik-transactionOutbox')), {
+    'MP-MISSING': { orderId: 'MP-MISSING', idempotencyKey: 'key-missing', tenders: [] }
+  });
 });
 
 test('pending shared sale summary lists only safe retry metadata', async () => {
