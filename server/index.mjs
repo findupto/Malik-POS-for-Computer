@@ -216,6 +216,20 @@ const server = http.createServer(async (req, res) => {
           await client.query('INSERT INTO pos_transaction_lines(transaction_id,product_id,sku,product_name,quantity,unit_price,line_total) VALUES ($1,$2,$3,$4,$5,$6,$7)',
             [transaction.id,line.productId,line.sku,line.productName,line.quantity,line.unitPrice,line.lineTotal]);
         }
+        // Deduct stock only for products explicitly initialized in inventory_balances.
+        // Untracked catalog items remain saleable until an opening balance is recorded.
+        for (const line of lines) {
+          if (!line.productId) continue;
+          await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [user.locationId + ':inventory:' + line.productId]);
+          const balance = await client.query('SELECT quantity,sku,product_name FROM inventory_balances WHERE location_id=$1 AND product_id=$2 FOR UPDATE', [user.locationId,line.productId]);
+          if (!balance.rowCount) continue;
+          const before = Number(balance.rows[0].quantity);
+          if (before < line.quantity) throw Object.assign(new Error('Insufficient stock for ' + line.productName + '. Available: ' + before), { status: 409 });
+          const after = Math.round((before - line.quantity + Number.EPSILON) * 1000) / 1000;
+          await client.query('UPDATE inventory_balances SET quantity=$1,updated_by=$2,updated_at=now() WHERE location_id=$3 AND product_id=$4', [after,user.sub,user.locationId,line.productId]);
+          await client.query('INSERT INTO inventory_movements(location_id,idempotency_key,product_id,sku,product_name,quantity_delta,quantity_after,reason,reference_type,reference_id,actor_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
+            [user.locationId,crypto.randomUUID(),line.productId,line.sku,line.productName,-line.quantity,after,'Sale '+orderId,'sale',transaction.id,user.sub]);
+        }
         for (const tender of tenderRows) {
           await client.query('INSERT INTO pos_tenders(transaction_id,method,amount,reference) VALUES ($1,$2,$3,$4)', [transaction.id,tender.method,tender.amount,tender.reference]);
         }
@@ -232,6 +246,105 @@ const server = http.createServer(async (req, res) => {
       } finally {
         client.release();
       }
+    }
+    if (req.method === 'POST' && url.pathname === '/api/inventory/adjustments') {
+      if (!['admin','manager'].includes(user.role)) return send(res, 403, { error: 'Administrator or manager role required for stock adjustments.' });
+      const input = await bodyJson(req, 32_000);
+      const idempotencyKey = String(input.idempotencyKey || '');
+      const productId = String(input.productId ?? '').trim();
+      const productName = String(input.productName || '').trim();
+      const sku = String(input.sku || '').trim();
+      const reason = String(input.reason || '').trim();
+      const delta = Number(input.quantityDelta);
+      if (!isUuid(idempotencyKey)) return send(res, 400, { error: 'A UUID idempotencyKey is required.' });
+      if (!productId || productId.length > 200 || !productName || productName.length > 200 || sku.length > 100) return send(res, 400, { error: 'A valid productId and productName are required.' });
+      if (!Number.isFinite(delta) || delta === 0 || Math.abs(delta) > 1_000_000 || Math.abs(delta * 1000 - Math.round(delta * 1000)) > 1e-6) return send(res, 400, { error: 'quantityDelta must be non-zero with at most three decimal places.' });
+      if (!reason || reason.length > 500) return send(res, 400, { error: 'A reason is required (maximum 500 characters).' });
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [user.locationId + ':inventory-adjustment:' + idempotencyKey]);
+        const prior = await client.query('SELECT id,product_id,quantity_delta,quantity_after,created_at FROM inventory_movements WHERE location_id=$1 AND idempotency_key=$2', [user.locationId,idempotencyKey]);
+        if (prior.rowCount) { await client.query('COMMIT'); return send(res, 200, { status: 'duplicate', movement: prior.rows[0] }); }
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [user.locationId + ':inventory:' + productId]);
+        const existing = await client.query('SELECT quantity FROM inventory_balances WHERE location_id=$1 AND product_id=$2 FOR UPDATE', [user.locationId,productId]);
+        const before = existing.rowCount ? Number(existing.rows[0].quantity) : 0;
+        const after = Math.round((before + delta + Number.EPSILON) * 1000) / 1000;
+        if (after < 0) { await client.query('ROLLBACK'); return send(res, 409, { error: 'Adjustment would make stock negative. Available: ' + before }); }
+        await client.query('INSERT INTO inventory_balances(location_id,product_id,sku,product_name,quantity,updated_by) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT(location_id,product_id) DO UPDATE SET sku=EXCLUDED.sku,product_name=EXCLUDED.product_name,quantity=EXCLUDED.quantity,updated_by=EXCLUDED.updated_by,updated_at=now()', [user.locationId,productId,sku,productName,after,user.sub]);
+        const movement = await client.query('INSERT INTO inventory_movements(location_id,idempotency_key,product_id,sku,product_name,quantity_delta,quantity_after,reason,reference_type,actor_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,\'adjustment\',$9) RETURNING id,product_id,quantity_delta,quantity_after,created_at', [user.locationId,idempotencyKey,productId,sku,productName,delta,after,reason,user.sub]);
+        await client.query('INSERT INTO audit_events(location_id,actor_id,action,entity,record_id,details) VALUES ($1,$2,$3,$4,$5,$6)', [user.locationId,user.sub,'inventory.adjusted','inventory_balances',productId,JSON.stringify({ quantityDelta: delta, quantityAfter: after, reason })]);
+        await client.query('COMMIT');
+        return send(res, 201, { status: 'created', movement: movement.rows[0] });
+      } catch (error) { await client.query('ROLLBACK'); throw error; }
+      finally { client.release(); }
+    }
+    if (req.method === 'GET' && url.pathname === '/api/inventory') {
+      const result = await pool.query('SELECT product_id,sku,product_name,quantity,updated_at FROM inventory_balances WHERE location_id=$1 ORDER BY product_name', [user.locationId]);
+      return send(res, 200, { inventory: result.rows });
+    }
+    const refundMatch = url.pathname.match(/^\\/api\\/transactions\\/([0-9a-f-]{36})\\/refunds$/i);
+    if (req.method === 'POST' && refundMatch) {
+      if (!['admin','manager'].includes(user.role)) return send(res, 403, { error: 'Administrator or manager role required for refunds.' });
+      const [, transactionId] = refundMatch;
+      if (!isUuid(transactionId)) return send(res, 400, { error: 'A valid transaction ID is required.' });
+      const input = await bodyJson(req, 64_000);
+      const idempotencyKey = String(input.idempotencyKey || '');
+      const amount = Number(input.amount);
+      const method = String(input.method || '');
+      const reason = String(input.reason || '').trim();
+      const restock = input.restock === true;
+      const items = input.items === undefined ? [] : input.items;
+      if (!isUuid(idempotencyKey)) return send(res, 400, { error: 'A UUID idempotencyKey is required and must be reused for retries.' });
+      if (!Number.isFinite(amount) || amount <= 0 || amount > 1_000_000_000 || Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-6) return send(res, 400, { error: 'Refund amount must be a positive amount with at most two decimal places.' });
+      if (!['Cash','Card','Bank Transfer','Mobile Wallet','Other'].includes(method)) return send(res, 400, { error: 'Unsupported refund method.' });
+      if (!reason || reason.length > 500) return send(res, 400, { error: 'A refund reason is required (maximum 500 characters).' });
+      if (!Array.isArray(items) || items.length > 200) return send(res, 400, { error: 'Refund items must be an array of at most 200 entries.' });
+      for (const item of items) {
+        const quantity = Number(item?.quantity);
+        if (!String(item?.productId ?? '').trim() || !String(item?.productName || '').trim() || !Number.isFinite(quantity) || quantity <= 0 || quantity > 1_000_000 || Math.abs(quantity * 1000 - Math.round(quantity * 1000)) > 1e-6) return send(res, 400, { error: 'Each refund item needs productId, productName and a positive quantity with at most three decimals.' });
+      }
+      if (restock && !items.length) return send(res, 400, { error: 'Provide refunded items when restocking inventory.' });
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [user.locationId + ':refund:' + idempotencyKey]);
+        const prior = await client.query('SELECT id,transaction_id,amount,method,restocked,created_at FROM pos_refunds WHERE location_id=$1 AND idempotency_key=$2', [user.locationId,idempotencyKey]);
+        if (prior.rowCount) { await client.query('COMMIT'); return send(res, 200, { status: 'duplicate', refund: prior.rows[0] }); }
+        const sale = await client.query('SELECT id,total FROM pos_transactions WHERE id=$1 AND location_id=$2 FOR UPDATE', [transactionId,user.locationId]);
+        if (!sale.rowCount) { await client.query('ROLLBACK'); return send(res, 404, { error: 'Sale transaction not found at this location.' }); }
+        const refunded = await client.query('SELECT COALESCE(sum(amount),0)::numeric AS amount FROM pos_refunds WHERE transaction_id=$1', [transactionId]);
+        const remaining = Number(sale.rows[0].total) - Number(refunded.rows[0].amount);
+        if (amount > remaining + 0.000001) { await client.query('ROLLBACK'); return send(res, 409, { error: 'Refund exceeds the remaining refundable amount of ' + Math.max(0, remaining).toFixed(2) + '.' }); }
+        const saleLines = await client.query('SELECT product_id,product_name,quantity FROM pos_transaction_lines WHERE transaction_id=$1', [transactionId]);
+        for (const item of items) {
+          const sold = saleLines.rows.filter(line => line.product_id === String(item.productId)).reduce((sum,line) => sum + Number(line.quantity),0);
+          const already = await client.query('SELECT COALESCE(sum(rl.quantity),0)::numeric AS quantity FROM pos_refund_lines rl JOIN pos_refunds r ON r.id=rl.refund_id WHERE r.transaction_id=$1 AND rl.product_id=$2', [transactionId,String(item.productId)]);
+          const requested = Number(item.quantity);
+          if (requested > sold - Number(already.rows[0].quantity) + 0.000001) { await client.query('ROLLBACK'); return send(res, 409, { error: 'Refund quantity exceeds the unrefunded sold quantity for ' + item.productName + '.' }); }
+        }
+        const inserted = await client.query('INSERT INTO pos_refunds(location_id,transaction_id,idempotency_key,amount,method,reason,restocked,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id,transaction_id,amount,method,reason,restocked,created_at', [user.locationId,transactionId,idempotencyKey,amount,method,reason,restock,user.sub]);
+        const refund = inserted.rows[0];
+        for (const item of items) {
+          const productId = String(item.productId);
+          const productName = String(item.productName).slice(0,200);
+          const quantity = Number(item.quantity);
+          await client.query('INSERT INTO pos_refund_lines(refund_id,product_id,product_name,quantity) VALUES ($1,$2,$3,$4)', [refund.id,productId,productName,quantity]);
+          if (restock) {
+            await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [user.locationId + ':inventory:' + productId]);
+            const balance = await client.query('SELECT quantity,sku,product_name FROM inventory_balances WHERE location_id=$1 AND product_id=$2 FOR UPDATE', [user.locationId,productId]);
+            if (balance.rowCount) {
+              const after = Math.round((Number(balance.rows[0].quantity) + quantity + Number.EPSILON) * 1000) / 1000;
+              await client.query('UPDATE inventory_balances SET quantity=$1,updated_by=$2,updated_at=now() WHERE location_id=$3 AND product_id=$4', [after,user.sub,user.locationId,productId]);
+              await client.query('INSERT INTO inventory_movements(location_id,idempotency_key,product_id,sku,product_name,quantity_delta,quantity_after,reason,reference_type,reference_id,actor_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,\'refund\',$9,$10)', [user.locationId,crypto.randomUUID(),productId,balance.rows[0].sku,productName,quantity,after,'Refund '+refund.id,'refund',refund.id,user.sub]);
+            }
+          }
+        }
+        await client.query('INSERT INTO audit_events(location_id,actor_id,action,entity,record_id,details) VALUES ($1,$2,$3,$4,$5,$6)', [user.locationId,user.sub,'sale.refunded','pos_refunds',refund.id,JSON.stringify({ transactionId, amount, method, reason, restock, itemCount: items.length })]);
+        await client.query('COMMIT');
+        return send(res, 201, { status: 'created', refund });
+      } catch (error) { await client.query('ROLLBACK'); throw error; }
+      finally { client.release(); }
     }
     if (req.method === 'GET' && url.pathname === '/api/transactions') {
       const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') || 50)));
