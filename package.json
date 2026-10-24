@@ -11,7 +11,7 @@
     "build:win": "vite build && electron-builder --win nsis --publish never",
     "preview": "vite preview",
     "test": "node --test tests/*.test.mjs",
-    "server": "node server/index.mjs"
+    "server": "node --env-file-if-exists=server/.env server/index.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
