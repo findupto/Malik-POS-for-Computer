@@ -30,6 +30,38 @@ function idempotencyKeyFor(storage, orderId, makeId) {
   return key;
 }
 
+export async function reconcilePendingSaleTransactions({ baseUrl, token, storage = globalThis.localStorage, fetchImpl = globalThis.fetch }) {
+  if (!baseUrl || !token) throw new Error('Connect this register to the Malik POS API before reconciling pending sales.');
+  if (!storage || typeof fetchImpl !== 'function') throw new Error('Shared sale reconciliation is unavailable in this environment.');
+  const outbox = readKeys(storage, SALE_OUTBOX_KEY);
+  const pending = Object.entries(outbox).filter(([orderId, payload]) =>
+    Boolean(orderId && payload && typeof payload === 'object' && payload.orderId === orderId && payload.idempotencyKey)
+  );
+  if (!pending.length) return [];
+  const response = await fetchImpl(new URL('/api/transactions?limit=200', baseUrl).toString(), {
+    headers: { authorization: 'Bearer ' + token }
+  });
+  let data = {};
+  try { data = await response.json(); } catch {}
+  if (!response.ok) throw new Error(data.error || 'Could not check pending shared sales against the server ledger.');
+  const byOrderId = new Map((Array.isArray(data.transactions) ? data.transactions : []).map(transaction => [String(transaction.order_id), transaction]));
+  const reconciled = [];
+  for (const [orderId, payload] of pending) {
+    const transaction = byOrderId.get(orderId);
+    if (!transaction) continue;
+    const tenders = Array.isArray(payload.tenders) ? payload.tenders : [];
+    reconciled.push({
+      orderId,
+      transaction,
+      payment: tenders.length ? String(tenders[0].method || 'Other') : 'Customer Due',
+      paidAt: transaction.occurred_at || payload.occurredAt || new Date().toISOString()
+    });
+    delete outbox[orderId];
+  }
+  if (reconciled.length) storage.setItem(SALE_OUTBOX_KEY, JSON.stringify(outbox));
+  return reconciled;
+}
+
 export async function recordSaleTransaction({ baseUrl, token, order, payment, storage = globalThis.localStorage, fetchImpl = globalThis.fetch, makeId = () => globalThis.crypto.randomUUID() }) {
   if (!baseUrl || !token) throw new Error('Connect this register to the Malik POS API before recording a shared sale.');
   if (!order || !order.id || !Array.isArray(order.items) || !order.items.length) throw new Error('A sale with at least one item is required.');
