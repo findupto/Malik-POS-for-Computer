@@ -28,5 +28,7 @@ jobs:
           sh -n server/backup.sh server/restore.sh
       - name: Run all unit tests
         run: npm test
+      - name: Build API container image
+        run: docker build -f server/Dockerfile -t malik-pos-api:ci .
       - name: Build web application
         run: npm run build
