@@ -63,10 +63,11 @@ test('uncertain shared sale is durably queued and retries the exact original pay
   assert.deepEqual(JSON.parse(storage.inspect('malik-transactionOutbox')), {});
 });
 
-test('reconciliation clears only queued sales confirmed by exact server order lookup', async () => {
+test('reconciliation requires an exact server order and idempotency-key match', async () => {
   const storage = fakeStorage({
     'malik-transactionOutbox': JSON.stringify({
       'MP-FOUND': { orderId: 'MP-FOUND', idempotencyKey: 'key-found', occurredAt: '2026-10-24T10:00:00.000Z', tenders: [{ method: 'Cash', amount: 25 }] },
+      'MP-MISMATCH': { orderId: 'MP-MISMATCH', idempotencyKey: 'key-local', tenders: [] },
       'MP-MISSING': { orderId: 'MP-MISSING', idempotencyKey: 'key-missing', tenders: [] }
     })
   });
@@ -76,23 +77,27 @@ test('reconciliation clears only queued sales confirmed by exact server order lo
     fetchImpl: async (url, options) => {
       calls.push({ url: new URL(url), options });
       const id = new URL(url).searchParams.get('orderId');
-      return { ok: true, status: 200, json: async () => ({
-        transactions: id === 'MP-FOUND' ? [{ order_id: id, total: 25, occurred_at: '2026-10-24T10:00:00.000Z' }] : []
-      }) };
+      const transactions = id === 'MP-FOUND'
+        ? [{ order_id: id, idempotency_key: 'key-found', total: 25, occurred_at: '2026-10-24T10:00:00.000Z' }]
+        : id === 'MP-MISMATCH'
+          ? [{ order_id: id, idempotency_key: 'key-from-another-register', total: 99, occurred_at: '2026-10-24T10:00:00.000Z' }]
+          : [];
+      return { ok: true, status: 200, json: async () => ({ transactions }) };
     }
   });
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 3);
   assert.equal(calls[0].options.headers.authorization, 'Bearer token');
   assert.equal(calls[0].url.searchParams.get('orderId'), 'MP-FOUND');
-  assert.equal(reconciled.length, 1);
-  assert.equal(reconciled[0].orderId, 'MP-FOUND');
+  assert.deepEqual(reconciled.map(item => item.orderId), ['MP-FOUND']);
   assert.equal(reconciled[0].payment, 'Cash');
   assert.deepEqual(JSON.parse(storage.inspect('malik-transactionOutbox')), {
     'MP-FOUND': { orderId: 'MP-FOUND', idempotencyKey: 'key-found', occurredAt: '2026-10-24T10:00:00.000Z', tenders: [{ method: 'Cash', amount: 25 }] },
+    'MP-MISMATCH': { orderId: 'MP-MISMATCH', idempotencyKey: 'key-local', tenders: [] },
     'MP-MISSING': { orderId: 'MP-MISSING', idempotencyKey: 'key-missing', tenders: [] }
   });
   clearReconciledSaleTransactions(['MP-FOUND'], storage);
   assert.deepEqual(JSON.parse(storage.inspect('malik-transactionOutbox')), {
+    'MP-MISMATCH': { orderId: 'MP-MISMATCH', idempotencyKey: 'key-local', tenders: [] },
     'MP-MISSING': { orderId: 'MP-MISSING', idempotencyKey: 'key-missing', tenders: [] }
   });
 });
