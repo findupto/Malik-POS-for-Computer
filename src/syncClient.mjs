@@ -94,3 +94,106 @@ export function buildSnapshotEvents(storage, role = 'admin', definitions = DEFAU
   return events;
 }
 
+
+export function applyPulledEvents(storage, events, cursorKey = CURSOR_KEY, definitions = DEFAULT_SYNC_ENTITIES) {
+  const byEntity = new Map(definitions.map(def => [def.entity, def]));
+  const grouped = new Map();
+  let nextCursor = Number(storage.getItem(cursorKey) || 0);
+  for (const event of events || []) {
+    const sequence = Number(event.sequence);
+    if (Number.isSafeInteger(sequence)) nextCursor = Math.max(nextCursor, sequence);
+    const def = byEntity.get(event.entity);
+    if (!def) continue;
+    if (!grouped.has(def.key)) grouped.set(def.key, { def, records: currentRecords(storage, def) });
+    const records = grouped.get(def.key).records;
+    if (event.operation === 'delete') delete records[String(event.record_id)];
+    else if (def.collection && event.payload && typeof event.payload === 'object') records[String(event.record_id)] = event.payload;
+    else if (!def.collection) records.singleton = { id: 'singleton', value: event.payload };
+  }
+  for (const { def, records } of grouped.values()) writeCurrentRecords(storage, def, records);
+  storage.setItem(cursorKey, String(nextCursor));
+  return nextCursor;
+}
+
+export function resolveSyncConflict(storage, conflictId, choice, role = 'admin', definitions = DEFAULT_SYNC_ENTITIES) {
+  const conflicts = readJson(storage, CONFLICTS_KEY, []);
+  const conflict = conflicts.find(item => item.id === conflictId);
+  if (!conflict) throw new Error('This sync conflict no longer exists.');
+  if (choice !== 'local' && choice !== 'remote') throw new Error('Choose local or remote data.');
+  if (choice === 'remote') {
+    const event = conflict.remoteEvent;
+    applyPulledEvents(storage, [{ ...event, sequence: Number(storage.getItem(CURSOR_KEY) || 0) }], CURSOR_KEY, definitions);
+    captureBaseline(storage, definitions, new Set(), role);
+    storage.setItem(OUTBOX_KEY, JSON.stringify(readJson(storage, OUTBOX_KEY, []).filter(item => !(item.entity === conflict.entity && item.recordId === conflict.recordId))));
+  }
+  storage.setItem(CONFLICTS_KEY, JSON.stringify(conflicts.filter(item => item.id !== conflictId)));
+  return conflict;
+}
+
+export async function loginToSyncApi(baseUrl, username, password, fetchImpl = fetch) {
+  const base = String(baseUrl || '').trim().replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(base)) throw new Error('Enter the API URL including http:// or https://.');
+  const response = await fetchImpl(base + '/api/auth/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.token) throw new Error(data.error || 'Sign-in failed.');
+  return { baseUrl: base, token: data.token, user: data.user };
+}
+
+export async function syncSnapshot({ baseUrl, token, storage, role = 'admin', fetchImpl = fetch }) {
+  const base = String(baseUrl || '').trim().replace(/\/+$/, '');
+  if (!token) throw new Error('Sign in to the sync server first.');
+  if (!/^https?:\/\//i.test(base)) throw new Error('Enter the API URL including http:// or https://.');
+  const authHeaders = { Authorization: 'Bearer ' + token };
+  const baseline = readJson(storage, BASELINE_KEY, null);
+  const pending = buildSnapshotEvents(storage, role);
+  const pendingByKey = new Map(pending.map(event => [event.entity + ':' + event.recordId, event]));
+  const existingConflicts = readJson(storage, CONFLICTS_KEY, []);
+  const conflictKeys = new Set(existingConflicts.map(item => item.entity + ':' + item.recordId));
+  let cursor = Number(storage.getItem(CURSOR_KEY) || 0);
+  let downloaded = 0;
+  let nextConflicts = [...existingConflicts];
+
+  for (let page = 0; page < 20; page++) {
+    const previousCursor = cursor;
+    const response = await fetchImpl(base + '/api/sync/pull?after=' + encodeURIComponent(cursor), { headers: authHeaders });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Download failed.');
+    const batch = data.events || [];
+    const safeBatch = [];
+    for (const event of batch) {
+      const key = event.entity + ':' + event.record_id;
+      const localEvent = pendingByKey.get(key);
+      const remoteValue = event.operation === 'delete' ? undefined : event.payload;
+      const localValue = localEvent?.operation === 'delete' ? undefined : localEvent?.payload;
+      if (localEvent && !conflictKeys.has(key) && stable(remoteValue) !== stable(localValue)) {
+        const conflict = { id: uuid(), entity: event.entity, recordId: String(event.record_id), local: localValue, remote: remoteValue, remoteEvent: event, detectedAt: new Date().toISOString() };
+        nextConflicts.push(conflict);
+        conflictKeys.add(key);
+      }
+      if (!conflictKeys.has(key)) safeBatch.push(event);
+    }
+    applyPulledEvents(storage, safeBatch);
+    cursor = Math.max(cursor, ...batch.map(event => Number(event.sequence) || 0));
+    storage.setItem(CURSOR_KEY, String(cursor));
+    downloaded += batch.length;
+    if (batch.length < 500 || cursor <= previousCursor) break;
+  }
+  storage.setItem(CONFLICTS_KEY, JSON.stringify(nextConflicts));
+
+  const outgoing = pending.filter(event => !conflictKeys.has(event.entity + ':' + event.recordId));
+  let uploaded = 0;
+  const headers = { ...authHeaders, 'Content-Type': 'application/json' };
+  for (let offset = 0; offset < outgoing.length; offset += 100) {
+    const response = await fetchImpl(base + '/api/sync/push', { method: 'POST', headers, body: JSON.stringify({ events: outgoing.slice(offset, offset + 100) }) });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Upload failed.');
+    uploaded += Number(data.accepted || 0);
+  }
+  const sentIds = new Set(outgoing.map(event => event.eventId));
+  storage.setItem(OUTBOX_KEY, JSON.stringify(readJson(storage, OUTBOX_KEY, []).filter(event => !sentIds.has(event.eventId))));
+  captureBaseline(storage, DEFAULT_SYNC_ENTITIES, conflictKeys, role);
+  return { uploaded, downloaded, cursor, conflicts: nextConflicts.length };
+}
