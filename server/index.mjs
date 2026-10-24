@@ -202,10 +202,33 @@ const server = http.createServer(async (req, res) => {
       try {
         await client.query('BEGIN');
         await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [user.locationId + ':transaction:' + idempotencyKey]);
-        const existing = await client.query('SELECT id,order_id,total,created_at FROM pos_transactions WHERE location_id=$1 AND idempotency_key=$2', [user.locationId, idempotencyKey]);
+        const existing = await client.query('SELECT id,order_id,customer_name,subtotal,discount_amount,tax_amount,service_charge_amount,delivery_fee,total,notes,payload,occurred_at,created_at FROM pos_transactions WHERE location_id=$1 AND idempotency_key=$2', [user.locationId, idempotencyKey]);
         if (existing.rowCount) {
+          const prior = existing.rows[0];
+          const priorLines = await client.query('SELECT product_id,sku,product_name,quantity,unit_price,line_total FROM pos_transaction_lines WHERE transaction_id=$1 ORDER BY id', [prior.id]);
+          const priorTenders = await client.query('SELECT method,amount,reference FROM pos_tenders WHERE transaction_id=$1 ORDER BY id', [prior.id]);
+          const sameNumber = (a, b) => Math.abs(Number(a || 0) - Number(b || 0)) < 0.000001;
+          const sameLines = priorLines.rows.length === lines.length && priorLines.rows.every((line, index) => {
+            const requested = lines[index];
+            return line.product_id === requested.productId && line.sku === requested.sku &&
+              line.product_name === requested.productName && sameNumber(line.quantity, requested.quantity) &&
+              sameNumber(line.unit_price, requested.unitPrice) && sameNumber(line.line_total, requested.lineTotal);
+          });
+          const sameTenders = priorTenders.rows.length === tenderRows.length && priorTenders.rows.every((tender, index) => {
+            const requested = tenderRows[index];
+            return tender.method === requested.method && sameNumber(tender.amount, requested.amount) && tender.reference === requested.reference;
+          });
+          const requestedPayload = { serviceType: String(input.serviceType || '').slice(0,40), tableNumber: String(input.tableNumber || '').slice(0,40) };
+          const storedPayload = prior.payload && typeof prior.payload === 'object' ? prior.payload : {};
+          const samePayload = prior.order_id === orderId && prior.customer_name === customerName &&
+            sameNumber(prior.subtotal, subtotal) && sameNumber(prior.discount_amount, discountAmount) &&
+            sameNumber(prior.tax_amount, taxAmount) && sameNumber(prior.service_charge_amount, serviceChargeAmount) &&
+            sameNumber(prior.delivery_fee, deliveryFee) && sameNumber(prior.total, total) &&
+            prior.notes === notes && JSON.stringify(storedPayload) === JSON.stringify(requestedPayload) &&
+            sameLines && sameTenders;
           await client.query('COMMIT');
-          return send(res, 200, { status: 'duplicate', transaction: existing.rows[0] });
+          if (!samePayload) return send(res, 409, { error: 'This idempotency key was already used for a different sale payload. Retry with the original sale details or use a new key for a new sale.' });
+          return send(res, 200, { status: 'duplicate', transaction: { id: prior.id, order_id: prior.order_id, total: prior.total, created_at: prior.created_at } });
         }
         const inserted = await client.query(
           'INSERT INTO pos_transactions(location_id,idempotency_key,order_id,customer_name,subtotal,discount_amount,tax_amount,service_charge_amount,delivery_fee,total,notes,payload,created_by,occurred_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id,order_id,total,created_at',
