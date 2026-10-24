@@ -85,6 +85,17 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   assert.equal(cashierLogin.status, 200);
   cashierToken = cashierLogin.data.token;
 
+  const teaOpening = await request('/api/inventory/adjustments', {
+    token: adminToken, method: 'POST',
+    body: { idempotencyKey: crypto.randomUUID(), productId: 'tea-1', sku: 'TEA-1', productName: 'Tea', quantityDelta: 5, reason: 'Integration test opening stock' }
+  });
+  assert.equal(teaOpening.status, 201);
+  const breadOpening = await request('/api/inventory/adjustments', {
+    token: adminToken, method: 'POST',
+    body: { idempotencyKey: crypto.randomUUID(), productId: 'bread-1', sku: 'BREAD-1', productName: 'Bread', quantityDelta: 4, reason: 'Integration test opening stock' }
+  });
+  assert.equal(breadOpening.status, 201);
+
   const saleKey = crypto.randomUUID();
   const saleOrderId = 'integration-sale-' + crypto.randomUUID();
   const saleBody = {
@@ -104,6 +115,38 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   const sale = await request('/api/transactions', { token: cashierToken, method: 'POST', body: saleBody });
   assert.equal(sale.status, 201);
   assert.equal(Number(sale.data.transaction.total), 265);
+  const inventoryAfterSale = await request('/api/inventory', { token: cashierToken });
+  assert.equal(inventoryAfterSale.status, 200);
+  assert.equal(Number(inventoryAfterSale.data.inventory.find(item => item.product_id === 'tea-1').quantity), 3);
+  assert.equal(Number(inventoryAfterSale.data.inventory.find(item => item.product_id === 'bread-1').quantity), 3);
+
+  const refundKey = crypto.randomUUID();
+  const refundBody = {
+    idempotencyKey: refundKey, amount: 50, method: 'Cash', reason: 'Integration test return',
+    restock: true, items: [{ productId: 'tea-1', productName: 'Tea', quantity: 1 }]
+  };
+  const refund = await request('/api/transactions/' + sale.data.transaction.id + '/refunds', {
+    token: adminToken, method: 'POST', body: refundBody
+  });
+  assert.equal(refund.status, 201);
+  assert.equal(Number(refund.data.refund.amount), 50);
+  const duplicateRefund = await request('/api/transactions/' + sale.data.transaction.id + '/refunds', {
+    token: adminToken, method: 'POST', body: refundBody
+  });
+  assert.equal(duplicateRefund.status, 200);
+  assert.equal(duplicateRefund.data.status, 'duplicate');
+  const inventoryAfterRefund = await request('/api/inventory', { token: cashierToken });
+  assert.equal(Number(inventoryAfterRefund.data.inventory.find(item => item.product_id === 'tea-1').quantity), 4);
+  const excessiveRefund = await request('/api/transactions/' + sale.data.transaction.id + '/refunds', {
+    token: adminToken, method: 'POST',
+    body: { idempotencyKey: crypto.randomUUID(), amount: 220, method: 'Cash', reason: 'Must exceed remaining amount' }
+  });
+  assert.equal(excessiveRefund.status, 409);
+  const cashierRefund = await request('/api/transactions/' + sale.data.transaction.id + '/refunds', {
+    token: cashierToken, method: 'POST',
+    body: { idempotencyKey: crypto.randomUUID(), amount: 1, method: 'Cash', reason: 'Role test' }
+  });
+  assert.equal(cashierRefund.status, 403);
   const duplicateSale = await request('/api/transactions', {
     token: cashierToken, method: 'POST',
     body: { ...saleBody, items: [{ productName: 'Changed retry payload', quantity: 1, unitPrice: 1 }] }
