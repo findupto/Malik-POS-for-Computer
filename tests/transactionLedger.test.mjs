@@ -59,7 +59,7 @@ test('uncertain shared sale is durably queued and retries the exact original pay
   await recordSaleTransaction({ ...args, order: changedOrder, payment: 'Card' });
   assert.deepEqual(calls[1].body, calls[0].body);
   assert.ok(JSON.parse(storage.inspect('malik-transactionOutbox'))[order.id], 'successful retry stays queued until local completion is persisted');
-  clearReconciledSaleTransactions([order.id], storage);
+  clearReconciledSaleTransactions([{ orderId: order.id, idempotencyKey: JSON.parse(storage.inspect('malik-transactionOutbox'))[order.id].idempotencyKey }], storage);
   assert.deepEqual(JSON.parse(storage.inspect('malik-transactionOutbox')), {});
 });
 
@@ -95,11 +95,17 @@ test('reconciliation requires an exact server order and idempotency-key match', 
     'MP-MISMATCH': { orderId: 'MP-MISMATCH', idempotencyKey: 'key-local', tenders: [] },
     'MP-MISSING': { orderId: 'MP-MISSING', idempotencyKey: 'key-missing', tenders: [] }
   });
-  clearReconciledSaleTransactions(['MP-FOUND'], storage);
+  clearReconciledSaleTransactions([{ orderId: 'MP-FOUND', idempotencyKey: 'key-found' }], storage);
   assert.deepEqual(JSON.parse(storage.inspect('malik-transactionOutbox')), {
     'MP-MISMATCH': { orderId: 'MP-MISMATCH', idempotencyKey: 'key-local', tenders: [] },
     'MP-MISSING': { orderId: 'MP-MISSING', idempotencyKey: 'key-missing', tenders: [] }
   });
+});
+
+test('outbox clearing never deletes a replacement request with a different key', () => {
+  const storage = fakeStorage({ 'malik-transactionOutbox': JSON.stringify({ 'MP-1': { orderId: 'MP-1', idempotencyKey: 'new-key' } }) });
+  clearReconciledSaleTransactions([{ orderId: 'MP-1', idempotencyKey: 'old-key' }], storage);
+  assert.deepEqual(JSON.parse(storage.inspect('malik-transactionOutbox')), { 'MP-1': { orderId: 'MP-1', idempotencyKey: 'new-key' } });
 });
 
 test('pending shared sale summary lists only safe retry metadata', async () => {
