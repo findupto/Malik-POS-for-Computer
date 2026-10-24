@@ -66,7 +66,7 @@ export default function CloudSyncPanel() {
 
   function chooseConflict(conflict, choice) {
     try {
-      resolveSyncConflict(localStorage, conflict.id, choice);
+      resolveSyncConflict(localStorage, conflict.id, choice, session.user.role);
       setConflicts(JSON.parse(localStorage.getItem(CONFLICTS_KEY) || '[]'));
       setStatus(choice === 'local'
         ? 'Kept this computer’s version. It will upload on the next sync.'
