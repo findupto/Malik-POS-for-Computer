@@ -129,3 +129,32 @@ test('pending sync events retain IDs across failed network attempts', async () =
   const second = buildSnapshotEvents(storage, 'admin');
   assert.equal(second[0].eventId, first[0].eventId);
 });
+
+
+test('conflict review retains the newest server version from a multi-event pull', async () => {
+  const { syncSnapshot } = await import('../src/syncClient.mjs');
+  const storage = fakeStorage({ 'malik-orders': JSON.stringify([{ id: 'o-1', total: 10 }]) });
+  const fetchMock = async (url, options = {}) => {
+    if (String(url).includes('/api/sync/pull')) {
+      const after = Number(new URL(String(url)).searchParams.get('after') || 0);
+      if (after > 0) return { ok: true, json: async () => ({ events: [] }) };
+      return { ok: true, json: async () => ({ events: [
+        { sequence: 1, entity: 'orders', record_id: 'o-1', operation: 'upsert', payload: { id: 'o-1', total: 20 } },
+        { sequence: 2, entity: 'orders', record_id: 'o-1', operation: 'upsert', payload: { id: 'o-1', total: 30 } }
+      ] }) };
+    }
+    const body = JSON.parse(options.body || '{"events":[]}');
+    return { ok: true, json: async () => ({ accepted: body.events.length }) };
+  };
+  // Establish a baseline/outbox before the remote edits arrive.
+  const firstStorage = fakeStorage({ 'malik-orders': JSON.stringify([{ id: 'o-1', total: 10 }]) });
+  await syncSnapshot({ baseUrl: 'https://pos.example.test', token: 'token', storage: firstStorage, fetchImpl: async url => ({ ok: true, json: async () => ({ events: [] }) }) });
+  storage.setItem('malik-syncBaseline', firstStorage.inspect('malik-syncBaseline'));
+  storage.setItem('malik-syncOutbox', firstStorage.inspect('malik-syncOutbox') || '[]');
+  storage.setItem('malik-orders', JSON.stringify([{ id: 'o-1', total: 15 }]));
+  await syncSnapshot({ baseUrl: 'https://pos.example.test', token: 'token', storage, fetchImpl: fetchMock });
+  const conflicts = JSON.parse(storage.inspect('malik-syncConflicts'));
+  assert.equal(conflicts.length, 1);
+  assert.deepEqual(conflicts[0].remote, { id: 'o-1', total: 30 });
+  assert.equal(conflicts[0].remoteEvent.sequence, 2);
+});
