@@ -85,6 +85,41 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   assert.equal(cashierLogin.status, 200);
   cashierToken = cashierLogin.data.token;
 
+  const saleKey = crypto.randomUUID();
+  const saleOrderId = 'integration-sale-' + crypto.randomUUID();
+  const saleBody = {
+    idempotencyKey: saleKey,
+    orderId: saleOrderId,
+    customerName: 'Integration Customer',
+    items: [
+      { productId: 'tea-1', sku: 'TEA-1', productName: 'Tea', quantity: 2, unitPrice: 100 },
+      { productId: 'bread-1', sku: 'BREAD-1', productName: 'Bread', quantity: 1, unitPrice: 50 }
+    ],
+    discountAmount: 10,
+    taxAmount: 5,
+    serviceChargeAmount: 0,
+    deliveryFee: 20,
+    tenders: [{ method: 'Cash', amount: 165, reference: 'test-cash' }]
+  };
+  const sale = await request('/api/transactions', { token: cashierToken, method: 'POST', body: saleBody });
+  assert.equal(sale.status, 201);
+  assert.equal(Number(sale.data.transaction.total), 265);
+  const duplicateSale = await request('/api/transactions', {
+    token: cashierToken, method: 'POST',
+    body: { ...saleBody, items: [{ productName: 'Changed retry payload', quantity: 1, unitPrice: 1 }] }
+  });
+  assert.equal(duplicateSale.status, 200);
+  assert.equal(duplicateSale.data.status, 'duplicate');
+  assert.equal(duplicateSale.data.transaction.id, sale.data.transaction.id);
+  const invalidSale = await request('/api/transactions', {
+    token: cashierToken, method: 'POST',
+    body: { ...saleBody, idempotencyKey: crypto.randomUUID(), orderId: 'invalid-discount-' + crypto.randomUUID(), discountAmount: 99999 }
+  });
+  assert.equal(invalidSale.status, 400);
+  const transactions = await request('/api/transactions?limit=10', { token: cashierToken });
+  assert.equal(transactions.status, 200);
+  assert.ok(transactions.data.transactions.some(item => item.order_id === saleOrderId));
+
   const recordId = 'integration-order-' + crypto.randomUUID();
   const firstEventId = crypto.randomUUID();
   const first = await request('/api/sync/push', {
