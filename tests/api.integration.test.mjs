@@ -173,6 +173,18 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   assert.equal(duplicateSale.status, 200);
   assert.equal(duplicateSale.data.status, 'duplicate');
   assert.equal(duplicateSale.data.transaction.id, sale.data.transaction.id);
+  const inventoryAfterDuplicateSale = await request('/api/inventory', { token: cashierToken });
+  assert.equal(Number(inventoryAfterDuplicateSale.data.inventory.find(item => item.product_id === 'tea-1').quantity), 4);
+  const insufficientStock = await request('/api/transactions', {
+    token: cashierToken, method: 'POST',
+    body: {
+      ...saleBody,
+      idempotencyKey: crypto.randomUUID(),
+      orderId: 'insufficient-stock-' + crypto.randomUUID(),
+      items: [{ productId: 'tea-1', sku: 'TEA-1', productName: 'Tea', quantity: 99, unitPrice: 1 }]
+    }
+  });
+  assert.equal(insufficientStock.status, 409);
   const invalidSale = await request('/api/transactions', {
     token: cashierToken, method: 'POST',
     body: { ...saleBody, idempotencyKey: crypto.randomUUID(), orderId: 'invalid-discount-' + crypto.randomUUID(), discountAmount: 99999 }
