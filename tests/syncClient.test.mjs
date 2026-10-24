@@ -116,3 +116,16 @@ test('concurrent local and server edits are held for explicit conflict review', 
   assert.deepEqual(JSON.parse(storage.inspect('malik-orders')), [{ id: 'o-1', total: 20 }]);
   assert.equal(JSON.parse(storage.inspect('malik-syncConflicts')).length, 1);
 });
+
+
+test('pending sync events retain IDs across failed network attempts', async () => {
+  const { syncSnapshot } = await import('../src/syncClient.mjs');
+  const storage = fakeStorage({ 'malik-orders': JSON.stringify([{ id: 'o-1', total: 50 }]) });
+  const first = buildSnapshotEvents(storage, 'admin');
+  await assert.rejects(() => syncSnapshot({
+    baseUrl: 'https://pos.example.test', token: 'token', storage,
+    fetchImpl: async () => { throw new Error('network down'); }
+  }), /network down/);
+  const second = buildSnapshotEvents(storage, 'admin');
+  assert.equal(second[0].eventId, first[0].eventId);
+});
