@@ -202,6 +202,32 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
     }
   });
   assert.equal(insufficientStock.status, 409);
+
+  // Two registers race to sell more stock than is available in aggregate.
+  const concurrentProductId = 'race-' + crypto.randomUUID();
+  const concurrentOpening = await request('/api/inventory/adjustments', {
+    token: adminToken, method: 'POST',
+    body: { idempotencyKey: crypto.randomUUID(), productId: concurrentProductId, sku: 'RACE', productName: 'Concurrent Sale Test', quantityDelta: 5, reason: 'Concurrent sale test opening stock' }
+  });
+  assert.equal(concurrentOpening.status, 201);
+  const makeConcurrentSale = (suffix) => request('/api/transactions', {
+    token: cashierToken, method: 'POST',
+    body: {
+      idempotencyKey: crypto.randomUUID(),
+      orderId: 'concurrent-sale-' + suffix + '-' + crypto.randomUUID(),
+      items: [{ productId: concurrentProductId, sku: 'RACE', productName: 'Concurrent Sale Test', quantity: 4, unitPrice: 10 }],
+      discountAmount: 0, taxAmount: 0, serviceChargeAmount: 0, deliveryFee: 0,
+      tenders: [{ method: 'Cash', amount: 40 }]
+    }
+  });
+  const concurrentResults = await Promise.all([makeConcurrentSale('a'), makeConcurrentSale('b')]);
+  assert.deepEqual(concurrentResults.map(result => result.status).sort(), [201, 409]);
+  const concurrentBalance = await request('/api/inventory', { token: cashierToken });
+  assert.equal(Number(concurrentBalance.data.inventory.find(item => item.product_id === concurrentProductId).quantity), 1);
+  const concurrentMovements = await request('/api/inventory/movements?limit=200&productId=' + encodeURIComponent(concurrentProductId), { token: cashierToken });
+  assert.equal(concurrentMovements.status, 200);
+  assert.equal(concurrentMovements.data.movements.filter(item => item.reference_type === 'sale').length, 1);
+
   const invalidSale = await request('/api/transactions', {
     token: cashierToken, method: 'POST',
     body: { ...saleBody, idempotencyKey: crypto.randomUUID(), orderId: 'invalid-discount-' + crypto.randomUUID(), discountAmount: 99999 }
