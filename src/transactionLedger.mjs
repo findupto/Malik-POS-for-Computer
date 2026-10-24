@@ -144,3 +144,28 @@ export async function initializeServerInventory({ baseUrl, token, products, fetc
   }
   return results;
 }
+
+
+export async function recordInventoryAdjustment({ baseUrl, token, product, quantityDelta, reason, idempotencyKey = globalThis.crypto.randomUUID(), fetchImpl = globalThis.fetch }) {
+  if (!baseUrl || !token) throw new Error('Connect this register to the Malik POS API first.');
+  const delta = Number(quantityDelta);
+  if (!product?.id || !String(product.name || '').trim()) throw new Error('Choose a valid product.');
+  if (!Number.isFinite(delta) || delta === 0 || Math.abs(delta * 1000 - Math.round(delta * 1000)) > 1e-6) throw new Error('Enter a non-zero quantity with at most three decimal places.');
+  if (!String(reason || '').trim()) throw new Error('Enter a reason for the stock adjustment.');
+  const response = await fetchImpl(new URL('/api/inventory/adjustments', baseUrl).toString(), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token },
+    body: JSON.stringify({
+      idempotencyKey,
+      productId: String(product.id),
+      sku: String(product.sku || ''),
+      productName: String(product.name || ''),
+      quantityDelta: delta,
+      reason: String(reason).trim()
+    })
+  });
+  let data = {};
+  try { data = await response.json(); } catch {}
+  if (!response.ok) throw new Error(data.error || 'The server rejected the stock adjustment.');
+  return data;
+}
