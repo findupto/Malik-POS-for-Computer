@@ -283,7 +283,7 @@ const server = http.createServer(async (req, res) => {
       const result = await pool.query('SELECT product_id,sku,product_name,quantity,updated_at FROM inventory_balances WHERE location_id=$1 ORDER BY product_name', [user.locationId]);
       return send(res, 200, { inventory: result.rows });
     }
-    const refundMatch = url.pathname.match(/^\\/api\\/transactions\\/([0-9a-f-]{36})\\/refunds$/i);
+    const refundMatch = url.pathname.match(/^\/api\/transactions\/([0-9a-f-]{36})\/refunds$/i);
     if (req.method === 'POST' && refundMatch) {
       if (!['admin','manager'].includes(user.role)) return send(res, 403, { error: 'Administrator or manager role required for refunds.' });
       const [, transactionId] = refundMatch;
