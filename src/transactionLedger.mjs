@@ -102,3 +102,41 @@ export async function recordRefundTransaction({ baseUrl, token, order, refund, s
   if (!result.ok) throw new Error(resultData.error || 'The server did not record this refund. No local refund was recorded; retry after resolving the issue.');
   return resultData;
 }
+
+
+export async function fetchServerInventory({ baseUrl, token, fetchImpl = globalThis.fetch }) {
+  if (!baseUrl || !token) throw new Error('Connect this register to the Malik POS API first.');
+  const response = await fetchImpl(new URL('/api/inventory', baseUrl).toString(), {
+    headers: { authorization: 'Bearer ' + token }
+  });
+  let data = {};
+  try { data = await response.json(); } catch {}
+  if (!response.ok) throw new Error(data.error || 'Could not load server inventory.');
+  return Array.isArray(data.inventory) ? data.inventory : [];
+}
+
+export async function initializeServerInventory({ baseUrl, token, products, fetchImpl = globalThis.fetch }) {
+  if (!baseUrl || !token) throw new Error('Connect this register to the Malik POS API first.');
+  if (!Array.isArray(products)) throw new Error('Product catalog is not available.');
+  const results = [];
+  for (const product of products) {
+    const productId = String(product?.id ?? '').trim();
+    const productName = String(product?.name || '').trim();
+    if (!productId || !productName) continue;
+    const response = await fetchImpl(new URL('/api/inventory/initialize', baseUrl).toString(), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token },
+      body: JSON.stringify({
+        productId,
+        sku: String(product.sku || ''),
+        productName,
+        quantity: Math.max(0, Number(product.stock) || 0)
+      })
+    });
+    let data = {};
+    try { data = await response.json(); } catch {}
+    if (!response.ok) throw new Error(data.error || 'Could not initialize stock for ' + productName + '.');
+    results.push({ productId, productName, status: data.status, quantity: Number(data.inventory?.quantity ?? product.stock ?? 0) });
+  }
+  return results;
+}
