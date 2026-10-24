@@ -224,8 +224,8 @@ const server = http.createServer(async (req, res) => {
             sameNumber(prior.subtotal, subtotal) && sameNumber(prior.discount_amount, discountAmount) &&
             sameNumber(prior.tax_amount, taxAmount) && sameNumber(prior.service_charge_amount, serviceChargeAmount) &&
             sameNumber(prior.delivery_fee, deliveryFee) && sameNumber(prior.total, total) &&
-            prior.notes === notes && JSON.stringify(storedPayload) === JSON.stringify(requestedPayload) &&
-            sameLines && sameTenders;
+            prior.notes === notes && storedPayload.serviceType === requestedPayload.serviceType &&
+            storedPayload.tableNumber === requestedPayload.tableNumber && sameLines && sameTenders;
           await client.query('COMMIT');
           if (!samePayload) return send(res, 409, { error: 'This idempotency key was already used for a different sale payload. Retry with the original sale details or use a new key for a new sale.' });
           return send(res, 200, { status: 'duplicate', transaction: { id: prior.id, order_id: prior.order_id, total: prior.total, created_at: prior.created_at } });
