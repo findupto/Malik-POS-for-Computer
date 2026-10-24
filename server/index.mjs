@@ -16,6 +16,9 @@ const bootstrapUser = process.env.BOOTSTRAP_ADMIN_USERNAME;
 const bootstrapPassword = process.env.BOOTSTRAP_ADMIN_PASSWORD;
 const defaultLocationName = process.env.DEFAULT_LOCATION_NAME || 'Main location';
 const allowedOrigin = process.env.CORS_ORIGIN || '';
+const loginAttempts = new Map();
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_ATTEMPTS = 10;
 if (!databaseUrl || !jwtSecret || jwtSecret.length < 32) {
   console.error('Set DATABASE_URL and JWT_SECRET (at least 32 characters) before starting the API.');
   process.exit(1);
@@ -110,9 +113,21 @@ const server = http.createServer(async (req, res) => {
       const username = String(input.username || '').trim().toLowerCase();
       const password = String(input.password || '');
       if (!username || !password || password.length > 1024) return send(res, 400, { error: 'Username and password are required.' });
+      const ip = String(req.socket.remoteAddress || 'unknown');
+      const now = Date.now();
+      const prior = loginAttempts.get(ip);
+      if (prior && now - prior.startedAt < LOGIN_WINDOW_MS && prior.count >= LOGIN_MAX_ATTEMPTS) {
+        return send(res, 429, { error: 'Too many sign-in attempts. Wait 15 minutes and try again.' });
+      }
+      if (!prior || now - prior.startedAt >= LOGIN_WINDOW_MS) loginAttempts.set(ip, { startedAt: now, count: 0 });
       const found = await pool.query('SELECT id,location_id,username,password_hash,display_name,role,active FROM staff_users WHERE username=$1', [username]);
       const user = found.rows[0];
-      if (!user || !user.active || !(await verifyPassword(password, user.password_hash))) return send(res, 401, { error: 'Invalid username or password.' });
+      if (!user || !user.active || !(await verifyPassword(password, user.password_hash))) {
+        const attempt = loginAttempts.get(ip);
+        attempt.count += 1;
+        return send(res, 401, { error: 'Invalid username or password.' });
+      }
+      loginAttempts.delete(ip);
       return send(res, 200, { token: tokenFor(user), user: { id: user.id, username: user.username, name: user.display_name, role: user.role, locationId: user.location_id } });
     }
     const user = authFrom(req);
@@ -159,6 +174,28 @@ const server = http.createServer(async (req, res) => {
       const result = await pool.query('SELECT sequence,event_id,entity,record_id,operation,payload,actor_id,occurred_at,received_at FROM sync_events WHERE location_id=$1 AND sequence>$2 ORDER BY sequence LIMIT 500', [user.locationId, after]);
       return send(res, 200, { events: result.rows, nextAfter: result.rows.length ? Number(result.rows[result.rows.length - 1].sequence) : after });
     }
+    if (url.pathname === '/api/admin/users') {
+      if (user.role !== 'admin') return send(res, 403, { error: 'Administrator role required.' });
+      if (req.method === 'GET') {
+        const result = await pool.query('SELECT id,username,display_name,role,active,created_at FROM staff_users WHERE location_id=$1 ORDER BY username', [user.locationId]);
+        return send(res, 200, { users: result.rows });
+      }
+      if (req.method === 'POST') {
+        const input = await bodyJson(req, 16_000);
+        const username = String(input.username || '').trim().toLowerCase();
+        const password = String(input.password || '');
+        const displayName = String(input.displayName || '').trim();
+        const role = String(input.role || '');
+        if (!/^[a-z0-9._-]{3,64}$/.test(username)) return send(res, 400, { error: 'Username must be 3–64 characters using letters, numbers, dots, underscores or hyphens.' });
+        if (password.length < 12 || password.length > 1024) return send(res, 400, { error: 'Password must be at least 12 characters.' });
+        if (!displayName || displayName.length > 100) return send(res, 400, { error: 'Display name is required (maximum 100 characters).' });
+        if (!['admin','manager','cashier'].includes(role)) return send(res, 400, { error: 'Role must be admin, manager or cashier.' });
+        const inserted = await pool.query('INSERT INTO staff_users(location_id,username,password_hash,display_name,role) VALUES ($1,$2,$3,$4,$5) RETURNING id,username,display_name,role,active,created_at',
+          [user.locationId, username, await hashPassword(password), displayName, role]);
+        return send(res, 201, { user: inserted.rows[0] });
+      }
+      return send(res, 405, { error: 'Method not allowed.' });
+    }
     if (req.method === 'GET' && url.pathname === '/api/admin/locations') {
       if (user.role !== 'admin') return send(res, 403, { error: 'Administrator role required.' });
       const result = await pool.query('SELECT id,name,timezone,active,created_at FROM locations ORDER BY name');
@@ -167,6 +204,7 @@ const server = http.createServer(async (req, res) => {
     return send(res, 404, { error: 'Route not found.' });
   } catch (error) {
     console.error('API request failed:', error);
+    if (error.code === '23505') return send(res, 409, { error: 'That username already exists.' });
     return send(res, error.status || 500, { error: error.status ? error.message : 'Internal server error.' });
   }
 });
