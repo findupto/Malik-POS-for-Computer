@@ -66,3 +66,53 @@ test('login trims trailing slashes from the API URL', async () => {
   assert.equal(requestedUrl, 'https://pos.example.test/api/auth/login');
   assert.equal(result.baseUrl, 'https://pos.example.test');
 });
+
+
+test('snapshot sync uploads only changed records and emits delete tombstones', async () => {
+  const { syncSnapshot } = await import('../src/syncClient.mjs');
+  const storage = fakeStorage({
+    'malik-orders': JSON.stringify([{ id: 'o-1', total: 10 }, { id: 'o-2', total: 20 }])
+  });
+  const pushed = [];
+  const fetchMock = async (url, options = {}) => {
+    if (String(url).includes('/api/sync/pull')) return { ok: true, json: async () => ({ events: [] }) };
+    const body = JSON.parse(options.body);
+    pushed.push(...body.events);
+    return { ok: true, json: async () => ({ accepted: body.events.length }) };
+  };
+  await syncSnapshot({ baseUrl: 'https://pos.example.test', token: 'token', storage, fetchImpl: fetchMock });
+  assert.equal(pushed.length, 2);
+  pushed.length = 0;
+  storage.setItem('malik-orders', JSON.stringify([{ id: 'o-1', total: 15 }]));
+  await syncSnapshot({ baseUrl: 'https://pos.example.test', token: 'token', storage, fetchImpl: fetchMock });
+  assert.equal(pushed.length, 2);
+  assert.equal(pushed.find(e => e.recordId === 'o-1').operation, 'upsert');
+  assert.equal(pushed.find(e => e.recordId === 'o-2').operation, 'delete');
+});
+
+test('concurrent local and server edits are held for explicit conflict review', async () => {
+  const { syncSnapshot } = await import('../src/syncClient.mjs');
+  const storage = fakeStorage({ 'malik-orders': JSON.stringify([{ id: 'o-1', total: 10 }]) });
+  const fetchMock = async (url, options = {}) => {
+    if (String(url).includes('/api/sync/pull')) return { ok: true, json: async () => ({ events: [] }) };
+    const body = JSON.parse(options.body);
+    return { ok: true, json: async () => ({ accepted: body.events.length }) };
+  };
+  await syncSnapshot({ baseUrl: 'https://pos.example.test', token: 'token', storage, fetchImpl: fetchMock });
+  storage.setItem('malik-orders', JSON.stringify([{ id: 'o-1', total: 20 }]));
+  let served = false;
+  const conflictFetch = async (url, options = {}) => {
+    if (String(url).includes('/api/sync/pull')) {
+      if (served) return { ok: true, json: async () => ({ events: [] }) };
+      served = true;
+      return { ok: true, json: async () => ({ events: [{ sequence: 1, entity: 'orders', record_id: 'o-1', operation: 'upsert', payload: { id: 'o-1', total: 30 } }] }) };
+    }
+    const body = JSON.parse(options.body);
+    assert.equal(body.events.some(e => e.recordId === 'o-1'), false);
+    return { ok: true, json: async () => ({ accepted: body.events.length }) };
+  };
+  const result = await syncSnapshot({ baseUrl: 'https://pos.example.test', token: 'token', storage, fetchImpl: conflictFetch });
+  assert.equal(result.conflicts, 1);
+  assert.deepEqual(JSON.parse(storage.inspect('malik-orders')), [{ id: 'o-1', total: 20 }]);
+  assert.equal(JSON.parse(storage.inspect('malik-syncConflicts')).length, 1);
+});
