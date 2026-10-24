@@ -15,5 +15,31 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+  api:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8787
+      DATABASE_URL: postgresql://malik_pos:${POSTGRES_PASSWORD}@db:5432/malik_pos
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in server/.env}
+      BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-owner}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:?Set BOOTSTRAP_ADMIN_PASSWORD in server/.env}
+      DEFAULT_LOCATION_NAME: ${DEFAULT_LOCATION_NAME:-Main location}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://127.0.0.1:5173}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
+    ports:
+      - "${API_BIND_IP:-127.0.0.1}:${API_PORT:-8787}:8787"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 volumes:
   malik_pos_db:
