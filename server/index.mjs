@@ -315,7 +315,16 @@ const server = http.createServer(async (req, res) => {
       let productClause = '';
       if (productId) { values.push(productId); productClause = ' AND m.product_id=$2'; }
       values.push(limit);
-      const limitParam = '
+      const limitParam = '$' + values.length;
+      const result = await pool.query(
+        'SELECT m.id,m.product_id,m.sku,m.product_name,m.quantity_delta,m.quantity_after,m.reason,m.reference_type,m.reference_id,m.created_at,u.username AS actor_username ' +
+        'FROM inventory_movements m LEFT JOIN staff_users u ON u.id=m.actor_id ' +
+        'WHERE m.location_id=$1' + productClause + ' ORDER BY m.created_at DESC,m.id DESC LIMIT ' + limitParam,
+        values
+      );
+      return send(res, 200, { movements: result.rows });
+    }
+    if (req.method === 'GET' && url.pathname === '/api/inventory') {
       const result = await pool.query('SELECT product_id,sku,product_name,quantity,updated_at FROM inventory_balances WHERE location_id=$1 ORDER BY product_name', [user.locationId]);
       return send(res, 200, { inventory: result.rows });
     }
