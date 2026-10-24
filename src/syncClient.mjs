@@ -194,6 +194,14 @@ export async function syncSnapshot({ baseUrl, token, storage, role = 'admin', fe
       }
       if (!conflictKeys.has(key)) safeBatch.push(event);
     }
+    const observedVersions = readJson(storage, VERSIONS_KEY, {});
+    for (const event of batch) {
+      const sequence = Number(event.sequence);
+      if (event.entity && event.record_id != null && Number.isSafeInteger(sequence)) {
+        observedVersions[event.entity + ':' + String(event.record_id)] = sequence;
+      }
+    }
+    storage.setItem(VERSIONS_KEY, JSON.stringify(observedVersions));
     applyPulledEvents(storage, safeBatch);
     cursor = Math.max(cursor, ...batch.map(event => Number(event.sequence) || 0));
     storage.setItem(CURSOR_KEY, String(cursor));
