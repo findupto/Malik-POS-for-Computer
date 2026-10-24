@@ -151,6 +151,16 @@ const server = http.createServer(async (req, res) => {
           if (!isUuid(event.eventId) || !/^[a-z][a-z0-9_-]{0,63}$/.test(String(event.entity || '')) || !String(event.recordId || '').trim() || String(event.recordId).length > 200 || !['upsert','delete'].includes(event.operation)) {
             throw Object.assign(new Error('Each event needs a UUID eventId, valid entity/recordId and upsert/delete operation.'), { status: 400 });
           }
+          const priorEvent = await client.query('SELECT sequence FROM sync_events WHERE event_id=$1', [event.eventId]);
+          if (priorEvent.rowCount) { results.push({ eventId: event.eventId, status: 'duplicate', sequence: Number(priorEvent.rows[0].sequence) }); continue; }
+          if (Object.hasOwn(event, 'expectedSequence')) {
+            const latest = await client.query('SELECT sequence FROM sync_events WHERE location_id=$1 AND entity=$2 AND record_id=$3 ORDER BY sequence DESC LIMIT 1', [user.locationId,event.entity,event.recordId]);
+            const expectedSequence = event.expectedSequence === null ? null : Number(event.expectedSequence);
+            const actualSequence = latest.rowCount ? Number(latest.rows[0].sequence) : null;
+            if (expectedSequence !== actualSequence) {
+              throw Object.assign(new Error('Sync conflict: this record changed on the server. Sync again to review the conflict.'), { status: 409 });
+            }
+          }
           const inserted = await client.query('INSERT INTO sync_events(event_id,location_id,entity,record_id,operation,payload,actor_id,occurred_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(event_id) DO NOTHING RETURNING sequence',
             [event.eventId,user.locationId,event.entity,event.recordId,event.operation,event.payload === undefined ? null : JSON.stringify(event.payload),user.sub,event.occurredAt && Number.isFinite(Date.parse(event.occurredAt)) ? new Date(event.occurredAt).toISOString() : null]);
           if (!inserted.rowCount) { results.push({ eventId: event.eventId, status: 'duplicate' }); continue; }
