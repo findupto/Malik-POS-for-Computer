@@ -1,0 +1,119 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { setTimeout as delay } from 'node:timers/promises';
+import crypto from 'node:crypto';
+
+const databaseUrl = process.env.TEST_DATABASE_URL;
+const enabled = Boolean(databaseUrl);
+const host = '127.0.0.1';
+const port = Number(process.env.TEST_API_PORT || 18787);
+const baseUrl = `http://${host}:${port}`;
+const adminUsername = 'integration-admin';
+const adminPassword = 'test-only-admin-password-123';
+let child;
+let adminToken;
+let cashierToken;
+
+async function request(path, { token, method = 'GET', body } = {}) {
+  const response = await fetch(baseUrl + path, {
+    method,
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(body !== undefined ? { 'Content-Type': 'application/json' } : {})
+    },
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {})
+  });
+  return { status: response.status, data: await response.json().catch(() => ({})) };
+}
+
+test('PostgreSQL API integration: auth, idempotency, concurrency and role checks', { skip: !enabled, timeout: 45_000 }, async t => {
+  child = spawn(process.execPath, ['--env-file-if-exists=server/.env', 'server/index.mjs'], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      DATABASE_URL: databaseUrl,
+      JWT_SECRET: 'integration-test-secret-key-at-least-32-characters-long',
+      BOOTSTRAP_ADMIN_USERNAME: adminUsername,
+      BOOTSTRAP_ADMIN_PASSWORD: adminPassword,
+      DEFAULT_LOCATION_NAME: 'Integration Test Location',
+      HOST: host,
+      PORT: String(port)
+    },
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  let logs = '';
+  child.stdout.on('data', chunk => { logs += chunk.toString(); });
+  child.stderr.on('data', chunk => { logs += chunk.toString(); });
+  t.after(async () => {
+    if (child && child.exitCode === null) {
+      child.kill('SIGTERM');
+      await Promise.race([
+        new Promise(resolve => child.once('exit', resolve)),
+        delay(3000)
+      ]);
+      if (child.exitCode === null) child.kill('SIGKILL');
+    }
+  });
+
+  let healthy = false;
+  for (let i = 0; i < 80; i += 1) {
+    if (child.exitCode !== null) break;
+    try {
+      const response = await fetch(baseUrl + '/health');
+      if (response.ok) { healthy = true; break; }
+    } catch {}
+    await delay(250);
+  }
+  assert.equal(healthy, true, `API did not become healthy. Logs: ${logs}`);
+
+  const login = await request('/api/auth/login', { method: 'POST', body: { username: adminUsername, password: adminPassword } });
+  assert.equal(login.status, 200);
+  adminToken = login.data.token;
+  assert.ok(adminToken);
+
+  const created = await request('/api/admin/users', {
+    token: adminToken,
+    method: 'POST',
+    body: { username: 'integration-cashier', displayName: 'Integration Cashier', role: 'cashier', password: 'test-only-cashier-password-123' }
+  });
+  assert.equal(created.status, 201);
+  const cashierLogin = await request('/api/auth/login', {
+    method: 'POST',
+    body: { username: 'integration-cashier', password: 'test-only-cashier-password-123' }
+  });
+  assert.equal(cashierLogin.status, 200);
+  cashierToken = cashierLogin.data.token;
+
+  const recordId = 'integration-order-' + crypto.randomUUID();
+  const firstEventId = crypto.randomUUID();
+  const first = await request('/api/sync/push', {
+    token: adminToken, method: 'POST',
+    body: { events: [{ eventId: firstEventId, entity: 'orders', recordId, operation: 'upsert', payload: { id: recordId, total: 100 }, expectedSequence: null }] }
+  });
+  assert.equal(first.status, 200);
+  assert.equal(first.data.results[0].status, 'applied');
+
+  const duplicate = await request('/api/sync/push', {
+    token: adminToken, method: 'POST',
+    body: { events: [{ eventId: firstEventId, entity: 'orders', recordId, operation: 'upsert', payload: { id: recordId, total: 100 }, expectedSequence: null }] }
+  });
+  assert.equal(duplicate.status, 200);
+  assert.equal(duplicate.data.results[0].status, 'duplicate');
+
+  const staleWrite = await request('/api/sync/push', {
+    token: adminToken, method: 'POST',
+    body: { events: [{ eventId: crypto.randomUUID(), entity: 'orders', recordId, operation: 'upsert', payload: { id: recordId, total: 999 }, expectedSequence: null }] }
+  });
+  assert.equal(staleWrite.status, 409);
+
+  const denied = await request('/api/sync/push', {
+    token: cashierToken, method: 'POST',
+    body: { events: [{ eventId: crypto.randomUUID(), entity: 'products', recordId: 'restricted-product', operation: 'upsert', payload: { id: 'restricted-product' }, expectedSequence: null }] }
+  });
+  assert.equal(denied.status, 403);
+
+  const pulled = await request('/api/sync/pull?after=0', { token: adminToken });
+  assert.equal(pulled.status, 200);
+  assert.ok(pulled.data.events.some(event => event.record_id === recordId && event.operation === 'upsert'));
+});
