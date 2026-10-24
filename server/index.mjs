@@ -279,6 +279,34 @@ const server = http.createServer(async (req, res) => {
       } catch (error) { await client.query('ROLLBACK'); throw error; }
       finally { client.release(); }
     }
+    if (req.method === 'POST' && url.pathname === '/api/inventory/initialize') {
+      if (!['admin','manager'].includes(user.role)) return send(res, 403, { error: 'Administrator or manager role required to initialize inventory.' });
+      const input = await bodyJson(req, 16_000);
+      const productId = String(input.productId ?? '').trim();
+      const productName = String(input.productName || '').trim();
+      const sku = String(input.sku || '').trim();
+      const quantity = Number(input.quantity);
+      if (!productId || productId.length > 200 || !productName || productName.length > 200 || sku.length > 100) return send(res, 400, { error: 'A valid productId and productName are required.' });
+      if (!Number.isFinite(quantity) || quantity < 0 || quantity > 1_000_000_000 || Math.abs(quantity * 1000 - Math.round(quantity * 1000)) > 1e-6) return send(res, 400, { error: 'quantity must be zero or greater with at most three decimal places.' });
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [user.locationId + ':inventory:' + productId]);
+        const existing = await client.query('SELECT product_id,sku,product_name,quantity,updated_at FROM inventory_balances WHERE location_id=$1 AND product_id=$2 FOR UPDATE', [user.locationId,productId]);
+        if (existing.rowCount) {
+          await client.query('COMMIT');
+          return send(res, 200, { status: 'already_initialized', inventory: existing.rows[0] });
+        }
+        const created = await client.query('INSERT INTO inventory_balances(location_id,product_id,sku,product_name,quantity,updated_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING product_id,sku,product_name,quantity,updated_at', [user.locationId,productId,sku,productName,quantity,user.sub]);
+        if (quantity > 0) {
+          await client.query('INSERT INTO inventory_movements(location_id,idempotency_key,product_id,sku,product_name,quantity_delta,quantity_after,reason,reference_type,actor_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', [user.locationId,crypto.randomUUID(),productId,sku,productName,quantity,quantity,'Initial stock imported from desktop catalog','adjustment',user.sub]);
+        }
+        await client.query('INSERT INTO audit_events(location_id,actor_id,action,entity,record_id,details) VALUES ($1,$2,$3,$4,$5,$6)', [user.locationId,user.sub,'inventory.initialized','inventory_balances',productId,JSON.stringify({ quantity, source: 'desktop catalog' })]);
+        await client.query('COMMIT');
+        return send(res, 201, { status: 'initialized', inventory: created.rows[0] });
+      } catch (error) { await client.query('ROLLBACK'); throw error; }
+      finally { client.release(); }
+    }
     if (req.method === 'GET' && url.pathname === '/api/inventory') {
       const result = await pool.query('SELECT product_id,sku,product_name,quantity,updated_at FROM inventory_balances WHERE location_id=$1 ORDER BY product_name', [user.locationId]);
       return send(res, 200, { inventory: result.rows });
