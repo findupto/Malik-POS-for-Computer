@@ -17,6 +17,22 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: malik_test
+          POSTGRES_PASSWORD: malik_test_password
+          POSTGRES_DB: malik_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U malik_test -d malik_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://malik_test:malik_test_password@127.0.0.1:5432/malik_test
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
