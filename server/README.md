@@ -42,6 +42,7 @@ Use a strong unique `POSTGRES_PASSWORD`, `JWT_SECRET` (at least 32 characters), 
 - `GET /api/sync/pull?after=0` — fetches the signed-in location's event stream.
 - `GET /api/admin/locations` — list locations for an administrator.\n- `GET /api/admin/users` and `POST /api/admin/users` — list/create staff accounts for the administrator's current location; new passwords must be at least 12 characters.
 - `POST /api/admin/users/:id/activate` and `/deactivate` — enable or disable a staff account; admins cannot deactivate themselves or the last active administrator at a location.
+- `POST /api/admin/users/:id/role` — change a staff role; demoting the last active administrator is blocked.
 - `POST /api/admin/users/:id/reset-password` — set a new password (minimum 12 characters) for a staff account at the administrator's location.
 
 The service uses parameterized SQL, scrypt password hashes, 8-hour HMAC-signed tokens, role-aware entity permissions on write ingestion, request-size limits, database transactions, per-record optimistic concurrency checks for updated sync clients, and basic in-memory per-IP login throttling. Configure CORS to the exact trusted client origin if browser clients need it. Login throttling is process-local and should be replaced with a shared reverse-proxy or datastore-backed limiter for multi-instance production.
