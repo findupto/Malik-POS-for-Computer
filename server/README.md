@@ -1,6 +1,6 @@
 # Malik POS API (foundation)
 
-This is the first backend foundation for central PostgreSQL storage, staff authentication, location-scoped records, and idempotent event ingestion. The existing React desktop application still uses localStorage until a client migration is implemented and verified; starting this service does **not** automatically connect existing registers or enable offline/multi-branch operation.
+This is the first backend foundation for central PostgreSQL storage, staff authentication, location-scoped records, and idempotent event ingestion. The React application now has an opt-in **Settings → Multi-computer sync** panel for API login and manual local-first snapshot transfer. Existing POS screens still use localStorage, so sync is not automatic or real-time; starting this service does **not** enable reliable offline operation or multi-branch synchronization.
 
 ## Requirements
 
