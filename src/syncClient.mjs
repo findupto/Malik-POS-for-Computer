@@ -33,21 +33,23 @@ function writeCurrentRecords(storage, def, records) {
   if (def.collection) storage.setItem('malik-' + def.key, JSON.stringify(Object.values(records)));
   else storage.setItem('malik-' + def.key, JSON.stringify(records.singleton?.value ?? null));
 }
-function captureBaseline(storage, definitions = DEFAULT_SYNC_ENTITIES, preserve = new Set()) {
+function captureBaseline(storage, definitions = DEFAULT_SYNC_ENTITIES, preserve = new Set(), role = 'admin') {
   const previous = readJson(storage, BASELINE_KEY, {});
-  const next = {};
+  const next = { ...previous };
   for (const def of definitions) {
+    if (!roleAllowed(role, def.entity)) continue;
     const now = currentRecords(storage, def);
     const old = previous[def.entity] || {};
+    next[def.entity] = {};
     for (const [id, value] of Object.entries(now)) {
-      next[def.entity] ||= {};
-      next[def.entity][id] = preserve.has(def.entity + ':' + id) && Object.hasOwn(old, id) ? old[id] : value;
-    }
-    for (const [id, value] of Object.entries(old)) {
-      if (preserve.has(def.entity + ':' + id) && !Object.hasOwn(now, id)) {
-        next[def.entity] ||= {};
+      if (preserve.has(def.entity + ':' + id)) {
+        if (Object.hasOwn(old, id)) next[def.entity][id] = old[id];
+      } else {
         next[def.entity][id] = value;
       }
+    }
+    for (const [id, value] of Object.entries(old)) {
+      if (preserve.has(def.entity + ':' + id) && !Object.hasOwn(now, id)) next[def.entity][id] = value;
     }
   }
   storage.setItem(BASELINE_KEY, JSON.stringify(next));
@@ -171,6 +173,6 @@ export async function syncSnapshot({ baseUrl, token, storage, role = 'admin', fe
     if (!response.ok) throw new Error(data.error || 'Upload failed.');
     uploaded += Number(data.accepted || 0);
   }
-  captureBaseline(storage, DEFAULT_SYNC_ENTITIES, conflictKeys);
+  captureBaseline(storage, DEFAULT_SYNC_ENTITIES, conflictKeys, role);
   return { uploaded, downloaded, cursor, conflicts: nextConflicts.length };
 }
