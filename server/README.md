@@ -1,6 +1,6 @@
 # Malik POS API (foundation)
 
-This is the first backend foundation for central PostgreSQL storage, staff authentication, location-scoped records, and idempotent event ingestion. The React application has a **Settings → Multi-computer sync** panel for API login, delta sync, delete tombstones, conflict review, and periodic retry while the panel is mounted and the app is online. Existing POS screens still use localStorage; this is not a server-authoritative register or reliable offline-first multi-branch system.
+This is the first backend foundation for central PostgreSQL storage, staff authentication, location-scoped records, and idempotent event ingestion. The React application has a **Settings → Multi-computer sync** panel for API login, delta sync, delete tombstones, conflict review, and background retry every 30 seconds while the app is open and online. Existing POS screens still use localStorage; this is not a server-authoritative register or reliable offline-first multi-branch system.
 
 ## Requirements
 
@@ -69,5 +69,5 @@ After restoring, verify `/health`, sign-in, record counts, and a controlled test
 
 - The desktop UI is not yet migrated to this API; current operational data remains in each browser profile. The API can now be deployed with Compose and the sync Settings panel includes staff account management for connected administrators.
 - The local durable database/outbox agent needed to keep multiple counters working when the shop internet is down is not yet implemented.
-- Cross-location synchronization, the local LAN database/outbox agent, central catalog ownership, token revocation/refresh, shared rate limiting, and disaster-recovery automation still require implementation and acceptance tests.
+- Cross-location synchronization, the local LAN database/outbox agent, central catalog ownership, token refresh, shared rate limiting, and disaster-recovery automation still require implementation and acceptance tests. Password resets and account changes invalidate previously issued tokens on the next request.
 - Before production, add HTTPS, firewall rules, backups and tested restores, migrations, security review, audit monitoring, rate limiting, and automated integration tests. Do not rely on this foundation as the sole record of real sales until the desktop migration and offline/recovery gates pass.
