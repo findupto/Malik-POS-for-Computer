@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { recordSaleTransaction } from '../src/transactionLedger.mjs';
+import { recordSaleTransaction, recordRefundTransaction, initializeServerInventory, fetchServerInventory } from '../src/transactionLedger.mjs';
 
 function fakeStorage(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -57,4 +57,50 @@ test('server rejection is surfaced so checkout can remain pending', async () => 
     makeId: () => '33333333-3333-4333-8333-333333333333',
     fetchImpl: async () => ({ ok: false, status: 409, json: async () => ({ error: 'Order already exists' }) })
   }), /Order already exists/);
+});
+
+
+test('shared refund is recorded server-first and retries with the same key', async () => {
+  const storage = fakeStorage();
+  const calls = [];
+  const order = { id: 'MP-7654321', total: 100, items: [] };
+  const refund = { amount: '25', method: 'Cash', reason: 'Wrong item', reference: 'receipt 1' };
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url.includes('/api/transactions?limit=200')) return { ok: true, json: async () => ({ transactions: [{ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', order_id: order.id, total: 100 }] }) };
+    return { ok: true, status: 201, json: async () => ({ status: 'created' }) };
+  };
+  const args = { baseUrl: 'http://localhost:8787', token: 'token', order, refund, storage, fetchImpl, makeId: () => '44444444-4444-4444-8444-444444444444' };
+  await recordRefundTransaction(args);
+  await recordRefundTransaction(args);
+  const posts = calls.filter(call => call.options.method === 'POST');
+  assert.equal(posts.length, 2);
+  assert.equal(JSON.parse(posts[0].options.body).idempotencyKey, JSON.parse(posts[1].options.body).idempotencyKey);
+  assert.equal(JSON.parse(posts[0].options.body).method, 'Cash');
+  assert.equal(JSON.parse(posts[0].options.body).restock, false);
+});
+
+test('inventory initialization never overwrites an existing server balance', async () => {
+  const calls = [];
+  const results = await initializeServerInventory({
+    baseUrl: 'http://localhost:8787', token: 'token',
+    products: [{ id: 9, name: 'Milk', sku: 'MILK', stock: 12 }],
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      return { ok: true, status: 200, json: async () => ({ status: 'already_initialized', inventory: { product_id: '9', quantity: 4 } }) };
+    }
+  });
+  assert.equal(results[0].status, 'already_initialized');
+  assert.equal(results[0].quantity, 4);
+  assert.equal(JSON.parse(calls[0].options.body).quantity, 12);
+  assert.equal(calls[0].url, 'http://localhost:8787/api/inventory/initialize');
+});
+
+test('fetch server inventory returns the server balances', async () => {
+  const inventory = await fetchServerInventory({
+    baseUrl: 'http://localhost:8787', token: 'token',
+    fetchImpl: async () => ({ ok: true, json: async () => ({ inventory: [{ product_id: '1', quantity: '3' }] }) })
+  });
+  assert.equal(inventory.length, 1);
+  assert.equal(inventory[0].quantity, '3');
 });
