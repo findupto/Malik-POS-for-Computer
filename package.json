@@ -10,14 +10,16 @@
     "build": "vite build",
     "build:win": "vite build && electron-builder --win nsis --publish never",
     "preview": "vite preview",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "server": "node server/index.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
     "vite": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "lucide-react": "^0.468.0"
+    "lucide-react": "^0.468.0",
+    "pg": "^8.16.3"
   },
   "devDependencies": {
     "electron": "latest",
