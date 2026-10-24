@@ -16,7 +16,7 @@ pg_dump --format=custom --no-owner --no-acl --file="$tmp" "$DATABASE_URL"
 # Validate the archive before making it available as a completed backup.
 pg_restore --list "$tmp" >/dev/null
 mv "$tmp" "$archive"
-sha256sum "$archive" > "$archive.sha256"
+(cd "$BACKUP_DIR" && sha256sum "$(basename "$archive")" > "$(basename "$archive").sha256")
 find "$BACKUP_DIR" -maxdepth 1 -type f -name 'malik-pos-*.dump' -mtime +"$RETENTION_DAYS" -print -delete
 find "$BACKUP_DIR" -maxdepth 1 -type f -name 'malik-pos-*.dump.sha256' -mtime +"$RETENTION_DAYS" -print -delete
 printf 'Backup verified: %s\n' "$archive"
