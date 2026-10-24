@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { recordSaleTransaction, recordRefundTransaction, initializeServerInventory, fetchServerInventory, recordInventoryAdjustment } from '../src/transactionLedger.mjs';
+import { recordSaleTransaction, recordRefundTransaction, initializeServerInventory, fetchServerInventory, fetchInventoryMovements, recordInventoryAdjustment } from '../src/transactionLedger.mjs';
 
 function fakeStorage(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -140,5 +140,35 @@ test('shared inventory adjustment surfaces server stock rejection', async () => 
       fetchImpl: async () => ({ ok: false, status: 409, json: async () => ({ error: 'Adjustment would make stock negative.' }) })
     }),
     /Adjustment would make stock negative/
+  );
+});
+
+
+test('inventory movement history helper sends bounded limit and optional product filter', async () => {
+  const calls = [];
+  const movements = [{ id: 'move-1', product_id: 'tea-1', quantity_delta: '-1' }];
+  const result = await fetchInventoryMovements({
+    baseUrl: 'http://localhost:8787',
+    token: 'token',
+    limit: 500,
+    productId: 'tea-1',
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      return { ok: true, json: async () => ({ movements }) };
+    }
+  });
+  assert.deepEqual(result, movements);
+  assert.equal(calls[0].url, 'http://localhost:8787/api/inventory/movements?limit=200&productId=tea-1');
+  assert.equal(calls[0].options.headers.authorization, 'Bearer token');
+});
+
+test('inventory movement history helper surfaces API errors', async () => {
+  await assert.rejects(
+    fetchInventoryMovements({
+      baseUrl: 'http://localhost:8787',
+      token: 'token',
+      fetchImpl: async () => ({ ok: false, json: async () => ({ error: 'Not authorized' }) })
+    }),
+    /Not authorized/
   );
 });
