@@ -48,7 +48,11 @@ export async function reconcilePendingSaleTransactions({ baseUrl, token, storage
     let data = {};
     try { data = await response.json(); } catch {}
     if (!response.ok) throw new Error(data.error || 'Could not check pending shared sales against the server ledger.');
-    const transaction = (Array.isArray(data.transactions) ? data.transactions : []).find(item => String(item.order_id) === orderId);
+    const transaction = (Array.isArray(data.transactions) ? data.transactions : []).find(item =>
+      String(item.order_id) === orderId && String(item.idempotency_key || '') === String(payload.idempotencyKey)
+    );
+    // Order IDs can collide across offline registers. Only reconcile when the server confirms
+    // the exact idempotency key that was persisted with this outbox entry.
     if (!transaction) continue;
     const tenders = Array.isArray(payload.tenders) ? payload.tenders : [];
     reconciled.push({
