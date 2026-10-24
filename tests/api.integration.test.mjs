@@ -163,6 +163,14 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   ]);
   assert.deepEqual(retryResults.map(result => result.status).sort(), [200, 201]);
   assert.equal(retryResults.find(result => result.status === 200).data.status, 'duplicate');
+  const mismatchedRetry = await request('/api/transactions', {
+    token: cashierToken, method: 'POST',
+    body: { ...retryBody, orderId: retryOrderId + '-different', items: [{ ...retryBody.items[0], quantity: 1 }] }
+  });
+  assert.equal(mismatchedRetry.status, 409, 'same key with different sale details must be rejected');
+  const retryInventoryAfterMismatch = await request('/api/inventory', { token: cashierToken });
+  assert.equal(Number(retryInventoryAfterMismatch.data.inventory.find(item => item.product_id === retryProductId).quantity), 3,
+    'mismatched idempotency retry must not deduct stock again');
   const retryInventory = await request('/api/inventory', { token: cashierToken });
   assert.equal(Number(retryInventory.data.inventory.find(item => item.product_id === retryProductId).quantity), 3);
   const retryLedger = await request('/api/transactions?limit=10&orderId=' + encodeURIComponent(retryOrderId), { token: cashierToken });
