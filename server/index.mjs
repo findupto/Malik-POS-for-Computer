@@ -218,7 +218,8 @@ const server = http.createServer(async (req, res) => {
         }
         // Deduct stock only for products explicitly initialized in inventory_balances.
         // Untracked catalog items remain saleable until an opening balance is recorded.
-        for (const line of lines) {
+        // Acquire product locks in a stable order so overlapping multi-item sales avoid lock-order deadlocks.
+        for (const line of [...lines].sort((a, b) => a.productId.localeCompare(b.productId))) {
           if (!line.productId) continue;
           await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [user.locationId + ':inventory:' + line.productId]);
           const balance = await client.query('SELECT quantity,sku,product_name FROM inventory_balances WHERE location_id=$1 AND product_id=$2 FOR UPDATE', [user.locationId,line.productId]);
