@@ -37,17 +37,18 @@ export async function reconcilePendingSaleTransactions({ baseUrl, token, storage
   const pending = Object.entries(outbox).filter(([orderId, payload]) =>
     Boolean(orderId && payload && typeof payload === 'object' && payload.orderId === orderId && payload.idempotencyKey)
   );
-  if (!pending.length) return [];
-  const response = await fetchImpl(new URL('/api/transactions?limit=200', baseUrl).toString(), {
-    headers: { authorization: 'Bearer ' + token }
-  });
-  let data = {};
-  try { data = await response.json(); } catch {}
-  if (!response.ok) throw new Error(data.error || 'Could not check pending shared sales against the server ledger.');
-  const byOrderId = new Map((Array.isArray(data.transactions) ? data.transactions : []).map(transaction => [String(transaction.order_id), transaction]));
   const reconciled = [];
   for (const [orderId, payload] of pending) {
-    const transaction = byOrderId.get(orderId);
+    const url = new URL('/api/transactions', baseUrl);
+    url.searchParams.set('limit', '1');
+    url.searchParams.set('orderId', orderId);
+    const response = await fetchImpl(url.toString(), {
+      headers: { authorization: 'Bearer ' + token }
+    });
+    let data = {};
+    try { data = await response.json(); } catch {}
+    if (!response.ok) throw new Error(data.error || 'Could not check pending shared sales against the server ledger.');
+    const transaction = (Array.isArray(data.transactions) ? data.transactions : []).find(item => String(item.order_id) === orderId);
     if (!transaction) continue;
     const tenders = Array.isArray(payload.tenders) ? payload.tenders : [];
     reconciled.push({
