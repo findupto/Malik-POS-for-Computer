@@ -422,7 +422,7 @@ const server = http.createServer(async (req, res) => {
       if (!Number.isInteger(limit)) return send(res, 400, { error: 'limit must be an integer from 1 to 200.' });
       const orderId = String(url.searchParams.get('orderId') || '').trim();
       const result = orderId
-        ? await pool.query('SELECT id,order_id,customer_name,subtotal,discount_amount,tax_amount,service_charge_amount,delivery_fee,total,created_by,occurred_at,created_at FROM pos_transactions WHERE location_id=$1 AND order_id=$2 ORDER BY created_at DESC LIMIT $3', [user.locationId,orderId,limit])
+        ? await pool.query('SELECT id,order_id,idempotency_key,customer_name,subtotal,discount_amount,tax_amount,service_charge_amount,delivery_fee,total,created_by,occurred_at,created_at FROM pos_transactions WHERE location_id=$1 AND order_id=$2 ORDER BY created_at DESC LIMIT $3', [user.locationId,orderId,limit])
         : await pool.query('SELECT id,order_id,customer_name,subtotal,discount_amount,tax_amount,service_charge_amount,delivery_fee,total,created_by,occurred_at,created_at FROM pos_transactions WHERE location_id=$1 ORDER BY created_at DESC LIMIT $2', [user.locationId,limit]);
       return send(res, 200, { transactions: result.rows });
     }
