@@ -22,8 +22,10 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install
-      - name: Check backend JavaScript syntax
-        run: node --check server/index.mjs
+      - name: Check backend and backup script syntax
+        run: |
+          node --check server/index.mjs
+          sh -n server/backup.sh server/restore.sh
       - name: Run all unit tests
         run: npm test
       - name: Build web application
