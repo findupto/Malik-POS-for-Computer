@@ -40,6 +40,27 @@ test('shared sale payload uses server endpoint and persists one idempotency key 
   assert.equal(calls[0].options.headers.authorization, 'Bearer token');
 });
 
+test('uncertain shared sale is durably queued and retries the exact original payload', async () => {
+  const storage = fakeStorage();
+  const calls = [];
+  const args = {
+    baseUrl: 'http://localhost:8787', token: 'token', order, payment: 'Cash', storage,
+    makeId: () => '12121212-1212-4212-8212-121212121212',
+    fetchImpl: async (url, options) => {
+      calls.push({ url, body: JSON.parse(options.body) });
+      if (calls.length === 1) throw new Error('connection reset after request');
+      return { ok: true, status: 200, json: async () => ({ status: 'duplicate' }) };
+    }
+  };
+  await assert.rejects(() => recordSaleTransaction(args), /connection reset/);
+  const queued = JSON.parse(storage.inspect('malik-transactionOutbox'));
+  assert.equal(queued[order.id].idempotencyKey, '12121212-1212-4212-8212-121212121212');
+  const changedOrder = { ...order, total: 999, items: [{ id: 99, name: 'Changed item', qty: 1, price: 999 }] };
+  await recordSaleTransaction({ ...args, order: changedOrder, payment: 'Card' });
+  assert.deepEqual(calls[1].body, calls[0].body);
+  assert.deepEqual(JSON.parse(storage.inspect('malik-transactionOutbox')), {});
+});
+
 test('customer due is recorded without a false cash tender', async () => {
   const storage = fakeStorage();
   let sent;
