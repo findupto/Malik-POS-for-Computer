@@ -1,4 +1,5 @@
 const IDEMPOTENCY_KEY = 'malik-transactionIdempotency';
+const SALE_OUTBOX_KEY = 'malik-transactionOutbox';
 
 function readKeys(storage, key = IDEMPOTENCY_KEY) {
   try {
@@ -21,6 +22,8 @@ export async function recordSaleTransaction({ baseUrl, token, order, payment, st
   if (!order || !order.id || !Array.isArray(order.items) || !order.items.length) throw new Error('A sale with at least one item is required.');
   if (!storage || typeof fetchImpl !== 'function') throw new Error('Shared sale recording is unavailable in this environment.');
   const idempotencyKey = idempotencyKeyFor(storage, String(order.id), makeId);
+  const outbox = readKeys(storage, SALE_OUTBOX_KEY);
+  const queued = outbox[String(order.id)];
   const paymentMethod = String(payment || '');
   const tenders = paymentMethod === 'Customer Due' ? [] : [{
     method: ({ 'Cash': 'Cash', 'Card': 'Card', 'Bank Transfer': 'Bank Transfer', 'Mobile Wallet': 'Mobile Wallet' })[paymentMethod] || 'Other',
@@ -48,14 +51,34 @@ export async function recordSaleTransaction({ baseUrl, token, order, payment, st
     occurredAt: order.paidAt || new Date().toISOString(),
     tenders
   };
-  const response = await fetchImpl(new URL('/api/transactions', baseUrl).toString(), {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token },
-    body: JSON.stringify(payload)
-  });
+  // If a previous request lost its response, replay the exact saved payload with the same key.
+  // This prevents a retry from silently changing the sale after the server may have committed it.
+  const requestPayload = queued && queued.idempotencyKey === idempotencyKey ? queued : payload;
+  outbox[String(order.id)] = requestPayload;
+  storage.setItem(SALE_OUTBOX_KEY, JSON.stringify(outbox));
+  let response;
+  try {
+    response = await fetchImpl(new URL('/api/transactions', baseUrl).toString(), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token },
+      body: JSON.stringify(requestPayload)
+    });
+  } catch (error) {
+    // Keep the durable outbox entry on network failure; the server may have committed before disconnect.
+    throw error;
+  }
   let result = {};
   try { result = await response.json(); } catch {}
-  if (!response.ok) throw new Error(result.error || 'The server did not record this sale. The order remains pending; retry payment to safely retry the same sale.');
+  if (!response.ok) {
+    // A client-side validation/conflict response confirms the request was rejected; allow a corrected retry.
+    if (response.status >= 400 && response.status < 500) {
+      delete outbox[String(order.id)];
+      storage.setItem(SALE_OUTBOX_KEY, JSON.stringify(outbox));
+    }
+    throw new Error(result.error || 'The server did not record this sale. The order remains pending; retry payment to safely retry the same sale.');
+  }
+  delete outbox[String(order.id)];
+  storage.setItem(SALE_OUTBOX_KEY, JSON.stringify(outbox));
   return result;
 }
 
