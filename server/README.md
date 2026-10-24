@@ -27,12 +27,14 @@ The bootstrap administrator is created only when the username does not already e
 - `POST /api/sync/push` — atomically ingests up to 500 events, deduplicated by event UUID. Admins/managers can sync all entity types; cashiers are restricted to orders, time charges, cash entries, audit trail, and attendance.
 - `GET /api/sync/pull?after=0` — fetches the signed-in location's event stream.
 - `GET /api/admin/locations` — list locations for an administrator.\n- `GET /api/admin/users` and `POST /api/admin/users` — list/create staff accounts for the administrator's current location; new passwords must be at least 12 characters.
+- `POST /api/admin/users/:id/activate` and `/deactivate` — enable or disable a staff account; admins cannot deactivate themselves or the last active administrator at a location.
+- `POST /api/admin/users/:id/reset-password` — set a new password (minimum 12 characters) for a staff account at the administrator's location.
 
-The service uses parameterized SQL, scrypt password hashes, 8-hour HMAC-signed tokens, role-aware entity permissions on write ingestion, request-size limits, database transactions, and basic in-memory per-IP login throttling. Configure CORS to the exact trusted client origin if browser clients need it. Login throttling is process-local and should be replaced with a shared reverse-proxy or datastore-backed limiter for multi-instance production.
+The service uses parameterized SQL, scrypt password hashes, 8-hour HMAC-signed tokens, role-aware entity permissions on write ingestion, request-size limits, database transactions, per-record optimistic concurrency checks for updated sync clients, and basic in-memory per-IP login throttling. Configure CORS to the exact trusted client origin if browser clients need it. Login throttling is process-local and should be replaced with a shared reverse-proxy or datastore-backed limiter for multi-instance production.
 
 ## Not production-complete yet
 
 - The desktop UI is not yet migrated to this API; current operational data remains in each browser profile.
 - The local durable database/outbox agent needed to keep multiple counters working when the shop internet is down is not yet implemented.
-- Cross-location synchronization, conflict resolution, central catalog ownership, remote user administration, token revocation/refresh, rate limiting, and disaster-recovery automation still require implementation and acceptance tests.
+- Cross-location synchronization, the local LAN database/outbox agent, central catalog ownership, token revocation/refresh, shared rate limiting, and disaster-recovery automation still require implementation and acceptance tests.
 - Before production, add HTTPS, firewall rules, backups and tested restores, migrations, security review, audit monitoring, rate limiting, and automated integration tests. Do not rely on this foundation as the sole record of real sales until the desktop migration and offline/recovery gates pass.
