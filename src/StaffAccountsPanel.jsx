@@ -11,7 +11,7 @@ export default function StaffAccountsPanel({ baseUrl, token }) {
   const [resetPassword, setResetPassword] = useState('');
 
   const request = useCallback(async (path, options = {}) => {
-    const response = await fetch(baseUrl.replace(/\\/+$/, '') + path, {
+    const response = await fetch(baseUrl.replace(/\/+$/,'') + path, {
       ...options,
       headers: { Authorization: 'Bearer ' + token, ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) }
     });
