@@ -80,7 +80,7 @@ export async function loginToSyncApi(baseUrl, username, password, fetchImpl = fe
 }
 
 export async function syncSnapshot({ baseUrl, token, storage, role = 'admin', fetchImpl = fetch }) {
-  const base = String(baseUrl || '').trim().replace(/\\/+$/, '');
+  const base = String(baseUrl || '').trim().replace(/\/+$/, '');
   if (!token) throw new Error('Sign in to the sync server first.');
   const authHeaders = { Authorization: 'Bearer ' + token };
   let cursor = Number(storage.getItem('malik-syncCursor') || 0);
