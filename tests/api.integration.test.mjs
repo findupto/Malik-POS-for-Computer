@@ -176,6 +176,7 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   const retryLedger = await request('/api/transactions?limit=10&orderId=' + encodeURIComponent(retryOrderId), { token: cashierToken });
   assert.equal(retryLedger.status, 200);
   assert.equal(retryLedger.data.transactions.length, 1);
+  assert.equal(retryLedger.data.transactions[0].idempotency_key, retryKey, 'exact order lookup returns the key needed for safe recovery');
 
   const refundKey = crypto.randomUUID();
   const refundBody = {
