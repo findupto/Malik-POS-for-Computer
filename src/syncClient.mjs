@@ -168,10 +168,21 @@ export async function syncSnapshot({ baseUrl, token, storage, role = 'admin', fe
       const localEvent = pendingByKey.get(key);
       const remoteValue = event.operation === 'delete' ? undefined : event.payload;
       const localValue = localEvent?.operation === 'delete' ? undefined : localEvent?.payload;
-      if (localEvent && !conflictKeys.has(key) && stable(remoteValue) !== stable(localValue)) {
-        const conflict = { id: uuid(), entity: event.entity, recordId: String(event.record_id), local: localValue, remote: remoteValue, remoteEvent: event, detectedAt: new Date().toISOString() };
-        nextConflicts.push(conflict);
-        conflictKeys.add(key);
+      if (localEvent && stable(remoteValue) !== stable(localValue)) {
+        const existingIndex = nextConflicts.findIndex(conflict => conflict.entity + ':' + conflict.recordId === key);
+        if (existingIndex >= 0) {
+          // A pull can contain multiple versions of one record; keep the newest server event for resolution.
+          nextConflicts[existingIndex] = {
+            ...nextConflicts[existingIndex],
+            remote: remoteValue,
+            remoteEvent: event,
+            detectedAt: new Date().toISOString()
+          };
+          conflictKeys.add(key);
+        } else if (!conflictKeys.has(key)) {
+          nextConflicts.push({ id: uuid(), entity: event.entity, recordId: String(event.record_id), local: localValue, remote: remoteValue, remoteEvent: event, detectedAt: new Date().toISOString() });
+          conflictKeys.add(key);
+        }
       }
       if (!conflictKeys.has(key)) safeBatch.push(event);
     }
