@@ -57,10 +57,21 @@ export async function reconcilePendingSaleTransactions({ baseUrl, token, storage
       payment: tenders.length ? String(tenders[0].method || 'Other') : 'Customer Due',
       paidAt: transaction.occurred_at || payload.occurredAt || new Date().toISOString()
     });
-    delete outbox[orderId];
   }
-  if (reconciled.length) storage.setItem(SALE_OUTBOX_KEY, JSON.stringify(outbox));
   return reconciled;
+}
+
+export function clearReconciledSaleTransactions(orderIds, storage = globalThis.localStorage) {
+  if (!storage || !Array.isArray(orderIds) || !orderIds.length) return;
+  const outbox = readKeys(storage, SALE_OUTBOX_KEY);
+  let changed = false;
+  for (const orderId of orderIds) {
+    if (Object.prototype.hasOwnProperty.call(outbox, String(orderId))) {
+      delete outbox[String(orderId)];
+      changed = true;
+    }
+  }
+  if (changed) storage.setItem(SALE_OUTBOX_KEY, JSON.stringify(outbox));
 }
 
 export async function recordSaleTransaction({ baseUrl, token, order, payment, storage = globalThis.localStorage, fetchImpl = globalThis.fetch, makeId = () => globalThis.crypto.randomUUID() }) {
