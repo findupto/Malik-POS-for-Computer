@@ -58,3 +58,47 @@ export async function recordSaleTransaction({ baseUrl, token, order, payment, st
   if (!response.ok) throw new Error(result.error || 'The server did not record this sale. The order remains pending; retry payment to safely retry the same sale.');
   return result;
 }
+
+
+const REFUND_KEYS = 'malik-refundIdempotency';
+function refundKeyFor(storage, orderId, refundDraft, makeId) {
+  const keys = readKeys(storage);
+  const fingerprint = [String(orderId), Number(refundDraft.amount).toFixed(2), String(refundDraft.method), String(refundDraft.reason || '').trim(), String(refundDraft.reference || '')].join('|');
+  if (keys[fingerprint]) return keys[fingerprint];
+  const key = makeId();
+  keys[fingerprint] = key;
+  storage.setItem(REFUND_KEYS, JSON.stringify(keys));
+  return key;
+}
+
+export async function recordRefundTransaction({ baseUrl, token, order, refund, storage = globalThis.localStorage, fetchImpl = globalThis.fetch, makeId = () => globalThis.crypto.randomUUID() }) {
+  if (!baseUrl || !token) throw new Error('Connect this register to the Malik POS API before recording a shared refund.');
+  if (!order?.id || !refund || !Number.isFinite(Number(refund.amount)) || Number(refund.amount) <= 0) throw new Error('A valid sale and positive refund amount are required.');
+  if (!storage || typeof fetchImpl !== 'function') throw new Error('Shared refund recording is unavailable in this environment.');
+  const response = await fetchImpl(new URL('/api/transactions?limit=200', baseUrl).toString(), {
+    headers: { authorization: 'Bearer ' + token }
+  });
+  let data = {};
+  try { data = await response.json(); } catch {}
+  if (!response.ok) throw new Error(data.error || 'Could not locate the original server sale.');
+  const transaction = (data.transactions || []).find(item => String(item.order_id) === String(order.id));
+  if (!transaction) throw new Error('The original sale is not in the server ledger. No local refund was recorded.');
+  const method = ({ 'Cash': 'Cash', 'Card reversal': 'Card', 'Bank transfer': 'Bank Transfer', 'Mobile wallet': 'Mobile Wallet', 'Customer account credit': 'Other' })[refund.method] || 'Other';
+  const idempotencyKey = refundKeyFor(storage, order.id, refund, makeId);
+  const result = await fetchImpl(new URL('/api/transactions/' + encodeURIComponent(transaction.id) + '/refunds', baseUrl).toString(), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token },
+    body: JSON.stringify({
+      idempotencyKey,
+      amount: Number(refund.amount),
+      method,
+      reason: String(refund.reason || '').trim() + (refund.reference ? ' · Reference: ' + String(refund.reference).trim() : ''),
+      restock: false,
+      items: []
+    })
+  });
+  let resultData = {};
+  try { resultData = await result.json(); } catch {}
+  if (!result.ok) throw new Error(resultData.error || 'The server did not record this refund. No local refund was recorded; retry after resolving the issue.');
+  return resultData;
+}
