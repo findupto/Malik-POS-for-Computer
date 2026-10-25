@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { canPushEntity } from './syncPolicy.mjs';
+import { checkLoginRateLimit, clearLoginFailures, recordLoginFailure } from './loginRateLimit.mjs';
 
 const { Pool } = pg;
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -17,8 +18,6 @@ const bootstrapPassword = process.env.BOOTSTRAP_ADMIN_PASSWORD;
 const defaultLocationName = process.env.DEFAULT_LOCATION_NAME || 'Main location';
 const allowedOrigin = process.env.CORS_ORIGIN || '';
 const loginAttempts = new Map();
-const LOGIN_WINDOW_MS = 15 * 60 * 1000;
-const LOGIN_MAX_ATTEMPTS = 10;
 if (!databaseUrl || !jwtSecret || jwtSecret.length < 32) {
   console.error('Set DATABASE_URL and JWT_SECRET (at least 32 characters) before starting the API.');
   process.exit(1);
@@ -114,20 +113,17 @@ const server = http.createServer(async (req, res) => {
       const password = String(input.password || '');
       if (!username || !password || password.length > 1024) return send(res, 400, { error: 'Username and password are required.' });
       const ip = String(req.socket.remoteAddress || 'unknown');
-      const now = Date.now();
-      const prior = loginAttempts.get(ip);
-      if (prior && now - prior.startedAt < LOGIN_WINDOW_MS && prior.count >= LOGIN_MAX_ATTEMPTS) {
+      const limit = checkLoginRateLimit(loginAttempts, ip, Date.now());
+      if (limit.limited) {
         return send(res, 429, { error: 'Too many sign-in attempts. Wait 15 minutes and try again.' });
       }
-      if (!prior || now - prior.startedAt >= LOGIN_WINDOW_MS) loginAttempts.set(ip, { startedAt: now, count: 0 });
       const found = await pool.query('SELECT id,location_id,username,password_hash,display_name,role,active FROM staff_users WHERE username=$1', [username]);
       const user = found.rows[0];
       if (!user || !user.active || !(await verifyPassword(password, user.password_hash))) {
-        const attempt = loginAttempts.get(ip);
-        attempt.count += 1;
+        recordLoginFailure(loginAttempts, ip);
         return send(res, 401, { error: 'Invalid username or password.' });
       }
-      loginAttempts.delete(ip);
+      clearLoginFailures(loginAttempts, ip);
       return send(res, 200, { token: tokenFor(user), user: { id: user.id, username: user.username, name: user.display_name, role: user.role, locationId: user.location_id } });
     }
     const claims = authFrom(req);
