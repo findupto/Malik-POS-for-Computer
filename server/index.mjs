@@ -26,7 +26,16 @@ if (!databaseUrl || !jwtSecret || jwtSecret.length < 32) {
   console.error('Set DATABASE_URL and JWT_SECRET (at least 32 characters) before starting the API.');
   process.exit(1);
 }
-const pool = new Pool({ connectionString: databaseUrl, ssl: process.env.PGSSLMODE === 'require' ? { rejectUnauthorized: true } : undefined, max: Number(process.env.DB_POOL_SIZE || 10) });
+const pool = new Pool({
+  connectionString: databaseUrl,
+  ssl: process.env.PGSSLMODE === 'require' ? { rejectUnauthorized: true } : undefined,
+  max: Number(process.env.DB_POOL_SIZE || 10),
+  // Fail fast when PostgreSQL is unreachable and prevent abandoned queries or
+  // idle transactions from holding API resources indefinitely.
+  connectionTimeoutMillis: 5_000,
+  statement_timeout: 30_000,
+  idle_in_transaction_session_timeout: 30_000
+});
 const b64 = value => Buffer.from(value).toString('base64url');
 const sign = value => crypto.createHmac('sha256', jwtSecret).update(value).digest('base64url');
 function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
