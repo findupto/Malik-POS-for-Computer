@@ -161,3 +161,14 @@ CREATE TABLE IF NOT EXISTS pos_refund_lines (
   product_name text NOT NULL,
   quantity numeric(14,3) NOT NULL CHECK (quantity > 0)
 );
+
+
+-- Shared, bounded login throttling state so API replicas use the same limits.
+-- Only a SHA-256 digest of the client address is stored, never the raw address.
+CREATE TABLE IF NOT EXISTS login_rate_limits (
+  key_hash char(64) PRIMARY KEY,
+  window_started_at timestamptz NOT NULL DEFAULT now(),
+  attempt_count integer NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS login_rate_limits_window_idx ON login_rate_limits(window_started_at);
