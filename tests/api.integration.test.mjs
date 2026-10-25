@@ -85,6 +85,40 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   assert.equal(cashierLogin.status, 200);
   cashierToken = cashierLogin.data.token;
 
+  const deniedLocationCreate = await request('/api/admin/locations', {
+    token: cashierToken, method: 'POST',
+    body: { name: 'Forbidden Branch' }
+  });
+  assert.equal(deniedLocationCreate.status, 403, 'cashiers cannot create locations');
+  const invalidLocation = await request('/api/admin/locations', {
+    token: adminToken, method: 'POST',
+    body: { name: 'Invalid Timezone Branch', timezone: 'Not/A_Timezone' }
+  });
+  assert.equal(invalidLocation.status, 400);
+  const branch = await request('/api/admin/locations', {
+    token: adminToken, method: 'POST',
+    body: { name: 'Integration Branch ' + crypto.randomUUID().slice(0, 8), timezone: 'Asia/Karachi' }
+  });
+  assert.equal(branch.status, 201);
+  assert.equal(branch.data.location.timezone, 'Asia/Karachi');
+  const branchStaff = await request('/api/admin/users', {
+    token: adminToken, method: 'POST',
+    body: { username: 'branch-admin-' + crypto.randomUUID().slice(0, 8), displayName: 'Branch Administrator', role: 'admin', password: 'test-only-branch-password-123', locationId: branch.data.location.id }
+  });
+  assert.equal(branchStaff.status, 201);
+  const branchLogin = await request('/api/auth/login', {
+    method: 'POST',
+    body: { username: branchStaff.data.user.username, password: 'test-only-branch-password-123' }
+  });
+  assert.equal(branchLogin.status, 200);
+  const branchMe = await request('/api/me', { token: branchLogin.data.token });
+  assert.equal(branchMe.status, 200);
+  assert.equal(branchMe.data.locationId, branch.data.location.id, 'branch staff must be assigned to the created branch');
+  const branchInventory = await request('/api/inventory', { token: branchLogin.data.token });
+  assert.equal(branchInventory.status, 200);
+  assert.equal(branchInventory.data.inventory.length, 0, 'new branch inventory must be location-scoped');
+
+
   for (const invalidCursor of ['-1', '1.5', 'Infinity']) {
     const invalidPull = await request('/api/sync/pull?after=' + encodeURIComponent(invalidCursor), { token: adminToken });
     assert.equal(invalidPull.status, 400, 'invalid sync cursor ' + invalidCursor + ' must be rejected');
