@@ -198,6 +198,16 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   });
   assert.equal(duplicateRefund.status, 200);
   assert.equal(duplicateRefund.data.status, 'duplicate');
+  const mismatchedRefund = await request('/api/transactions/' + sale.data.transaction.id + '/refunds', {
+    token: adminToken, method: 'POST',
+    body: { ...refundBody, amount: 25, items: [{ productId: 'tea-1', productName: 'Tea', quantity: 1 }] }
+  });
+  assert.equal(mismatchedRefund.status, 409, 'same refund idempotency key with changed amount must be rejected');
+  const mismatchedRefundReason = await request('/api/transactions/' + sale.data.transaction.id + '/refunds', {
+    token: adminToken, method: 'POST',
+    body: { ...refundBody, reason: 'Different reason' }
+  });
+  assert.equal(mismatchedRefundReason.status, 409, 'same refund idempotency key with changed reason must be rejected');
   const inventoryAfterRefund = await request('/api/inventory', { token: cashierToken });
   assert.equal(Number(inventoryAfterRefund.data.inventory.find(item => item.product_id === 'tea-1').quantity), 4);
 

@@ -378,8 +378,23 @@ const server = http.createServer(async (req, res) => {
       try {
         await client.query('BEGIN');
         await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [user.locationId + ':refund:' + idempotencyKey]);
-        const prior = await client.query('SELECT id,transaction_id,amount,method,restocked,created_at FROM pos_refunds WHERE location_id=$1 AND idempotency_key=$2', [user.locationId,idempotencyKey]);
-        if (prior.rowCount) { await client.query('COMMIT'); return send(res, 200, { status: 'duplicate', refund: prior.rows[0] }); }
+        const prior = await client.query('SELECT id,transaction_id,amount,method,reason,restocked,created_at FROM pos_refunds WHERE location_id=$1 AND idempotency_key=$2', [user.locationId,idempotencyKey]);
+        if (prior.rowCount) {
+          const existingRefund = prior.rows[0];
+          const priorLines = await client.query('SELECT product_id,product_name,quantity FROM pos_refund_lines WHERE refund_id=$1 ORDER BY product_id,product_name,quantity', [existingRefund.id]);
+          const requestedLines = items.map(item => [String(item.productId), String(item.productName).slice(0,200), Number(item.quantity)])
+            .sort((a,b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+          const storedLines = priorLines.rows.map(item => [String(item.product_id), String(item.product_name), Number(item.quantity)])
+            .sort((a,b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+          const sameRefund = existingRefund.transaction_id === transactionId &&
+            Math.abs(Number(existingRefund.amount) - amount) < 0.000001 &&
+            existingRefund.method === method && existingRefund.reason === reason &&
+            existingRefund.restocked === restock &&
+            JSON.stringify(storedLines) === JSON.stringify(requestedLines);
+          await client.query('COMMIT');
+          if (!sameRefund) return send(res, 409, { error: 'This idempotency key was already used for a different refund payload. Retry with the original refund details or use a new key for a new refund.' });
+          return send(res, 200, { status: 'duplicate', refund: existingRefund });
+        }
         const sale = await client.query('SELECT id,total FROM pos_transactions WHERE id=$1 AND location_id=$2 FOR UPDATE', [transactionId,user.locationId]);
         if (!sale.rowCount) { await client.query('ROLLBACK'); return send(res, 404, { error: 'Sale transaction not found at this location.' }); }
         const refunded = await client.query('SELECT COALESCE(sum(amount),0)::numeric AS amount FROM pos_refunds WHERE transaction_id=$1', [transactionId]);
