@@ -155,7 +155,8 @@ function validatePulledEvents(events) {
         !['upsert', 'delete'].includes(event.operation) ||
         (Object.hasOwn(event, 'occurred_at') && event.occurred_at !== null &&
           (typeof event.occurred_at !== 'string' || !event.occurred_at.trim() || !Number.isFinite(Date.parse(event.occurred_at)))) ||
-        (event.operation === 'upsert' && (!event.payload || typeof event.payload !== 'object' || Array.isArray(event.payload)))) {
+        (event.operation === 'upsert' && (!event.payload || typeof event.payload !== 'object' || Array.isArray(event.payload))) ||
+        (event.operation === 'delete' && event.payload != null)) {
       throw new Error('The sync server returned an invalid event. Local POS data and sync progress were preserved; retry sync after checking the server.');
     }
   }

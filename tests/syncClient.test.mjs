@@ -395,6 +395,21 @@ test('invalid pulled event timestamps are rejected before changing local records
   assert.equal(storage.inspect('malik-syncVersions'), JSON.stringify({ 'orders:o-1': 7 }));
 });
 
+test('delete events with payloads are rejected before changing local records or sync progress', () => {
+  const original = JSON.stringify([{ id: 'o-1', total: 10 }]);
+  const storage = fakeStorage({
+    'malik-orders': original,
+    'malik-syncCursor': '7',
+    'malik-syncVersions': JSON.stringify({ 'orders:o-1': 7 })
+  });
+  assert.throws(() => applyPulledEvents(storage, [
+    { sequence: 8, entity: 'orders', record_id: 'o-1', operation: 'delete', payload: { id: 'o-1' } }
+  ]), /invalid event.*preserved/i);
+  assert.equal(storage.inspect('malik-orders'), original);
+  assert.equal(storage.inspect('malik-syncCursor'), '7');
+  assert.equal(storage.inspect('malik-syncVersions'), JSON.stringify({ 'orders:o-1': 7 }));
+});
+
 test('sync rejects a malformed server event batch before persisting its cursor', async () => {
   const { syncSnapshot } = await import('../src/syncClient.mjs');
   const orders = JSON.stringify([{ id: 'o-1', total: 10 }]);
