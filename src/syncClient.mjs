@@ -29,7 +29,12 @@ function readOutbox(storage) {
   try { parsed = JSON.parse(raw); } catch {
     throw new Error('Saved sync outbox is unreadable. Its contents were preserved; do not clear app data before recovery.');
   }
-  if (!Array.isArray(parsed) || parsed.some(event => !event || typeof event !== 'object' || typeof event.eventId !== 'string' || typeof event.entity !== 'string' || typeof event.recordId !== 'string')) {
+  if (!Array.isArray(parsed) || parsed.some(event => {
+    if (!event || typeof event !== 'object' || typeof event.eventId !== 'string' || typeof event.entity !== 'string' || !/^[a-z][a-z0-9_-]{0,63}$/.test(event.entity) || typeof event.recordId !== 'string' || !event.recordId.trim() || event.recordId.length > 200 || !['upsert', 'delete'].includes(event.operation)) return true;
+    if (event.operation === 'upsert' && (!event.payload || typeof event.payload !== 'object' || Array.isArray(event.payload))) return true;
+    if (Object.hasOwn(event, 'expectedSequence') && event.expectedSequence !== null && (!Number.isSafeInteger(event.expectedSequence) || event.expectedSequence < 0)) return true;
+    return false;
+  })) {
     throw new Error('Saved sync outbox has an invalid format. Its contents were preserved; do not clear app data before recovery.');
   }
   return parsed;
