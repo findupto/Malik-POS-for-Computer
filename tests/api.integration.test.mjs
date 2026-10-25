@@ -215,6 +215,29 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   const rejectedOverpaymentLookup = await request('/api/transactions?limit=10&orderId=' + encodeURIComponent(overpaidOrderId), { token: cashierToken });
   assert.equal(rejectedOverpaymentLookup.data.transactions.length, 0, 'rejected overpayment must not create a ledger entry');
 
+  const oversizedLine = await request('/api/transactions', {
+    token: cashierToken, method: 'POST',
+    body: {
+      idempotencyKey: crypto.randomUUID(),
+      orderId: 'oversized-line-' + crypto.randomUUID(),
+      items: [{ productId: '', sku: '', productName: 'Oversized test item', quantity: 1_000_000, unitPrice: 1_000_000_000 }]
+    }
+  });
+  assert.equal(oversizedLine.status, 400, 'line totals that exceed the database numeric range must be rejected before writing');
+
+  const oversizedSubtotal = await request('/api/transactions', {
+    token: cashierToken, method: 'POST',
+    body: {
+      idempotencyKey: crypto.randomUUID(),
+      orderId: 'oversized-subtotal-' + crypto.randomUUID(),
+      items: [
+        { productId: '', sku: '', productName: 'Large test item A', quantity: 1_000_000, unitPrice: 500_000 },
+        { productId: '', sku: '', productName: 'Large test item B', quantity: 1_000_000, unitPrice: 500_000 }
+      ]
+    }
+  });
+  assert.equal(oversizedSubtotal.status, 400, 'subtotals that exceed the database numeric range must be rejected before writing');
+
   const saleKey = crypto.randomUUID();
   const saleOrderId = 'integration-sale-' + crypto.randomUUID();
   const saleBody = {

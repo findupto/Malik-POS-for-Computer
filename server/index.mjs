@@ -186,6 +186,9 @@ const server = http.createServer(async (req, res) => {
         if (!Number.isFinite(n) || n < 0 || n > 1_000_000_000) throw Object.assign(new Error(field + ' must be a non-negative amount.'), { status: 400 });
         return Math.round((n + Number.EPSILON) * 100) / 100;
       };
+      // PostgreSQL numeric(14,2) stores at most 999,999,999,999.99.
+      // Reject oversized computed amounts as client errors instead of surfacing a DB overflow.
+      const MAX_STORED_MONEY = 999_999_999_999.99;
       const lines = [];
       let subtotal = 0;
       for (const item of items) {
@@ -198,7 +201,13 @@ const server = http.createServer(async (req, res) => {
         }
         const unitPrice = moneyValue(item?.unitPrice, 'unitPrice');
         const lineTotal = Math.round((quantity * unitPrice + Number.EPSILON) * 100) / 100;
+        if (!Number.isFinite(lineTotal) || lineTotal > MAX_STORED_MONEY) {
+          return send(res, 400, { error: 'A line total exceeds the maximum supported sale amount.' });
+        }
         subtotal = Math.round((subtotal + lineTotal + Number.EPSILON) * 100) / 100;
+        if (!Number.isFinite(subtotal) || subtotal > MAX_STORED_MONEY) {
+          return send(res, 400, { error: 'The sale subtotal exceeds the maximum supported amount.' });
+        }
         lines.push({ productId, sku, productName, quantity: Number(quantity.toFixed(3)), unitPrice, lineTotal });
       }
       const discountAmount = moneyValue(input.discountAmount ?? 0, 'discountAmount');
@@ -207,6 +216,9 @@ const server = http.createServer(async (req, res) => {
       const deliveryFee = moneyValue(input.deliveryFee ?? 0, 'deliveryFee');
       if (discountAmount > subtotal) return send(res, 400, { error: 'Discount cannot exceed the subtotal.' });
       const total = Math.round((subtotal - discountAmount + taxAmount + serviceChargeAmount + deliveryFee + Number.EPSILON) * 100) / 100;
+      if (!Number.isFinite(total) || total > MAX_STORED_MONEY) {
+        return send(res, 400, { error: 'The sale total exceeds the maximum supported amount.' });
+      }
       const tenderRows = [];
       for (const tender of tenders) {
         const method = String(tender?.method || '');
