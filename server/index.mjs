@@ -370,7 +370,7 @@ const server = http.createServer(async (req, res) => {
       if (!Array.isArray(items) || items.length > 200) return send(res, 400, { error: 'Refund items must be an array of at most 200 entries.' });
       for (const item of items) {
         const quantity = Number(item?.quantity);
-        if (!String(item?.productId ?? '').trim() || !String(item?.productName || '').trim() || !Number.isFinite(quantity) || quantity <= 0 || quantity > 1_000_000 || Math.abs(quantity * 1000 - Math.round(quantity * 1000)) > 1e-6) return send(res, 400, { error: 'Each refund item needs productId, productName and a positive quantity with at most three decimals.' });
+        if (!String(item?.productId ?? '').trim() || !String(item?.productName || '').trim() || !Number.isFinite(quantity) || quantity <= 0 || quantity > 1_000_000 || !hasAtMostThreeDecimalPlaces(quantity)) return send(res, 400, { error: 'Each refund item needs productId, productName and a positive quantity with at most three decimals.' });
       }
       if (restock && !items.length) return send(res, 400, { error: 'Provide refunded items when restocking inventory.' });
       const client = await pool.connect();
