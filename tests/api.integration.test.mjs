@@ -425,6 +425,14 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
     token: adminToken, method: 'POST', body: { events: [null] }
   });
   assert.equal(malformedSyncEvents.status, 400, 'null sync events should be rejected as client input, not crash the API');
+  const malformedRecordId = await request('/api/sync/push', {
+    token: adminToken, method: 'POST',
+    body: { events: [{
+      eventId: crypto.randomUUID(), entity: 'orders', recordId: { id: 'unexpected-object' },
+      operation: 'upsert', payload: { id: 'unexpected-object' }, expectedSequence: null
+    }] }
+  });
+  assert.equal(malformedRecordId.status, 400, 'recordId must be a bounded string, not a coerced object');
   const malformedExpectedSequence = await request('/api/sync/push', {
     token: adminToken, method: 'POST',
     body: { events: [{

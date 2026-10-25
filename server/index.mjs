@@ -506,7 +506,7 @@ const server = http.createServer(async (req, res) => {
             throw Object.assign(new Error('Each sync event must be a JSON object.'), { status: 400 });
           }
           if (!canPushEntity(user.role, String(event.entity || ''))) throw Object.assign(new Error('Your role cannot sync this record type.'), { status: 403 });
-          if (!isUuid(event.eventId) || !/^[a-z][a-z0-9_-]{0,63}$/.test(String(event.entity || '')) || !String(event.recordId || '').trim() || String(event.recordId).length > 200 || !['upsert','delete'].includes(event.operation)) {
+          if (!isUuid(event.eventId) || typeof event.entity !== 'string' || !/^[a-z][a-z0-9_-]{0,63}$/.test(event.entity) || typeof event.recordId !== 'string' || !event.recordId.trim() || event.recordId.length > 200 || !['upsert','delete'].includes(event.operation)) {
             throw Object.assign(new Error('Each event needs a UUID eventId, valid entity/recordId and upsert/delete operation.'), { status: 400 });
           }
           if (Object.hasOwn(event, 'expectedSequence') && event.expectedSequence !== null &&
