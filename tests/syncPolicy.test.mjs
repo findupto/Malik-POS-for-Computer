@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { canPushEntity } from '../server/syncPolicy.mjs';
+import { canPushEntity, isValidSyncPayload } from '../server/syncPolicy.mjs';
 
 test('administrators and managers can sync all entity types', () => {
   assert.equal(canPushEntity('admin', 'products'), true);
@@ -23,4 +23,13 @@ test('unknown roles and unapproved entities are denied', () => {
   assert.equal(canPushEntity('guest', 'orders'), false);
   assert.equal(canPushEntity('cashier', 'orders;staff'), false);
   assert.equal(canPushEntity('cashier', ''), false);
+});
+
+test('sync upserts require an object payload, not arrays or null', () => {
+  assert.equal(isValidSyncPayload('upsert', { id: 'p-1' }), true);
+  assert.equal(isValidSyncPayload('upsert', []), false);
+  assert.equal(isValidSyncPayload('upsert', null), false);
+  assert.equal(isValidSyncPayload('upsert', undefined), false);
+  assert.equal(isValidSyncPayload('delete', undefined), true);
+  assert.equal(isValidSyncPayload('delete', { ignored: true }), false);
 });

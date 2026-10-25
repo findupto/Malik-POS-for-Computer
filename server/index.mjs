@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
-import { canPushEntity } from './syncPolicy.mjs';
+import { canPushEntity, isValidSyncPayload } from './syncPolicy.mjs';
 import { hasValidSessionClaims } from './sessionClaims.mjs';
 import { hasAtMostThreeDecimalPlaces } from './quantity.mjs';
 import { checkLoginRateLimit, clearLoginFailures, recordLoginFailure } from './loginRateLimit.mjs';
@@ -436,6 +436,7 @@ const server = http.createServer(async (req, res) => {
           if (!isUuid(event.eventId) || !/^[a-z][a-z0-9_-]{0,63}$/.test(String(event.entity || '')) || !String(event.recordId || '').trim() || String(event.recordId).length > 200 || !['upsert','delete'].includes(event.operation)) {
             throw Object.assign(new Error('Each event needs a UUID eventId, valid entity/recordId and upsert/delete operation.'), { status: 400 });
           }
+          if (!isValidSyncPayload(event.operation, event.payload)) throw Object.assign(new Error(event.operation === 'upsert' ? 'Upsert events require a non-array object payload.' : 'Delete events must not include a payload.'), { status: 400 });
           const priorEvent = await client.query('SELECT sequence FROM sync_events WHERE event_id=$1', [event.eventId]);
           if (priorEvent.rowCount) { results.push({ eventId: event.eventId, status: 'duplicate', sequence: Number(priorEvent.rows[0].sequence) }); continue; }
           if (Object.hasOwn(event, 'expectedSequence')) {
@@ -454,7 +455,6 @@ const server = http.createServer(async (req, res) => {
           if (event.operation === 'delete') {
             await client.query('DELETE FROM pos_records WHERE location_id=$1 AND entity=$2 AND record_id=$3', [user.locationId,event.entity,event.recordId]);
           } else {
-            if (event.payload === undefined || event.payload === null || typeof event.payload !== 'object') throw Object.assign(new Error('Upsert events require an object payload.'), { status: 400 });
             await client.query('INSERT INTO pos_records(location_id,entity,record_id,payload,updated_by) VALUES ($1,$2,$3,$4,$5) ON CONFLICT(location_id,entity,record_id) DO UPDATE SET payload=EXCLUDED.payload,revision=pos_records.revision+1,updated_by=EXCLUDED.updated_by,updated_at=now()',
               [user.locationId,event.entity,event.recordId,JSON.stringify(event.payload),user.sub]);
           }
