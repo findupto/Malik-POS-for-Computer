@@ -611,13 +611,15 @@ const server = http.createServer(async (req, res) => {
         [user.locationId]
       );
       const outOfStock = await pool.query(
-        `SELECT product_id, sku, product_name, quantity::numeric(14,3)::text AS quantity, updated_at
+        `SELECT product_id, sku, product_name, quantity::numeric(14,3)::text AS quantity, updated_at, count(*) OVER()::int AS total_count
            FROM inventory_balances
           WHERE location_id=$1 AND quantity <= 0
           ORDER BY product_name
           LIMIT 100`,
         [user.locationId]
       );
+      const outOfStockCount = Number(outOfStock.rows[0]?.total_count || 0);
+      const outOfStockProducts = outOfStock.rows.map(({ total_count, ...product }) => product);
       const staff = await pool.query(
         'SELECT count(*)::int AS active_staff FROM staff_users WHERE location_id=$1 AND active=true',
         [user.locationId]
@@ -638,7 +640,7 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, {
         locationId: user.locationId, timezone, from, to,
         sales: { transactionCount: sale.transaction_count, grossSales, averageSale: Number(sale.average_sale), refundsCount: refund.refund_count, refunded, netSales: Math.round((grossSales - refunded + Number.EPSILON) * 100) / 100, currency: 'PKR' },
-        inventory: { trackedProducts: inventory.rows[0].tracked_products, unitsOnHand: Number(inventory.rows[0].units_on_hand), outOfStockCount: outOfStock.rows.length, outOfStockProducts: outOfStock.rows },
+        inventory: { trackedProducts: inventory.rows[0].tracked_products, unitsOnHand: Number(inventory.rows[0].units_on_hand), outOfStockCount, outOfStockProducts },
         activeStaff: staff.rows[0].active_staff,
         recentActivity: activity.rows
       });
