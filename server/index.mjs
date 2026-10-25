@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
-import { canPushEntity, isValidSyncPayload } from './syncPolicy.mjs';
+import { canPushEntity, hasValidSyncRecordIdentity, isValidSyncPayload } from './syncPolicy.mjs';
 import { hasValidSessionClaims } from './sessionClaims.mjs';
 import { hasAtMostThreeDecimalPlaces } from './quantity.mjs';
 
@@ -518,6 +518,7 @@ const server = http.createServer(async (req, res) => {
             throw Object.assign(new Error('occurredAt must be null or a non-empty valid date-time string.'), { status: 400 });
           }
           if (!isValidSyncPayload(event.operation, event.payload)) throw Object.assign(new Error(event.operation === 'upsert' ? 'Upsert events require a non-array object payload.' : 'Delete events must not include a payload.'), { status: 400 });
+          if (event.operation === 'upsert' && !hasValidSyncRecordIdentity(event.payload, event.recordId)) throw Object.assign(new Error('Upsert payload id/uuid must match recordId when an identity is provided.'), { status: 400 });
           const priorEvent = await client.query(
             'SELECT sequence,location_id,entity,record_id,operation,occurred_at, (payload IS NOT DISTINCT FROM $2::jsonb) AS same_payload FROM sync_events WHERE event_id=$1',
             [event.eventId, event.payload === undefined ? null : JSON.stringify(event.payload)]

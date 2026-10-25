@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { canPushEntity, isValidSyncPayload } from '../server/syncPolicy.mjs';
+import { canPushEntity, hasValidSyncRecordIdentity, isValidSyncPayload } from '../server/syncPolicy.mjs';
 
 test('administrators and managers can sync all entity types', () => {
   assert.equal(canPushEntity('admin', 'products'), true);
@@ -32,4 +32,16 @@ test('sync upserts require an object payload, not arrays or null', () => {
   assert.equal(isValidSyncPayload('upsert', undefined), false);
   assert.equal(isValidSyncPayload('delete', undefined), true);
   assert.equal(isValidSyncPayload('delete', { ignored: true }), false);
+});
+
+test('sync payload identity must agree with recordId when present', () => {
+  assert.equal(hasValidSyncRecordIdentity({ id: 'o-1' }, 'o-1'), true);
+  assert.equal(hasValidSyncRecordIdentity({ uuid: 'o-1' }, 'o-1'), true);
+  assert.equal(hasValidSyncRecordIdentity({ id: 'o-1', uuid: 'o-1' }, 'o-1'), true);
+  assert.equal(hasValidSyncRecordIdentity({ total: 20 }, 'o-1'), true, 'legacy identity-less payloads remain supported');
+  assert.equal(hasValidSyncRecordIdentity({ id: 'o-2' }, 'o-1'), false);
+  assert.equal(hasValidSyncRecordIdentity({ uuid: 'o-2' }, 'o-1'), false);
+  assert.equal(hasValidSyncRecordIdentity({ id: 'o-1', uuid: 'o-2' }, 'o-1'), false);
+  assert.equal(hasValidSyncRecordIdentity({ id: '' }, 'o-1'), false);
+  assert.equal(hasValidSyncRecordIdentity({ id: 'x'.repeat(201) }, 'x'.repeat(201)), false);
 });

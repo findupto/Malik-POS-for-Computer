@@ -450,6 +450,24 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   });
   assert.equal(malformedOccurredAt.status, 400, 'occurredAt must be null or a valid date-time string');
 
+  const mismatchedPayloadIdentity = await request('/api/sync/push', {
+    token: adminToken, method: 'POST',
+    body: { events: [{
+      eventId: crypto.randomUUID(), entity: 'orders', recordId: 'identity-check-' + crypto.randomUUID(),
+      operation: 'upsert', payload: { id: 'different-record', total: 25 }, expectedSequence: null
+    }] }
+  });
+  assert.equal(mismatchedPayloadIdentity.status, 400, 'the API must reject payload identity that disagrees with recordId');
+
+  const conflictingPayloadIdentity = await request('/api/sync/push', {
+    token: adminToken, method: 'POST',
+    body: { events: [{
+      eventId: crypto.randomUUID(), entity: 'orders', recordId: 'identity-check-' + crypto.randomUUID(),
+      operation: 'upsert', payload: { id: 'same-record', uuid: 'different-record', total: 25 }, expectedSequence: null
+    }] }
+  });
+  assert.equal(conflictingPayloadIdentity.status, 400, 'the API must reject conflicting id and uuid values');
+
   const recordId = 'integration-order-' + crypto.randomUUID();
   const firstEventId = crypto.randomUUID();
   const first = await request('/api/sync/push', {
