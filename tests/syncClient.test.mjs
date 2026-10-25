@@ -602,3 +602,20 @@ test('pulled upserts whose payload ID conflicts with record_id are rejected with
   assert.equal(storage.inspect('malik-syncCursor'), '7');
   assert.equal(storage.inspect('malik-syncVersions'), versions);
 });
+
+
+test('applyPulledEvents preserves local records and sync metadata when the saved cursor is invalid', () => {
+  const orders = JSON.stringify([{ id: 'o-1', total: 10 }]);
+  const versions = JSON.stringify({ 'orders:o-1': 4 });
+  const storage = fakeStorage({
+    'malik-orders': orders,
+    'malik-syncCursor': '1.5',
+    'malik-syncVersions': versions
+  });
+  assert.throws(() => applyPulledEvents(storage, [
+    { sequence: 5, entity: 'orders', record_id: 'o-1', operation: 'upsert', payload: { id: 'o-1', total: 99 } }
+  ]), /Saved sync cursor is invalid.*preserved/i);
+  assert.equal(storage.inspect('malik-orders'), orders);
+  assert.equal(storage.inspect('malik-syncCursor'), '1.5');
+  assert.equal(storage.inspect('malik-syncVersions'), versions);
+});

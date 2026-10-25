@@ -170,7 +170,12 @@ export function applyPulledEvents(storage, events, cursorKey = CURSOR_KEY, defin
   validatePulledEvents(events);
   const byEntity = new Map(definitions.map(def => [def.entity, def]));
   const grouped = new Map();
-  let nextCursor = Number(storage.getItem(cursorKey) || 0);
+  const rawCursor = storage.getItem(cursorKey);
+  const nextCursorValue = rawCursor == null || rawCursor === '' ? 0 : Number(rawCursor);
+  if (!Number.isSafeInteger(nextCursorValue) || nextCursorValue < 0) {
+    throw new Error('Saved sync cursor is invalid. Its contents were preserved; do not clear app data before recovery.');
+  }
+  let nextCursor = nextCursorValue;
   const versions = readJson(storage, VERSIONS_KEY, {});
   for (const event of events) {
     const sequence = Number(event.sequence);
