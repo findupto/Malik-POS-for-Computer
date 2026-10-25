@@ -51,6 +51,20 @@ test('invalid queued sync events are preserved rather than uploaded', () => {
   assert.equal(storage.inspect('malik-syncOutbox'), corrupt);
 });
 
+test('invalid queued sync timestamps are preserved and block upload', () => {
+  const corrupt = JSON.stringify([{
+    eventId: '123e4567-e89b-42d3-a456-426614174000',
+    entity: 'orders', recordId: 'o-1', operation: 'upsert',
+    payload: { id: 'o-1' }, expectedSequence: null, occurredAt: 'not-a-date'
+  }]);
+  const storage = fakeStorage({
+    'malik-orders': JSON.stringify([{ id: 'o-1', total: 10 }]),
+    'malik-syncOutbox': corrupt
+  });
+  assert.throws(() => buildSnapshotEvents(storage, 'admin'), /outbox has an invalid format.*preserved/i);
+  assert.equal(storage.inspect('malik-syncOutbox'), corrupt);
+});
+
 test('snapshot excludes staff secrets and cashier catalog writes', () => {
   const storage = fakeStorage({
     'malik-orders': JSON.stringify([{ id: 'o-1', total: 500 }]),

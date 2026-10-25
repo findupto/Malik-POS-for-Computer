@@ -39,6 +39,8 @@ function readOutbox(storage) {
     if (!event || typeof event !== 'object' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(event.eventId || '') || typeof event.entity !== 'string' || !/^[a-z][a-z0-9_-]{0,63}$/.test(event.entity) || typeof event.recordId !== 'string' || !event.recordId.trim() || event.recordId.length > 200 || !['upsert', 'delete'].includes(event.operation)) return true;
     if (event.operation === 'upsert' && (!event.payload || typeof event.payload !== 'object' || Array.isArray(event.payload))) return true;
     if (Object.hasOwn(event, 'expectedSequence') && event.expectedSequence !== null && (!Number.isSafeInteger(event.expectedSequence) || event.expectedSequence < 0)) return true;
+    if (Object.hasOwn(event, 'occurredAt') && event.occurredAt !== null &&
+        (typeof event.occurredAt !== 'string' || !event.occurredAt.trim() || !Number.isFinite(Date.parse(event.occurredAt)))) return true;
     return false;
   })) {
     throw new Error('Saved sync outbox has an invalid format. Its contents were preserved; do not clear app data before recovery.');

@@ -509,10 +509,6 @@ const server = http.createServer(async (req, res) => {
           if (!isUuid(event.eventId) || typeof event.entity !== 'string' || !/^[a-z][a-z0-9_-]{0,63}$/.test(event.entity) || typeof event.recordId !== 'string' || !event.recordId.trim() || event.recordId.length > 200 || !['upsert','delete'].includes(event.operation)) {
             throw Object.assign(new Error('Each event needs a UUID eventId, valid entity/recordId and upsert/delete operation.'), { status: 400 });
           }
-          if (Object.hasOwn(event, 'occurredAt') && event.occurredAt !== null &&
-              (typeof event.occurredAt !== 'string' || !event.occurredAt.trim() || !Number.isFinite(Date.parse(event.occurredAt)))) {
-            throw Object.assign(new Error('occurredAt must be null or a valid date-time string.'), { status: 400 });
-          }
           if (Object.hasOwn(event, 'expectedSequence') && event.expectedSequence !== null &&
               (!Number.isSafeInteger(event.expectedSequence) || event.expectedSequence < 0)) {
             throw Object.assign(new Error('expectedSequence must be null or a non-negative safe integer.'), { status: 400 });
