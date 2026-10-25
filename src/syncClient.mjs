@@ -28,6 +28,19 @@ function readJson(storage, key, fallback) {
     throw new Error(`Saved sync metadata "${key}" is unreadable. Its contents were preserved; do not clear app data before recovery.`);
   }
 }
+function readVersions(storage) {
+  const versions = readJson(storage, VERSIONS_KEY, {});
+  if (!versions || typeof versions !== 'object' || Array.isArray(versions)) {
+    throw new Error('Saved sync version metadata has an invalid format. Its contents were preserved; do not clear app data before recovery.');
+  }
+  for (const [key, sequence] of Object.entries(versions)) {
+    if (!key || !Number.isSafeInteger(sequence) || sequence < 0) {
+      throw new Error('Saved sync version metadata has an invalid record sequence. Its contents were preserved; do not clear app data before recovery.');
+    }
+  }
+  return versions;
+}
+
 function readOutbox(storage) {
   const raw = storage.getItem(OUTBOX_KEY);
   if (raw == null) return [];
@@ -98,7 +111,7 @@ function captureBaseline(storage, definitions = DEFAULT_SYNC_ENTITIES, preserve 
 export function buildSnapshotEvents(storage, role = 'admin', definitions = DEFAULT_SYNC_ENTITIES) {
   const baseline = readJson(storage, BASELINE_KEY, null);
   const priorOutbox = readOutbox(storage);
-  const versions = readJson(storage, VERSIONS_KEY, {});
+  const versions = readVersions(storage);
   const priorByKey = new Map(priorOutbox.map(event => [event.entity + ':' + event.recordId, event]));
   const desired = [];
   const permittedEntities = new Set(definitions.filter(def => roleAllowed(role, def.entity)).map(def => def.entity));
@@ -184,7 +197,7 @@ export function applyPulledEvents(storage, events, cursorKey = CURSOR_KEY, defin
     throw new Error('Saved sync cursor is invalid. Its contents were preserved; do not clear app data before recovery.');
   }
   let nextCursor = nextCursorValue;
-  const versions = readJson(storage, VERSIONS_KEY, {});
+  const versions = readVersions(storage);
   for (const event of events) {
     const sequence = Number(event.sequence);
     if (Number.isSafeInteger(sequence)) {
@@ -294,7 +307,7 @@ export async function syncSnapshot({ baseUrl, token, storage, role = 'admin', fe
       }
       if (!conflictKeys.has(key)) safeBatch.push(event);
     }
-    const observedVersions = readJson(storage, VERSIONS_KEY, {});
+    const observedVersions = readVersions(storage);
     for (const event of batch) {
       const sequence = Number(event.sequence);
       if (event.entity && event.record_id != null && Number.isSafeInteger(sequence)) {
@@ -335,7 +348,7 @@ export async function syncSnapshot({ baseUrl, token, storage, role = 'admin', fe
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || 'Upload failed.');
     uploaded += Number(data.accepted || 0);
-    const versions = readJson(storage, VERSIONS_KEY, {});
+    const versions = readVersions(storage);
     for (const result of data.results || []) {
       const event = outgoing.find(item => item.eventId === result.eventId);
       if (event && Number.isSafeInteger(Number(result.sequence))) versions[event.entity + ':' + event.recordId] = Number(result.sequence);
