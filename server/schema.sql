@@ -113,10 +113,13 @@ CREATE TABLE IF NOT EXISTS inventory_balances (
   sku text NOT NULL DEFAULT '',
   product_name text NOT NULL,
   quantity numeric(14,3) NOT NULL DEFAULT 0 CHECK (quantity >= 0),
+  reorder_point numeric(14,3) NOT NULL DEFAULT 0 CHECK (reorder_point >= 0),
   updated_by uuid REFERENCES staff_users(id),
   updated_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (location_id, product_id)
 );
+
+ALTER TABLE inventory_balances ADD COLUMN IF NOT EXISTS reorder_point numeric(14,3) NOT NULL DEFAULT 0 CHECK (reorder_point >= 0);
 
 CREATE TABLE IF NOT EXISTS inventory_movements (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
