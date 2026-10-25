@@ -571,3 +571,34 @@ test('invalid pull pagination cursors are rejected before local records or sync 
     assert.equal(storage.inspect('malik-syncVersions'), versions);
   }
 });
+
+
+test('pulled upserts whose payload ID conflicts with record_id are rejected without applying data', async () => {
+  const { syncSnapshot } = await import('../src/syncClient.mjs');
+  const records = JSON.stringify([{ id: 'o-1', total: 20 }]);
+  const baseline = JSON.stringify({ orders: [{ id: 'o-1', total: 10 }] });
+  const versions = JSON.stringify({ 'orders:o-1': 7 });
+  const storage = fakeStorage({
+    'malik-orders': records,
+    'malik-syncBaseline': baseline,
+    'malik-syncCursor': '7',
+    'malik-syncVersions': versions
+  });
+  await assert.rejects(() => syncSnapshot({
+    baseUrl: 'https://pos.example.test', token: 'test-token', storage,
+    fetchImpl: async () => ({
+      ok: true,
+      json: async () => ({
+        events: [{
+          sequence: 8, entity: 'orders', record_id: 'o-2', operation: 'upsert',
+          payload: { id: 'different-record', total: 30 }, occurred_at: '2026-01-01T00:00:00.000Z'
+        }],
+        nextAfter: 8
+      })
+    })
+  }), /invalid event batch.*preserved/i);
+  assert.equal(storage.inspect('malik-orders'), records);
+  assert.equal(storage.inspect('malik-syncBaseline'), baseline);
+  assert.equal(storage.inspect('malik-syncCursor'), '7');
+  assert.equal(storage.inspect('malik-syncVersions'), versions);
+});
