@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { canPushEntity } from './syncPolicy.mjs';
+import { hasAtMostThreeDecimalPlaces } from './quantity.mjs';
 import { checkLoginRateLimit, clearLoginFailures, recordLoginFailure } from './loginRateLimit.mjs';
 
 const { Pool } = pg;
@@ -168,7 +169,7 @@ const server = http.createServer(async (req, res) => {
         const productId = String(item?.productId ?? '').trim();
         const sku = String(item?.sku ?? '').trim();
         const quantity = Number(item?.quantity);
-        if (!productName || productName.length > 200 || productId.length > 200 || sku.length > 100 || !Number.isFinite(quantity) || quantity <= 0 || quantity > 1_000_000 || !Number.isFinite(Number(quantity.toFixed(3)))) {
+        if (!productName || productName.length > 200 || productId.length > 200 || sku.length > 100 || !Number.isFinite(quantity) || quantity <= 0 || quantity > 1_000_000 || !hasAtMostThreeDecimalPlaces(quantity)) {
           return send(res, 400, { error: 'Each line needs a product name, valid identifiers, and a positive quantity.' });
         }
         const unitPrice = moneyValue(item?.unitPrice, 'unitPrice');
@@ -280,7 +281,7 @@ const server = http.createServer(async (req, res) => {
       const delta = Number(input.quantityDelta);
       if (!isUuid(idempotencyKey)) return send(res, 400, { error: 'A UUID idempotencyKey is required.' });
       if (!productId || productId.length > 200 || !productName || productName.length > 200 || sku.length > 100) return send(res, 400, { error: 'A valid productId and productName are required.' });
-      if (!Number.isFinite(delta) || delta === 0 || Math.abs(delta) > 1_000_000 || Math.abs(delta * 1000 - Math.round(delta * 1000)) > 1e-6) return send(res, 400, { error: 'quantityDelta must be non-zero with at most three decimal places.' });
+      if (!Number.isFinite(delta) || delta === 0 || Math.abs(delta) > 1_000_000 || !hasAtMostThreeDecimalPlaces(delta)) return send(res, 400, { error: 'quantityDelta must be non-zero with at most three decimal places.' });
       if (!reason || reason.length > 500) return send(res, 400, { error: 'A reason is required (maximum 500 characters).' });
       const client = await pool.connect();
       try {
@@ -309,7 +310,7 @@ const server = http.createServer(async (req, res) => {
       const sku = String(input.sku || '').trim();
       const quantity = Number(input.quantity);
       if (!productId || productId.length > 200 || !productName || productName.length > 200 || sku.length > 100) return send(res, 400, { error: 'A valid productId and productName are required.' });
-      if (!Number.isFinite(quantity) || quantity < 0 || quantity > 1_000_000_000 || Math.abs(quantity * 1000 - Math.round(quantity * 1000)) > 1e-6) return send(res, 400, { error: 'quantity must be zero or greater with at most three decimal places.' });
+      if (!Number.isFinite(quantity) || quantity < 0 || quantity > 1_000_000_000 || !hasAtMostThreeDecimalPlaces(quantity)) return send(res, 400, { error: 'quantity must be zero or greater with at most three decimal places.' });
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
