@@ -239,6 +239,16 @@ ipcMain.handle('malik-pos:disconnect-google-drive', async () => {
 const BACKUP_RETENTION_DAYS = 30;
 let latestBackupSnapshot = null;
 let backupScheduleTimer = null;
+let driveReminderDay = '';
+let driveFailureNoticeDay = '';
+function showDriveReminderIfNeeded() {
+  const today = new Date().toISOString().slice(0, 10);
+  if (readDriveConfig()?.refreshToken || driveReminderDay === today || !Notification.isSupported()) return;
+  driveReminderDay = today;
+  const notice = new Notification({ title: 'Malik POS backup reminder', body: 'Connect Google Drive in Settings to keep an off-device backup.' });
+  notice.show();
+  setTimeout(() => notice.close(), 1000);
+}
 function backupDirectory() { return path.join(app.getPath('userData'), 'backups'); }
 async function writeDailyBackup(snapshot) {
   if (!snapshot || !Array.isArray(snapshot.entries) || !snapshot.entries.length) return { success: false, error: 'No POS data snapshot is available yet.' };
@@ -264,6 +274,7 @@ ipcMain.handle('malik-pos:save-backup-snapshot', async (_event, snapshot) => {
     const safeSnapshot = { snapshotAt: new Date().toISOString(), entries };
     if (Buffer.byteLength(JSON.stringify(safeSnapshot)) > 25 * 1024 * 1024) return { success: false, error: 'Backup snapshot exceeds the 25 MB safety limit.' };
     latestBackupSnapshot = safeSnapshot;
+    showDriveReminderIfNeeded();
     const dir = backupDirectory();
     await fs.mkdir(dir, { recursive: true });
     const latestTemp = path.join(dir, 'latest.json.tmp');
@@ -299,19 +310,13 @@ ipcMain.handle('malik-pos:open-backup-folder', async () => {
 });
 
 app.whenReady().then(() => {
-  let reminderDay = '';
   const runBackupSchedule = async () => {
     if (!latestBackupSnapshot) return;
     const today = new Date().toISOString().slice(0, 10);
-    const config = readDriveConfig();
-    if (!config?.refreshToken && reminderDay !== today && Notification.isSupported()) {
-      reminderDay = today;
-      const notice = new Notification({ title: 'Malik POS backup reminder', body: 'Connect Google Drive in Settings to keep an off-device backup.' });
-      notice.show();
-      setTimeout(() => notice.close(), 1000);
-    }
+    showDriveReminderIfNeeded();
     const result = await writeDailyBackup(latestBackupSnapshot);
-    if (result.success && result.cloud?.success === false && result.cloud?.connected && Notification.isSupported()) {
+    if (result.success && result.cloud?.success === false && result.cloud?.connected && driveFailureNoticeDay !== today && Notification.isSupported()) {
+      driveFailureNoticeDay = today;
       const notice = new Notification({ title: 'Malik POS backup failed', body: 'Google Drive backup failed. Open Malik POS Settings to reconnect and retry.' });
       notice.show(); setTimeout(() => notice.close(), 1000);
     }
