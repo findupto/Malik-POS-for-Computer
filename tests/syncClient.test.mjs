@@ -716,3 +716,23 @@ test('duplicate local record IDs block applying pulled events without mutating d
   assert.equal(storage.inspect('malik-syncCursor'), '4');
   assert.equal(storage.inspect('malik-syncVersions'), versions);
 });
+
+test('duplicate queued event IDs are preserved and block snapshot rebuild', () => {
+  const event = { eventId: '123e4567-e89b-42d3-a456-426614174000', entity: 'orders', recordId: 'o-1', operation: 'upsert', payload: { id: 'o-1' } };
+  const corrupt = JSON.stringify([event, { ...event, entity: 'products', recordId: 'p-1', payload: { id: 'p-1' } }]);
+  const storage = fakeStorage({ 'malik-orders': JSON.stringify([{ id: 'o-1', total: 10 }]), 'malik-syncOutbox': corrupt });
+  assert.throws(() => buildSnapshotEvents(storage, 'admin'), /outbox has an invalid format.*preserved/i);
+  assert.equal(storage.inspect('malik-syncOutbox'), corrupt);
+});
+
+test('duplicate saved conflict IDs are preserved and block sync', async () => {
+  const event = { sequence: 12, entity: 'orders', record_id: 'o-1', operation: 'upsert', payload: { id: 'o-1', total: 30 } };
+  const conflict = { id: 'c-1', entity: 'orders', recordId: 'o-1', remoteEvent: event };
+  const corrupt = JSON.stringify([conflict, { ...conflict, recordId: 'o-2', remoteEvent: { ...event, record_id: 'o-2', payload: { id: 'o-2', total: 40 } } }]);
+  const storage = fakeStorage({ 'malik-orders': JSON.stringify([{ id: 'o-1', total: 10 }]), 'malik-syncConflicts': corrupt });
+  await assert.rejects(syncSnapshot({
+    baseUrl: 'https://pos.example.test', token: 'test-token', storage,
+    fetchImpl: async () => { throw new Error('network should not be called for invalid local metadata'); }
+  }), /Saved sync conflict metadata.*invalid.*preserved/i);
+  assert.equal(storage.inspect('malik-syncConflicts'), corrupt);
+});

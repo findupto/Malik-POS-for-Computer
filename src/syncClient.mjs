@@ -75,7 +75,12 @@ function readBaseline(storage) {
 
 function readConflicts(storage) {
   const conflicts = readJson(storage, CONFLICTS_KEY, []);
+  const seenIds = new Set();
   const invalid = !Array.isArray(conflicts) || conflicts.some(item => {
+    if (item && typeof item.id === 'string') {
+      if (seenIds.has(item.id)) return true;
+      seenIds.add(item.id);
+    }
     if (!item || typeof item !== 'object' || Array.isArray(item) ||
         typeof item.id !== 'string' || !item.id.trim() ||
         typeof item.entity !== 'string' || !/^[a-z][a-z0-9_-]{0,63}$/.test(item.entity) ||
@@ -101,8 +106,11 @@ function readOutbox(storage) {
   try { parsed = JSON.parse(raw); } catch {
     throw new Error('Saved sync outbox is unreadable. Its contents were preserved; do not clear app data before recovery.');
   }
+  const seenEventIds = new Set();
   if (!Array.isArray(parsed) || parsed.some(event => {
     if (!event || typeof event !== 'object' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(event.eventId || '') || typeof event.entity !== 'string' || !/^[a-z][a-z0-9_-]{0,63}$/.test(event.entity) || typeof event.recordId !== 'string' || !event.recordId.trim() || event.recordId.length > 200 || !['upsert', 'delete'].includes(event.operation)) return true;
+    if (seenEventIds.has(event.eventId.toLowerCase())) return true;
+    seenEventIds.add(event.eventId.toLowerCase());
     if (event.operation === 'upsert' && (!event.payload || typeof event.payload !== 'object' || Array.isArray(event.payload))) return true;
     if (Object.hasOwn(event, 'expectedSequence') && event.expectedSequence !== null && (!Number.isSafeInteger(event.expectedSequence) || event.expectedSequence < 0)) return true;
     if (Object.hasOwn(event, 'occurredAt') && event.occurredAt !== null &&
