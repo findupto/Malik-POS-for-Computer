@@ -144,12 +144,10 @@ export async function recordSaleTransaction({ baseUrl, token, order, payment, st
   let result = {};
   try { result = await response.json(); } catch {}
   if (!response.ok) {
-    // A client-side validation/conflict response confirms the request was rejected; allow a corrected retry.
-    if (response.status >= 400 && response.status < 500) {
-      delete outbox[String(order.id)];
-      storage.setItem(SALE_OUTBOX_KEY, JSON.stringify(outbox));
-    }
-    throw new Error(result.error || 'The server did not record this sale. The order remains pending; retry payment to safely retry the same sale.');
+    // Keep every rejected request in the durable outbox until an operator resolves it.
+    // Even 4xx responses can be caused by expired credentials or server-side conflicts;
+    // deleting the only saved payload could lose a sale or break safe idempotent retries.
+    throw new Error(result.error || 'The server did not record this sale. The order remains pending; resolve the error and retry safely.');
   }
   // Keep the queue entry until the caller has durably persisted the local paid order.
   return { ...result, idempotencyKey };
