@@ -43,17 +43,34 @@ function readVersions(storage) {
 
 function readBaseline(storage) {
   const baseline = readJson(storage, BASELINE_KEY, null);
-  const invalid = baseline !== null && (
-    !baseline || typeof baseline !== 'object' || Array.isArray(baseline) ||
-    Object.values(baseline).some(records =>
-      !records || typeof records !== 'object' || Array.isArray(records) ||
-      Object.values(records).some(record => !record || typeof record !== 'object' || Array.isArray(record))
-    )
-  );
-  if (invalid) {
+  if (baseline === null) return null;
+  const fail = () => {
     throw new Error('Saved sync baseline has an invalid format. Its contents were preserved; do not clear app data before recovery.');
+  };
+  if (typeof baseline !== 'object' || Array.isArray(baseline)) fail();
+  const normalized = { ...baseline };
+  for (const [entity, savedRecords] of Object.entries(baseline)) {
+    if (!savedRecords || typeof savedRecords !== 'object') fail();
+    if (Array.isArray(savedRecords)) {
+      // Older app versions stored baseline collections as arrays. Normalize them
+      // in memory so comparisons remain safe without rewriting saved metadata.
+      const records = Object.create(null);
+      for (const record of savedRecords) {
+        if (!record || typeof record !== 'object' || Array.isArray(record)) fail();
+        const rawId = record.id ?? record.uuid;
+        if (!['string', 'number'].includes(typeof rawId) || !String(rawId).trim() || String(rawId).length > 200) fail();
+        const id = String(rawId);
+        if (Object.hasOwn(records, id)) fail();
+        records[id] = record;
+      }
+      normalized[entity] = records;
+      continue;
+    }
+    for (const record of Object.values(savedRecords)) {
+      if (!record || typeof record !== 'object' || Array.isArray(record)) fail();
+    }
   }
-  return baseline;
+  return normalized;
 }
 
 function readConflicts(storage) {

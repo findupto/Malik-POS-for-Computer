@@ -19,7 +19,7 @@ test('valid JSON with malformed baseline or conflict metadata is preserved and b
     ['malik-syncBaseline', '42'],
     ['malik-syncBaseline', '{"orders":42}'],
     ['malik-syncBaseline', '{"orders":{"o-1":null}}'],
-    ['malik-syncBaseline', '{"orders":[]}'],
+    ['malik-syncBaseline', '{"orders":[null]}'],
     ['malik-syncConflicts', '{}'],
     ['malik-syncConflicts', '[null]'],
     ['malik-syncConflicts', '[{"reason":"missing id"}]'],
