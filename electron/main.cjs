@@ -1,4 +1,6 @@
-const { app, BrowserWindow, shell, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, shell, ipcMain, dialog, Notification, safeStorage } = require('electron');
+const crypto = require('node:crypto');
+const http = require('node:http');
 const { execFile } = require('node:child_process');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -126,6 +128,103 @@ ipcMain.handle('malik-pos:print', async (event, options = {}) => {
   }, (success, failureReason) => resolve({ success, error: failureReason || '' })));
 });
 
+
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email';
+const driveConfigPath = () => path.join(app.getPath('userData'), 'google-drive.enc');
+function readDriveConfig() {
+  try {
+    if (!safeStorage.isEncryptionAvailable()) return null;
+    const encrypted = require('node:fs').readFileSync(driveConfigPath());
+    return JSON.parse(safeStorage.decryptString(encrypted));
+  } catch { return null; }
+}
+function saveDriveConfig(config) {
+  if (!safeStorage.isEncryptionAvailable()) throw new Error('Secure Windows credential storage is unavailable.');
+  const temp = driveConfigPath() + '.tmp';
+  require('node:fs').writeFileSync(temp, safeStorage.encryptString(JSON.stringify(config)), { mode: 0o600 });
+  require('node:fs').renameSync(temp, driveConfigPath());
+}
+async function connectGoogleDrive(clientId) {
+  if (typeof clientId !== 'string' || !/^[0-9]+-[a-zA-Z0-9_-]+\.apps\.googleusercontent\.com$/.test(clientId.trim())) throw new Error('Enter a valid Google OAuth Desktop client ID from Google Cloud Console.');
+  if (!safeStorage.isEncryptionAvailable()) throw new Error('Secure token storage is unavailable on this computer.');
+  const verifier = crypto.randomBytes(48).toString('base64url');
+  const state = crypto.randomBytes(24).toString('hex');
+  const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+  const server = http.createServer();
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+  const address = server.address();
+  const redirectUri = 'http://127.0.0.1:' + address.port + '/oauth2callback';
+  const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  for (const [key, value] of Object.entries({ client_id: clientId.trim(), redirect_uri: redirectUri, response_type: 'code', scope: DRIVE_SCOPE, code_challenge: challenge, code_challenge_method: 'S256', state, access_type: 'offline', prompt: 'consent' })) authUrl.searchParams.set(key, value);
+  const callback = new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => { server.close(); reject(new Error('Google authorization timed out. Please try again.')); }, 5 * 60 * 1000);
+    server.on('request', (req, res) => {
+      const url = new URL(req.url, redirectUri);
+      if (url.pathname !== '/oauth2callback') { res.writeHead(404).end(); return; }
+      if (url.searchParams.get('state') !== state) { res.writeHead(400).end('Authorization state mismatch. You can close this window.'); clearTimeout(timeout); server.close(); reject(new Error('Google authorization state validation failed.')); return; }
+      const code = url.searchParams.get('code');
+      if (!code) { const error = url.searchParams.get('error') || 'Google authorization was cancelled.'; res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }).end('Authorization not completed. You can close this window.'); clearTimeout(timeout); server.close(); reject(new Error(error)); return; }
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }).end('<!doctype html><meta charset="utf-8"><title>Malik POS</title><p>Google Drive connected. You can return to Malik POS.</p>');
+      clearTimeout(timeout); server.close(); resolve(code);
+    });
+  });
+  try {
+    await shell.openExternal(authUrl.toString());
+    const code = await callback;
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: clientId.trim(), code, code_verifier: verifier, grant_type: 'authorization_code', redirect_uri: redirectUri }) });
+    const token = await tokenResponse.json();
+    if (!tokenResponse.ok || !token.refresh_token) throw new Error(token.error_description || token.error || 'Google did not return a refresh token. Disconnect the app in Google Account permissions and try again.');
+    const userResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', { headers: { authorization: 'Bearer ' + token.access_token } });
+    const user = userResponse.ok ? await userResponse.json() : {};
+    saveDriveConfig({ clientId: clientId.trim(), refreshToken: token.refresh_token, email: user.email || '', connectedAt: new Date().toISOString(), uploadedDay: '' });
+    return { success: true, email: user.email || '' };
+  } catch (error) { server.close(); throw error; }
+}
+async function driveAccessToken(config) {
+  const response = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: config.clientId, refresh_token: config.refreshToken, grant_type: 'refresh_token' }) });
+  const data = await response.json();
+  if (!response.ok || !data.access_token) throw new Error(data.error_description || data.error || 'Google Drive authorization expired. Reconnect your account.');
+  return data.access_token;
+}
+async function uploadBackupToDrive(file, day) {
+  const config = readDriveConfig();
+  if (!config?.refreshToken) return { success: false, connected: false, error: 'Google Drive is not connected.' };
+  if (config.uploadedDay === day) return { success: true, skipped: true };
+  const accessToken = await driveAccessToken(config);
+  const query = encodeURIComponent("name = 'Malik POS Backups' and mimeType = 'application/vnd.google-apps.folder' and trashed = false");
+  const folderResponse = await fetch('https://www.googleapis.com/drive/v3/files?q=' + query + '&fields=files(id,name)&pageSize=10', { headers: { authorization: 'Bearer ' + accessToken } });
+  if (!folderResponse.ok) throw new Error('Could not check Google Drive backup folder (' + folderResponse.status + ').');
+  const folderData = await folderResponse.json();
+  let folderId = folderData.files?.[0]?.id;
+  if (!folderId) {
+    const createFolder = await fetch('https://www.googleapis.com/drive/v3/files?fields=id', { method: 'POST', headers: { authorization: 'Bearer ' + accessToken, 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Malik POS Backups', mimeType: 'application/vnd.google-apps.folder' }) });
+    const folder = await createFolder.json();
+    if (!createFolder.ok || !folder.id) throw new Error('Could not create Google Drive backup folder.');
+    folderId = folder.id;
+  }
+  const bytes = await fs.readFile(file);
+  const boundary = 'malikpos_' + crypto.randomBytes(18).toString('hex');
+  const metadata = JSON.stringify({ name: 'malik-pos-' + day + '.json', mimeType: 'application/json', parents: [folderId] });
+  const body = Buffer.concat([Buffer.from('--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + metadata + '\r\n--' + boundary + '\r\nContent-Type: application/json\r\n\r\n'), bytes, Buffer.from('\r\n--' + boundary + '--')]);
+  const upload = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,size', { method: 'POST', headers: { authorization: 'Bearer ' + accessToken, 'content-type': 'multipart/related; boundary=' + boundary }, body });
+  const uploaded = await upload.json();
+  if (!upload.ok || !uploaded.id) throw new Error('Google Drive upload failed (' + upload.status + '): ' + (uploaded.error?.message || 'unknown error'));
+  saveDriveConfig({ ...config, uploadedDay: day, lastUploadAt: new Date().toISOString() });
+  return { success: true, fileId: uploaded.id, name: uploaded.name };
+}
+ipcMain.handle('malik-pos:connect-google-drive', async (_event, clientId) => {
+  try { return await connectGoogleDrive(clientId); }
+  catch (error) { return { success: false, error: String(error?.message || error).slice(0, 240) }; }
+});
+ipcMain.handle('malik-pos:google-drive-status', async () => {
+  const config = readDriveConfig();
+  return { connected: Boolean(config?.refreshToken), email: config?.email || '', lastUploadAt: config?.lastUploadAt || '' };
+});
+ipcMain.handle('malik-pos:disconnect-google-drive', async () => {
+  try { const config = readDriveConfig(); if (config?.refreshToken) await fetch('https://oauth2.googleapis.com/revoke?token=' + encodeURIComponent(config.refreshToken), { method: 'POST' }).catch(() => {}); await fs.unlink(driveConfigPath()).catch(() => {}); return { success: true }; }
+  catch (error) { return { success: false, error: String(error?.message || error).slice(0, 200) }; }
+});
+
 const BACKUP_RETENTION_DAYS = 30;
 let latestBackupSnapshot = null;
 let backupScheduleTimer = null;
@@ -142,7 +241,10 @@ async function writeDailyBackup(snapshot) {
   await fs.rename(temp, file);
   const names = (await fs.readdir(dir)).filter(name => /^malik-pos-\d{4}-\d{2}-\d{2}\.json$/.test(name)).sort().reverse();
   await Promise.all(names.slice(BACKUP_RETENTION_DAYS).map(name => fs.unlink(path.join(dir, name)).catch(() => {})));
-  return { success: true, file, day, bytes: Buffer.byteLength(payload) };
+  let cloud = { connected: false };
+  try { cloud = await uploadBackupToDrive(file, day); }
+  catch (error) { console.error('Malik POS Google Drive backup failed:', error); cloud = { success: false, connected: true, error: String(error?.message || error).slice(0, 240) }; }
+  return { success: true, file, day, bytes: Buffer.byteLength(payload), cloud };
 }
 ipcMain.handle('malik-pos:save-backup-snapshot', async (_event, snapshot) => {
   try {
@@ -172,9 +274,24 @@ ipcMain.handle('malik-pos:open-backup-folder', async () => {
 });
 
 app.whenReady().then(() => {
-  backupScheduleTimer = setInterval(() => {
-    if (latestBackupSnapshot) writeDailyBackup(latestBackupSnapshot).catch(error => console.error('Scheduled Malik POS backup failed:', error));
-  }, 60 * 60 * 1000);
+  let reminderDay = '';
+  const runBackupSchedule = async () => {
+    if (!latestBackupSnapshot) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const config = readDriveConfig();
+    if (!config?.refreshToken && reminderDay !== today && Notification.isSupported()) {
+      reminderDay = today;
+      const notice = new Notification({ title: 'Malik POS backup reminder', body: 'Connect Google Drive in Settings to keep an off-device backup.' });
+      notice.show();
+      setTimeout(() => notice.close(), 1000);
+    }
+    const result = await writeDailyBackup(latestBackupSnapshot);
+    if (result.success && result.cloud?.success === false && result.cloud?.connected && Notification.isSupported()) {
+      const notice = new Notification({ title: 'Malik POS backup failed', body: 'Google Drive backup failed. Open Malik POS Settings to reconnect and retry.' });
+      notice.show(); setTimeout(() => notice.close(), 1000);
+    }
+  };
+  backupScheduleTimer = setInterval(() => { runBackupSchedule().catch(error => console.error('Scheduled Malik POS backup failed:', error)); }, 60 * 60 * 1000);
 
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
