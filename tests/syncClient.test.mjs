@@ -736,3 +736,17 @@ test('duplicate saved conflict IDs are preserved and block sync', async () => {
   }), /Saved sync conflict metadata.*invalid.*preserved/i);
   assert.equal(storage.inspect('malik-syncConflicts'), corrupt);
 });
+
+test('queued upsert with mismatched payload ID is preserved and blocks upload', () => {
+  const corrupt = JSON.stringify([{
+    eventId: '123e4567-e89b-42d3-a456-426614174000',
+    entity: 'orders', recordId: 'o-1', operation: 'upsert',
+    payload: { id: 'o-2', total: 10 }
+  }]);
+  const storage = fakeStorage({
+    'malik-orders': JSON.stringify([{ id: 'o-1', total: 10 }]),
+    'malik-syncOutbox': corrupt
+  });
+  assert.throws(() => buildSnapshotEvents(storage, 'admin'), /outbox has an invalid format.*preserved/i);
+  assert.equal(storage.inspect('malik-syncOutbox'), corrupt);
+});

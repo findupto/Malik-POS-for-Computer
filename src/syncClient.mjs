@@ -112,6 +112,10 @@ function readOutbox(storage) {
     if (seenEventIds.has(event.eventId.toLowerCase())) return true;
     seenEventIds.add(event.eventId.toLowerCase());
     if (event.operation === 'upsert' && (!event.payload || typeof event.payload !== 'object' || Array.isArray(event.payload))) return true;
+    if (event.operation === 'upsert') {
+      const payloadId = event.payload.id ?? event.payload.uuid;
+      if (payloadId !== undefined && String(payloadId) !== event.recordId) return true;
+    }
     if (Object.hasOwn(event, 'expectedSequence') && event.expectedSequence !== null && (!Number.isSafeInteger(event.expectedSequence) || event.expectedSequence < 0)) return true;
     if (Object.hasOwn(event, 'occurredAt') && event.occurredAt !== null &&
         (typeof event.occurredAt !== 'string' || !event.occurredAt.trim() || !Number.isFinite(Date.parse(event.occurredAt)))) return true;
