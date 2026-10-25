@@ -45,7 +45,7 @@ test('backup monitor exits cleanly when backup and health check pass', async t =
 
 test('backup monitor alerts when the backup command fails even if an older backup remains healthy', async t => {
   const f = await fixture(t);
-  await writeFile(f.backup, '#!/bin/sh\\nexit 1\\n');
+  await writeFile(f.backup, '#!/bin/sh\nexit 1\n');
   const result = run(f, { BACKUP_ALERT_WEBHOOK_URL: 'https://example.invalid/webhook' });
   assert.equal(result.status, 1);
   const logged = await readFile(f.log, 'utf8');
