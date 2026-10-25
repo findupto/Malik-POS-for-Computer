@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyPulledEvents, buildSnapshotEvents, loginToSyncApi } from '../src/syncClient.mjs';
+import { applyPulledEvents, buildSnapshotEvents, loginToSyncApi, syncSnapshot } from '../src/syncClient.mjs';
 
 function fakeStorage(initial = {}) {
   const values = new Map(Object.entries(initial));
