@@ -248,6 +248,11 @@ export async function syncSnapshot({ baseUrl, token, storage, role = 'admin', fe
     if (batch.some(event => Number(event.sequence) <= previousCursor)) {
       throw new Error('The sync server returned an event at or behind the saved cursor. Local POS data and sync progress were preserved; retry sync after checking the server.');
     }
+    const reportedNextAfter = Number(data.nextAfter);
+    const expectedNextAfter = batch.length ? Number(batch[batch.length - 1].sequence) : previousCursor;
+    if (!Number.isSafeInteger(reportedNextAfter) || reportedNextAfter < 0 || reportedNextAfter !== expectedNextAfter) {
+      throw new Error('The sync server returned an invalid pagination cursor. Local POS data and sync progress were preserved; retry sync after checking the server.');
+    }
     const safeBatch = [];
     for (const event of batch) {
       const key = event.entity + ':' + event.record_id;
