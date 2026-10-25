@@ -536,12 +536,15 @@ const server = http.createServer(async (req, res) => {
         const password = String(input.password || '');
         const displayName = String(input.displayName || '').trim();
         const role = String(input.role || '');
+        const targetLocationId = String(input.locationId || user.locationId);
         if (!/^[a-z0-9._-]{3,64}$/.test(username)) return send(res, 400, { error: 'Username must be 3–64 characters using letters, numbers, dots, underscores or hyphens.' });
         if (password.length < 12 || password.length > 1024) return send(res, 400, { error: 'Password must be at least 12 characters.' });
         if (!displayName || displayName.length > 100) return send(res, 400, { error: 'Display name is required (maximum 100 characters).' });
         if (!['admin','manager','cashier'].includes(role)) return send(res, 400, { error: 'Role must be admin, manager or cashier.' });
+        const targetLocation = await pool.query('SELECT id FROM locations WHERE id=$1 AND active=true', [targetLocationId]);
+        if (!targetLocation.rowCount) return send(res, 400, { error: 'Target location does not exist or is inactive.' });
         const inserted = await pool.query('INSERT INTO staff_users(location_id,username,password_hash,display_name,role) VALUES ($1,$2,$3,$4,$5) RETURNING id,username,display_name,role,active,created_at',
-          [user.locationId, username, await hashPassword(password), displayName, role]);
+          [targetLocationId, username, await hashPassword(password), displayName, role]);
         return send(res, 201, { user: inserted.rows[0] });
       }
       return send(res, 405, { error: 'Method not allowed.' });
