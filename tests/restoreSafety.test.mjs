@@ -80,7 +80,7 @@ test('restore applies a verified archive in a single transaction', async () => {
       }
     });
     assert.equal(result.status, 0, result.stderr);
-    const args = (await import('node:fs/promises').then(({ readFile }) => readFile(log, 'utf8'))).trim().split(/\\r?\\n/);
+    const args = (await import('node:fs/promises').then(({ readFile }) => readFile(log, 'utf8'))).trim().split(/\r?\n/);
     assert.ok(args.includes('--single-transaction'), 'restore must roll back rather than leave a partially restored database');
     assert.ok(args.includes('--exit-on-error'));
   } finally {
