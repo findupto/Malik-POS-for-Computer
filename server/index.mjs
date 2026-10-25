@@ -595,7 +595,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/api/admin/overview') {
       if (user.role !== 'admin') return send(res, 403, { error: 'Administrator role required.' });
-      const location = await pool.query('SELECT timezone FROM locations WHERE id=$1 AND active=true', [user.locationId]);
+      const requestedLocationId = url.searchParams.get('locationId');
+      const overviewLocationId = requestedLocationId || user.locationId;
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(overviewLocationId)) return send(res, 400, { error: 'locationId must be a valid location UUID.' });
+      const location = await pool.query('SELECT timezone FROM locations WHERE id=$1 AND active=true', [overviewLocationId]);
       if (!location.rowCount) return send(res, 404, { error: 'Active location not found.' });
       const timezone = location.rows[0].timezone || 'Asia/Karachi';
       const datePattern = /^\d{4}-\d{2}-\d{2}$/;
@@ -615,7 +618,7 @@ const server = http.createServer(async (req, res) => {
           WHERE location_id=$1
             AND created_at >= ($2::date::timestamp AT TIME ZONE $4)
             AND created_at < (($3::date + 1)::timestamp AT TIME ZONE $4)`,
-        [user.locationId, from, to, timezone]
+        [overviewLocationId, from, to, timezone]
       );
       const refunds = await pool.query(
         `SELECT count(*)::int AS refund_count, COALESCE(sum(amount),0)::numeric(14,2)::text AS refunded
@@ -623,7 +626,7 @@ const server = http.createServer(async (req, res) => {
           WHERE location_id=$1
             AND created_at >= ($2::date::timestamp AT TIME ZONE $4)
             AND created_at < (($3::date + 1)::timestamp AT TIME ZONE $4)`,
-        [user.locationId, from, to, timezone]
+        [overviewLocationId, from, to, timezone]
       );
       const inventory = await pool.query(
         `SELECT count(*)::int AS tracked_products,
@@ -653,14 +656,14 @@ const server = http.createServer(async (req, res) => {
             AND created_at >= ($2::date::timestamp AT TIME ZONE $4)
             AND created_at < (($3::date + 1)::timestamp AT TIME ZONE $4)
           ORDER BY created_at DESC LIMIT 10`,
-        [user.locationId, from, to, timezone]
+        [overviewLocationId, from, to, timezone]
       );
       const sale = sales.rows[0];
       const refund = refunds.rows[0];
       const grossSales = Number(sale.gross_sales);
       const refunded = Number(refund.refunded);
       return send(res, 200, {
-        locationId: user.locationId, timezone, from, to,
+        locationId: overviewLocationId, timezone, from, to,
         sales: { transactionCount: sale.transaction_count, grossSales, averageSale: Number(sale.average_sale), refundsCount: refund.refund_count, refunded, netSales: Math.round((grossSales - refunded + Number.EPSILON) * 100) / 100, currency: 'PKR' },
         inventory: { trackedProducts: inventory.rows[0].tracked_products, unitsOnHand: Number(inventory.rows[0].units_on_hand), outOfStockCount, lowStockCount, lowStockProducts },
         activeStaff: staff.rows[0].active_staff,
