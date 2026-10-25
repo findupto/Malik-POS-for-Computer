@@ -188,6 +188,22 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   });
   assert.equal(adjustmentRetryMismatch.status, 409, 'same adjustment idempotency key with changed details must be rejected');
 
+  const overpaidOrderId = 'overpaid-sale-' + crypto.randomUUID();
+  const overpaid = await request('/api/transactions', {
+    token: cashierToken, method: 'POST',
+    body: {
+      idempotencyKey: crypto.randomUUID(),
+      orderId: overpaidOrderId,
+      customerName: 'Integration Customer',
+      items: [{ productId: '', sku: 'OVERPAY', productName: 'Overpayment validation', quantity: 1, unitPrice: 100 }],
+      discountAmount: 0, taxAmount: 0, serviceChargeAmount: 0, deliveryFee: 0,
+      tenders: [{ method: 'Cash', amount: 101 }]
+    }
+  });
+  assert.equal(overpaid.status, 400, 'server must reject tenders that exceed the sale total');
+  const rejectedOverpaymentLookup = await request('/api/transactions?limit=10&orderId=' + encodeURIComponent(overpaidOrderId), { token: cashierToken });
+  assert.equal(rejectedOverpaymentLookup.data.transactions.length, 0, 'rejected overpayment must not create a ledger entry');
+
   const saleKey = crypto.randomUUID();
   const saleOrderId = 'integration-sale-' + crypto.randomUUID();
   const saleBody = {

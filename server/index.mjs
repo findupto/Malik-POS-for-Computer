@@ -193,6 +193,8 @@ const server = http.createServer(async (req, res) => {
         if (reference.length > 200) return send(res, 400, { error: 'Tender reference must be at most 200 characters.' });
         tenderRows.push({ method, amount, reference });
       }
+      const tenderTotal = Math.round((tenderRows.reduce((sum, tender) => sum + tender.amount, 0) + Number.EPSILON) * 100) / 100;
+      if (tenderTotal > total + 0.000001) return send(res, 400, { error: 'Payment tenders cannot exceed the sale total. Record change returned to the customer separately.' });
       const customerName = String(input.customerName || 'Walk-in Customer').trim().slice(0, 200) || 'Walk-in Customer';
       const notes = String(input.notes || '').slice(0, 2000);
       const occurredAt = input.occurredAt && Number.isFinite(Date.parse(input.occurredAt)) ? new Date(input.occurredAt).toISOString() : null;
