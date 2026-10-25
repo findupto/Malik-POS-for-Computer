@@ -66,12 +66,15 @@ function readBaseline(storage) {
       normalized[entity] = records;
       continue;
     }
+    const records = Object.create(null);
     for (const [id, record] of Object.entries(savedRecords)) {
       if (!id.trim() || id.length > 200 ||
           !record || typeof record !== 'object' || Array.isArray(record)) fail();
       const rawId = record.id ?? record.uuid;
       if (!['string', 'number'].includes(typeof rawId) || String(rawId) !== id) fail();
+      records[id] = record;
     }
+    normalized[entity] = records;
   }
   return normalized;
 }

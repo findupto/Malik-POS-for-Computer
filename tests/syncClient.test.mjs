@@ -13,6 +13,14 @@ function fakeStorage(initial = {}) {
 }
 
 
+test('baseline IDs using prototype property names compare safely', () => {
+  const storage = fakeStorage({
+    'malik-orders': '[{"id":"__proto__","total":10}]',
+    'malik-syncBaseline': '{"orders":{"__proto__":{"id":"__proto__","total":10}}}'
+  });
+  assert.deepEqual(buildSnapshotEvents(storage, 'admin'), []);
+});
+
 test('valid JSON with malformed baseline or conflict metadata is preserved and blocks sync', async () => {
   for (const [key, corrupt] of [
     ['malik-syncBaseline', '[]'],
