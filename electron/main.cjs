@@ -275,6 +275,20 @@ ipcMain.handle('malik-pos:save-backup-snapshot', async (_event, snapshot) => {
     return { success: false, error: String(error && error.message || error).slice(0, 240) };
   }
 });
+ipcMain.handle('malik-pos:select-backup-file', async () => {
+  try {
+    const picked = await dialog.showOpenDialog({ title: 'Choose a Malik POS backup', properties: ['openFile'], filters: [{ name: 'Malik POS backup', extensions: ['json'] }] });
+    if (picked.canceled || !picked.filePaths?.[0]) return { success: false, cancelled: true };
+    const file = picked.filePaths[0];
+    const stat = await fs.stat(file);
+    if (stat.size > 25 * 1024 * 1024) return { success: false, error: 'Backup exceeds the 25 MB safety limit.' };
+    const backup = JSON.parse(await fs.readFile(file, 'utf8'));
+    if (backup?.format !== 'malik-pos-local-backup-v1' || !Array.isArray(backup.entries) || !backup.entries.length || backup.entries.length > 500) return { success: false, error: 'This is not a valid Malik POS backup.' };
+    const valid = backup.entries.every(entry => entry && typeof entry.key === 'string' && entry.key.startsWith('malik-') && typeof entry.value === 'string' && !/session|token|password|credential|secret/i.test(entry.key));
+    if (!valid || Buffer.byteLength(JSON.stringify(backup)) > 25 * 1024 * 1024) return { success: false, error: 'Backup contains invalid or sensitive entries and cannot be restored.' };
+    return { success: true, createdAt: backup.createdAt || backup.snapshotAt || '', entries: backup.entries };
+  } catch (error) { return { success: false, error: String(error?.message || error).slice(0, 240) }; }
+});
 ipcMain.handle('malik-pos:open-backup-folder', async () => {
   try {
     const dir = backupDirectory();
