@@ -723,7 +723,7 @@ const server = http.createServer(async (req, res) => {
       );
       const inventory = await pool.query(
         `SELECT count(*)::int AS tracked_products,
-                COALESCE(sum(quantity),0)::numeric(14,3)::text AS units_on_hand
+                COALESCE(sum(quantity),0)::text AS units_on_hand
            FROM inventory_balances WHERE location_id=$1`,
         [overviewLocationId]
       );
