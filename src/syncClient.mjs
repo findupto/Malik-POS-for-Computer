@@ -245,6 +245,9 @@ export async function syncSnapshot({ baseUrl, token, storage, role = 'admin', fe
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || 'Download failed.');
     const batch = validatePulledEvents(data.events);
+    if (batch.some(event => Number(event.sequence) <= previousCursor)) {
+      throw new Error('The sync server returned an event at or behind the saved cursor. Local POS data and sync progress were preserved; retry sync after checking the server.');
+    }
     const safeBatch = [];
     for (const event of batch) {
       const key = event.entity + ':' + event.record_id;
