@@ -43,7 +43,14 @@ function readVersions(storage) {
 
 function readBaseline(storage) {
   const baseline = readJson(storage, BASELINE_KEY, null);
-  if (baseline !== null && (!baseline || typeof baseline !== 'object' || Array.isArray(baseline))) {
+  const invalid = baseline !== null && (
+    !baseline || typeof baseline !== 'object' || Array.isArray(baseline) ||
+    Object.values(baseline).some(records =>
+      !records || typeof records !== 'object' || Array.isArray(records) ||
+      Object.values(records).some(record => !record || typeof record !== 'object' || Array.isArray(record))
+    )
+  );
+  if (invalid) {
     throw new Error('Saved sync baseline has an invalid format. Its contents were preserved; do not clear app data before recovery.');
   }
   return baseline;
@@ -109,7 +116,7 @@ function writeCurrentRecords(storage, def, records) {
   else storage.setItem('malik-' + def.key, JSON.stringify(records.singleton?.value ?? null));
 }
 function captureBaseline(storage, definitions = DEFAULT_SYNC_ENTITIES, preserve = new Set(), role = 'admin') {
-  const previous = readJson(storage, BASELINE_KEY, {});
+  const previous = readBaseline(storage) || {};
   const next = { ...previous };
   for (const def of definitions) {
     if (!roleAllowed(role, def.entity)) continue;

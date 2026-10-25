@@ -17,6 +17,9 @@ test('valid JSON with malformed baseline or conflict metadata is preserved and b
   for (const [key, corrupt] of [
     ['malik-syncBaseline', '[]'],
     ['malik-syncBaseline', '42'],
+    ['malik-syncBaseline', '{"orders":42}'],
+    ['malik-syncBaseline', '{"orders":{"o-1":null}}'],
+    ['malik-syncBaseline', '{"orders":[]}'],
     ['malik-syncConflicts', '{}'],
     ['malik-syncConflicts', '[null]'],
     ['malik-syncConflicts', '[{"reason":"missing id"}]']
