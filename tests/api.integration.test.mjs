@@ -141,6 +141,21 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
     assert.equal(invalidPull.status, 400, 'invalid sync cursor ' + invalidCursor + ' must be rejected');
   }
 
+  const maximumInventoryId = 'maximum-inventory-' + crypto.randomUUID();
+  const maximumInventory = await request('/api/inventory/initialize', {
+    token: adminToken, method: 'POST',
+    body: { productId: maximumInventoryId, sku: 'MAX-QTY', productName: 'Maximum Quantity Test', quantity: 99_999_999_999.999 }
+  });
+  assert.equal(maximumInventory.status, 201, 'the documented numeric(14,3) inventory maximum should initialize successfully');
+  const overflowingAdjustment = await request('/api/inventory/adjustments', {
+    token: adminToken, method: 'POST',
+    body: { idempotencyKey: crypto.randomUUID(), productId: maximumInventoryId, sku: 'MAX-QTY', productName: 'Maximum Quantity Test', quantityDelta: 0.001, reason: 'Must not overflow inventory' }
+  });
+  assert.equal(overflowingAdjustment.status, 400, 'stock adjustments must reject quantities beyond the database numeric range');
+  const maximumInventoryAfter = await request('/api/inventory', { token: adminToken });
+  assert.equal(Number(maximumInventoryAfter.data.inventory.find(item => item.product_id === maximumInventoryId).quantity), 99_999_999_999.999,
+    'overflow rejection must leave the stored inventory unchanged');
+
   const initKey = crypto.randomUUID();
   const firstInitialization = await request('/api/inventory/initialize', {
     token: adminToken, method: 'POST',

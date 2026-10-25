@@ -84,6 +84,8 @@ async function bodyJson(req, maxBytes = 2_000_000) {
 }
 function isUuid(value) { return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '')); }
 const roles = { admin: 3, manager: 2, cashier: 1 };
+// inventory_balances and inventory_movements use PostgreSQL numeric(14,3).
+const MAX_INVENTORY_QUANTITY = 99_999_999_999.999;
 async function bootstrap() {
   if (bootstrapPassword && bootstrapPassword.length < 12) throw new Error('BOOTSTRAP_ADMIN_PASSWORD must be at least 12 characters.');
   await pool.query(await readFile(path.join(here, 'schema.sql'), 'utf8'));
@@ -357,6 +359,10 @@ const server = http.createServer(async (req, res) => {
         const before = existing.rowCount ? Number(existing.rows[0].quantity) : 0;
         const after = Math.round((before + delta + Number.EPSILON) * 1000) / 1000;
         if (after < 0) { await client.query('ROLLBACK'); return send(res, 409, { error: 'Adjustment would make stock negative. Available: ' + before }); }
+        if (!Number.isFinite(after) || after > MAX_INVENTORY_QUANTITY) {
+          await client.query('ROLLBACK');
+          return send(res, 400, { error: 'The resulting inventory quantity exceeds the maximum supported amount.' });
+        }
         await client.query('INSERT INTO inventory_balances(location_id,product_id,sku,product_name,quantity,updated_by) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT(location_id,product_id) DO UPDATE SET sku=EXCLUDED.sku,product_name=EXCLUDED.product_name,quantity=EXCLUDED.quantity,updated_by=EXCLUDED.updated_by,updated_at=now()', [user.locationId,productId,sku,productName,after,user.sub]);
         const movement = await client.query('INSERT INTO inventory_movements(location_id,idempotency_key,product_id,sku,product_name,quantity_delta,quantity_after,reason,reference_type,actor_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,\'adjustment\',$9) RETURNING id,product_id,quantity_delta,quantity_after,created_at', [user.locationId,idempotencyKey,productId,sku,productName,delta,after,reason,user.sub]);
         await client.query('INSERT INTO audit_events(location_id,actor_id,action,entity,record_id,details) VALUES ($1,$2,$3,$4,$5,$6)', [user.locationId,user.sub,'inventory.adjusted','inventory_balances',productId,JSON.stringify({ quantityDelta: delta, quantityAfter: after, reason })]);
@@ -373,7 +379,7 @@ const server = http.createServer(async (req, res) => {
       const sku = String(input.sku || '').trim();
       const quantity = Number(input.quantity);
       if (!productId || productId.length > 200 || !productName || productName.length > 200 || sku.length > 100) return send(res, 400, { error: 'A valid productId and productName are required.' });
-      if (!Number.isFinite(quantity) || quantity < 0 || quantity > 1_000_000_000 || !hasAtMostThreeDecimalPlaces(quantity)) return send(res, 400, { error: 'quantity must be zero or greater with at most three decimal places.' });
+      if (!Number.isFinite(quantity) || quantity < 0 || quantity > MAX_INVENTORY_QUANTITY || !hasAtMostThreeDecimalPlaces(quantity)) return send(res, 400, { error: 'quantity must be zero or greater, within the supported inventory range, and have at most three decimal places.' });
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
@@ -500,6 +506,9 @@ const server = http.createServer(async (req, res) => {
             const balance = await client.query('SELECT quantity,sku,product_name FROM inventory_balances WHERE location_id=$1 AND product_id=$2 FOR UPDATE', [user.locationId,productId]);
             if (!balance.rowCount) throw Object.assign(new Error('Cannot restock ' + productName + ' because inventory tracking has not been initialized for this product.'), { status: 409 });
             const after = Math.round((Number(balance.rows[0].quantity) + quantity + Number.EPSILON) * 1000) / 1000;
+            if (!Number.isFinite(after) || after > MAX_INVENTORY_QUANTITY) {
+              throw Object.assign(new Error('Restocking this refund would exceed the maximum supported inventory quantity.'), { status: 400 });
+            }
             await client.query('UPDATE inventory_balances SET quantity=$1,updated_by=$2,updated_at=now() WHERE location_id=$3 AND product_id=$4', [after,user.sub,user.locationId,productId]);
             await client.query('INSERT INTO inventory_movements(location_id,idempotency_key,product_id,sku,product_name,quantity_delta,quantity_after,reason,reference_type,reference_id,actor_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)', [user.locationId,crypto.randomUUID(),productId,balance.rows[0].sku,productName,quantity,after,'Refund '+refund.id,'refund',refund.id,user.sub]);
           }
