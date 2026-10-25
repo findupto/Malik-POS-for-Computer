@@ -577,7 +577,7 @@ const server = http.createServer(async (req, res) => {
       const location = await pool.query('SELECT timezone FROM locations WHERE id=$1 AND active=true', [user.locationId]);
       if (!location.rowCount) return send(res, 404, { error: 'Active location not found.' });
       const timezone = location.rows[0].timezone || 'Asia/Karachi';
-      const datePattern = /^\\d{4}-\\d{2}-\\d{2}$/;
+      const datePattern = /^\d{4}-\d{2}-\d{2}$/;
       const isRealDate = value => datePattern.test(value) && !Number.isNaN(Date.parse(value + 'T00:00:00Z')) && new Date(value + 'T00:00:00Z').toISOString().slice(0, 10) === value;
       const todayResult = await pool.query('SELECT (now() AT TIME ZONE $1)::date::text AS today', [timezone]);
       const today = todayResult.rows[0].today;
