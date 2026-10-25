@@ -7,15 +7,17 @@ BACKUP_SCRIPT="${BACKUP_SCRIPT:-/usr/local/bin/malik-backup.sh}"
 HEALTHCHECK_SCRIPT="${HEALTHCHECK_SCRIPT:-/usr/local/bin/malik-backup-healthcheck.sh}"
 WEBHOOK_URL="${BACKUP_ALERT_WEBHOOK_URL:-}"
 
+backup_failed=0
 if ! sh "$BACKUP_SCRIPT"; then
+  backup_failed=1
   echo "ERROR: Malik POS backup command failed." >&2
 fi
 
-if sh "$HEALTHCHECK_SCRIPT"; then
+if sh "$HEALTHCHECK_SCRIPT" && [ "$backup_failed" -eq 0 ]; then
   exit 0
 fi
 
-echo "ERROR: Malik POS backup health check failed." >&2
+echo "ERROR: Malik POS backup operation failed or backup health check failed." >&2
 if [ -z "$WEBHOOK_URL" ]; then
   echo "WARNING: BACKUP_ALERT_WEBHOOK_URL is not configured; no remote alert was sent." >&2
   exit 1
