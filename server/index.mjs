@@ -656,7 +656,7 @@ const server = http.createServer(async (req, res) => {
         `SELECT count(*)::int AS tracked_products,
                 COALESCE(sum(quantity),0)::numeric(14,3)::text AS units_on_hand
            FROM inventory_balances WHERE location_id=$1`,
-        [user.locationId]
+        [overviewLocationId]
       );
       const outOfStock = await pool.query(
         `SELECT product_id, sku, product_name, quantity::numeric(14,3)::text AS quantity, reorder_point::numeric(14,3)::text AS reorder_point, updated_at, count(*) OVER()::int AS total_count
@@ -664,14 +664,14 @@ const server = http.createServer(async (req, res) => {
           WHERE location_id=$1 AND quantity <= reorder_point
           ORDER BY product_name
           LIMIT 100`,
-        [user.locationId]
+        [overviewLocationId]
       );
       const lowStockCount = Number(outOfStock.rows[0]?.total_count || 0);
       const lowStockProducts = outOfStock.rows.map(({ total_count, ...product }) => product);
       const outOfStockCount = lowStockProducts.filter(product => Number(product.quantity) <= 0).length;
       const staff = await pool.query(
         'SELECT count(*)::int AS active_staff FROM staff_users WHERE location_id=$1 AND active=true',
-        [user.locationId]
+        [overviewLocationId]
       );
       const activity = await pool.query(
         `SELECT id, action, entity, record_id, details, created_at
