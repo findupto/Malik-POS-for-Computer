@@ -20,7 +20,13 @@ const uuid = () => {
 };
 const stable = value => JSON.stringify(value);
 function readJson(storage, key, fallback) {
-  try { return JSON.parse(storage.getItem(key) || 'null') ?? fallback; } catch { return fallback; }
+  const raw = storage.getItem(key);
+  if (raw == null || raw === '') return fallback;
+  try {
+    return JSON.parse(raw) ?? fallback;
+  } catch {
+    throw new Error(`Saved sync metadata "${key}" is unreadable. Its contents were preserved; do not clear app data before recovery.`);
+  }
 }
 function readOutbox(storage) {
   const raw = storage.getItem(OUTBOX_KEY);
