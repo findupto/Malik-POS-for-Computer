@@ -22,6 +22,18 @@ const stable = value => JSON.stringify(value);
 function readJson(storage, key, fallback) {
   try { return JSON.parse(storage.getItem(key) || 'null') ?? fallback; } catch { return fallback; }
 }
+function readOutbox(storage) {
+  const raw = storage.getItem(OUTBOX_KEY);
+  if (raw == null) return [];
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch {
+    throw new Error('Saved sync outbox is unreadable. Its contents were preserved; do not clear app data before recovery.');
+  }
+  if (!Array.isArray(parsed) || parsed.some(event => !event || typeof event !== 'object' || typeof event.eventId !== 'string' || typeof event.entity !== 'string' || typeof event.recordId !== 'string')) {
+    throw new Error('Saved sync outbox has an invalid format. Its contents were preserved; do not clear app data before recovery.');
+  }
+  return parsed;
+}
 function roleAllowed(role, entity) {
   return role === 'admin' || role === 'manager' ||
     (role === 'cashier' && ['orders','timechargesessions','cashentries','attendance','audittrail'].includes(entity));
@@ -60,7 +72,7 @@ function captureBaseline(storage, definitions = DEFAULT_SYNC_ENTITIES, preserve 
 
 export function buildSnapshotEvents(storage, role = 'admin', definitions = DEFAULT_SYNC_ENTITIES) {
   const baseline = readJson(storage, BASELINE_KEY, null);
-  const priorOutbox = readJson(storage, OUTBOX_KEY, []);
+  const priorOutbox = readOutbox(storage);
   const versions = readJson(storage, VERSIONS_KEY, {});
   const priorByKey = new Map(priorOutbox.map(event => [event.entity + ':' + event.recordId, event]));
   const desired = [];
@@ -133,7 +145,7 @@ export function resolveSyncConflict(storage, conflictId, choice, role = 'admin',
     captureBaseline(storage, definitions, new Set(), role);
   }
   // A local choice must create a fresh event against the newest remote sequence, not retry the stale event.
-  storage.setItem(OUTBOX_KEY, JSON.stringify(readJson(storage, OUTBOX_KEY, []).filter(item => !(item.entity === conflict.entity && item.recordId === conflict.recordId))));
+  storage.setItem(OUTBOX_KEY, JSON.stringify(readOutbox(storage).filter(item => !(item.entity === conflict.entity && item.recordId === conflict.recordId))));
   storage.setItem(CONFLICTS_KEY, JSON.stringify(conflicts.filter(item => item.id !== conflictId)));
   return conflict;
 }
@@ -239,7 +251,7 @@ export async function syncSnapshot({ baseUrl, token, storage, role = 'admin', fe
     storage.setItem(VERSIONS_KEY, JSON.stringify(versions));
   }
   const sentIds = new Set(outgoing.map(event => event.eventId));
-  storage.setItem(OUTBOX_KEY, JSON.stringify(readJson(storage, OUTBOX_KEY, []).filter(event => !sentIds.has(event.eventId) && !satisfiedEventIds.has(event.eventId))));
+  storage.setItem(OUTBOX_KEY, JSON.stringify(readOutbox(storage).filter(event => !sentIds.has(event.eventId) && !satisfiedEventIds.has(event.eventId))));
   captureBaseline(storage, DEFAULT_SYNC_ENTITIES, conflictKeys, role);
   return { uploaded, downloaded, cursor, conflicts: nextConflicts.length };
 }
