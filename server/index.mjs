@@ -461,8 +461,18 @@ const server = http.createServer(async (req, res) => {
             throw Object.assign(new Error('Each event needs a UUID eventId, valid entity/recordId and upsert/delete operation.'), { status: 400 });
           }
           if (!isValidSyncPayload(event.operation, event.payload)) throw Object.assign(new Error(event.operation === 'upsert' ? 'Upsert events require a non-array object payload.' : 'Delete events must not include a payload.'), { status: 400 });
-          const priorEvent = await client.query('SELECT sequence FROM sync_events WHERE event_id=$1', [event.eventId]);
-          if (priorEvent.rowCount) { results.push({ eventId: event.eventId, status: 'duplicate', sequence: Number(priorEvent.rows[0].sequence) }); continue; }
+          const priorEvent = await client.query(
+            'SELECT sequence,location_id,entity,record_id,operation,occurred_at, (payload IS NOT DISTINCT FROM $2::jsonb) AS same_payload FROM sync_events WHERE event_id=$1',
+            [event.eventId, event.payload === undefined ? null : JSON.stringify(event.payload)]
+          );
+          if (priorEvent.rowCount) {
+            const prior = priorEvent.rows[0];
+            const occurredAt = event.occurredAt && Number.isFinite(Date.parse(event.occurredAt)) ? new Date(event.occurredAt).toISOString() : null;
+            const sameEvent = prior.location_id === user.locationId && prior.entity === event.entity && prior.record_id === event.recordId && prior.operation === event.operation && prior.same_payload && (prior.occurred_at ? new Date(prior.occurred_at).toISOString() : null) === occurredAt;
+            if (!sameEvent) throw Object.assign(new Error('Sync event ID was already used for different event details.'), { status: 409 });
+            results.push({ eventId: event.eventId, status: 'duplicate', sequence: Number(prior.sequence) });
+            continue;
+          }
           if (Object.hasOwn(event, 'expectedSequence')) {
             // Serialize writers for this location/entity/record so the compare-and-write check is atomic.
             await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [user.locationId + ':' + event.entity + ':' + event.recordId]);

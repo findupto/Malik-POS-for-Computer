@@ -324,6 +324,12 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   assert.equal(duplicate.status, 200);
   assert.equal(duplicate.data.results[0].status, 'duplicate');
 
+  const mismatchedEventRetry = await request('/api/sync/push', {
+    token: adminToken, method: 'POST',
+    body: { events: [{ eventId: firstEventId, entity: 'orders', recordId, operation: 'upsert', payload: { id: recordId, total: 101 }, expectedSequence: null }] }
+  });
+  assert.equal(mismatchedEventRetry.status, 409);
+
   const staleWrite = await request('/api/sync/push', {
     token: adminToken, method: 'POST',
     body: { events: [{ eventId: crypto.randomUUID(), entity: 'orders', recordId, operation: 'upsert', payload: { id: recordId, total: 999 }, expectedSequence: null }] }
