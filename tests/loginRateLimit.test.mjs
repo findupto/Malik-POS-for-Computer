@@ -37,6 +37,7 @@ test('limiter prunes expired entries and caps tracked client addresses', () => {
   }
   assert.equal(checkLoginRateLimit(attempts, 'fresh-client', LOGIN_WINDOW_MS + 1).limited, false);
   assert.equal(attempts.size, 1);
+  attempts.clear();
 
   for (let i = 0; i < LOGIN_MAX_TRACKED_IPS; i += 1) {
     attempts.set('active-' + i, { startedAt: LOGIN_WINDOW_MS + 1, count: 1 });
