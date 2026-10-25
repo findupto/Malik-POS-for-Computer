@@ -19,6 +19,13 @@ A desktop point-of-sale workspace built with React, Vite, and Electron.
 - First-launch business type setup for fast food, medical store, super store, restaurant, showroom, and other businesses
 - Windows NSIS installer build via GitHub Actions
 
+
+## Automatic desktop backups
+
+The Electron desktop app now writes a daily JSON snapshot of its `malik-*` local POS records to the application's user-data `backups` folder, refreshes the snapshot every 15 minutes while the app is open, and retains the most recent 30 daily files. Session/token/password/credential-like keys are excluded. The latest snapshot is also written as `latest.json`. In the desktop app, the folder can be opened through the exposed desktop backup action. These files are local backups, not Google Drive backups; protect the Windows user account and copy backups to encrypted off-device storage.
+
+**Google Drive is not yet configured automatically.** A Drive upload cannot be safely enabled just because a browser or Windows account is signed in. It requires a Google Cloud OAuth client, consent configuration, secure token storage, explicit user authorization, and a tested upload/restore path. Do not treat local backups as off-device disaster recovery. Also, automatic backups require the POS app to have been opened at least once to capture data; background scheduling only runs while the desktop app is running.
+
 ## Run locally
 Requires Node.js 22 or newer.
 
