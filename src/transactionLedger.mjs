@@ -2,10 +2,18 @@ const IDEMPOTENCY_KEY = 'malik-transactionIdempotency';
 const SALE_OUTBOX_KEY = 'malik-transactionOutbox';
 
 function readKeys(storage, key = IDEMPOTENCY_KEY) {
+  const raw = storage.getItem(key);
+  if (raw === null) return {};
+  let value;
   try {
-    const value = JSON.parse(storage.getItem(key) || '{}');
-    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-  } catch { return {}; }
+    value = JSON.parse(raw);
+  } catch {
+    throw new Error(`Stored ${key} data is invalid JSON. Existing transaction data was left untouched.`);
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`Stored ${key} data must be an object. Existing transaction data was left untouched.`);
+  }
+  return value;
 }
 
 export function getPendingSaleTransactions(storage = globalThis.localStorage) {
@@ -86,8 +94,9 @@ export async function recordSaleTransaction({ baseUrl, token, order, payment, st
   if (!baseUrl || !token) throw new Error('Connect this register to the Malik POS API before recording a shared sale.');
   if (!order || !order.id || !Array.isArray(order.items) || !order.items.length) throw new Error('A sale with at least one item is required.');
   if (!storage || typeof fetchImpl !== 'function') throw new Error('Shared sale recording is unavailable in this environment.');
-  const idempotencyKey = idempotencyKeyFor(storage, String(order.id), makeId);
+  // Validate the outbox before writing anything else. Never replace unreadable recovery data.
   const outbox = readKeys(storage, SALE_OUTBOX_KEY);
+  const idempotencyKey = idempotencyKeyFor(storage, String(order.id), makeId);
   const queued = outbox[String(order.id)];
   const paymentMethod = String(payment || '');
   const tenders = paymentMethod === 'Customer Due' ? [] : [{
