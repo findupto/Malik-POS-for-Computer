@@ -55,3 +55,35 @@ test('restore rejects a checksum entry that names a different file', async () =>
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test('restore applies a verified archive in a single transaction', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'malik-pos-restore-'));
+  const bin = path.join(directory, 'bin');
+  const archive = path.join(directory, 'backup.dump');
+  const log = path.join(directory, 'pg-restore-args.txt');
+  try {
+    await import('node:fs/promises').then(({ mkdir }) => mkdir(bin));
+    await writeFile(archive, 'mock verified archive');
+    const checksum = spawnSync('sha256sum', [archive], { encoding: 'utf8' });
+    assert.equal(checksum.status, 0, checksum.stderr);
+    await writeFile(archive + '.sha256', checksum.stdout);
+    const fakePgRestore = path.join(bin, 'pg_restore');
+    await writeFile(fakePgRestore, '#!/bin/sh\nif [ "$1" = "--list" ]; then exit 0; fi\nprintf "%s\\n" "$@" > "$PG_RESTORE_ARGS_LOG"\n', { mode: 0o755 });
+    const result = spawnSync('sh', [restoreScript, archive], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        PATH: bin + path.delimiter + process.env.PATH,
+        PG_RESTORE_ARGS_LOG: log,
+        DATABASE_URL: 'postgresql://test:test@127.0.0.1/test',
+        CONFIRM_RESTORE: 'YES'
+      }
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const args = (await import('node:fs/promises').then(({ readFile }) => readFile(log, 'utf8'))).trim().split(/\\r?\\n/);
+    assert.ok(args.includes('--single-transaction'), 'restore must roll back rather than leave a partially restored database');
+    assert.ok(args.includes('--exit-on-error'));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

@@ -28,5 +28,5 @@ if ! awk -v expected="$archive_name" '
 fi
 (cd "$archive_dir" && sha256sum --check "$archive_name.sha256")
 pg_restore --list "$ARCHIVE" >/dev/null
-pg_restore --clean --if-exists --exit-on-error --no-owner --no-acl --dbname="$DATABASE_URL" "$ARCHIVE"
+pg_restore --single-transaction --clean --if-exists --exit-on-error --no-owner --no-acl --dbname="$DATABASE_URL" "$ARCHIVE"
 echo "Restore completed. Verify application health and perform a test login before reopening registers."
