@@ -13,7 +13,7 @@ function fakeStorage(initial = {}) {
 }
 
 
-test('valid JSON with malformed baseline or conflict metadata is preserved and blocks sync', () => {
+test('valid JSON with malformed baseline or conflict metadata is preserved and blocks sync', async () => {
   for (const [key, corrupt] of [
     ['malik-syncBaseline', '[]'],
     ['malik-syncBaseline', '42'],
@@ -29,7 +29,7 @@ test('valid JSON with malformed baseline or conflict metadata is preserved and b
       'malik-syncOutbox': outbox
     });
     if (key === 'malik-syncConflicts') {
-      assert.throws(() => syncSnapshot({
+      await assert.rejects(syncSnapshot({
         baseUrl: 'https://pos.example.test', token: 'test-token', storage,
         fetchImpl: async () => { throw new Error('network should not be called for invalid local metadata'); }
       }), /Saved sync conflict metadata.*invalid.*preserved/i);
