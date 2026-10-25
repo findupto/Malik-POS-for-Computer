@@ -7,6 +7,7 @@ import pg from 'pg';
 import { canPushEntity, hasValidSyncRecordIdentity, isValidSyncPayload } from './syncPolicy.mjs';
 import { hasValidSessionClaims } from './sessionClaims.mjs';
 import { hasAtMostThreeDecimalPlaces } from './quantity.mjs';
+import { parseRequestBody } from './requestBody.mjs';
 
 const { Pool } = pg;
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -70,8 +71,7 @@ async function bodyJson(req, maxBytes = 2_000_000) {
     if (bytes > maxBytes) throw Object.assign(new Error('Request body is too large'), { status: 413 });
     chunks.push(chunk);
   }
-  try { return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); }
-  catch { throw Object.assign(new Error('Request body must be valid JSON'), { status: 400 }); }
+  return parseRequestBody(Buffer.concat(chunks).toString('utf8'));
 }
 function isUuid(value) { return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '')); }
 const roles = { admin: 3, manager: 2, cashier: 1 };
