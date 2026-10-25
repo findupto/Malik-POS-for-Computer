@@ -71,9 +71,16 @@ function currentRecords(storage, def) {
     throw new Error(`Saved POS data "${storageKey}" has an unexpected format. Its contents were preserved; do not sync or clear app data before recovery.`);
   }
   const values = def.collection ? parsed : (parsed == null ? [] : [{ id: 'singleton', value: parsed }]);
-  const records = {};
+  const records = Object.create(null);
   for (const [i, record] of values.entries()) {
-    const id = String(record?.id ?? record?.uuid ?? i);
+    if (!record || typeof record !== 'object' || Array.isArray(record)) {
+      throw new Error(`Saved POS data "${storageKey}" contains a record that is not an object at index ${i}. Its contents were preserved; resolve the invalid record before syncing.`);
+    }
+    const rawId = record.id ?? record.uuid;
+    if (!['string', 'number'].includes(typeof rawId) || !String(rawId).trim() || String(rawId).length > 200) {
+      throw new Error(`Saved POS data "${storageKey}" contains a record with a missing or invalid ID at index ${i}. Its contents were preserved; resolve the record ID before syncing.`);
+    }
+    const id = String(rawId);
     if (Object.hasOwn(records, id)) {
       throw new Error(`Saved POS data "${storageKey}" contains duplicate record ID "${id}". Its contents were preserved; resolve duplicates before syncing.`);
     }

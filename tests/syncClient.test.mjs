@@ -644,6 +644,30 @@ test('applyPulledEvents preserves local records and sync metadata when the saved
 });
 
 
+test('malformed local collection records are preserved and block sync instead of receiving synthetic IDs', () => {
+  for (const invalidRecords of [
+    [null],
+    [17],
+    ['not-a-record'],
+    [[]],
+    [{ total: 10 }],
+    [{ id: '   ', total: 10 }],
+    [{ uuid: 'x'.repeat(201), total: 10 }]
+  ]) {
+    const records = JSON.stringify(invalidRecords);
+    const outbox = JSON.stringify([{ eventId: '123e4567-e89b-42d3-a456-426614174000', entity: 'orders', recordId: 'o-2', operation: 'upsert', payload: { id: 'o-2', total: 20 } }]);
+    const storage = fakeStorage({
+      'malik-orders': records,
+      'malik-syncOutbox': outbox,
+      'malik-syncCursor': '3'
+    });
+    assert.throws(() => buildSnapshotEvents(storage, 'admin'), /malik-orders.*(not an object|missing or invalid ID).*preserved/i);
+    assert.equal(storage.inspect('malik-orders'), records);
+    assert.equal(storage.inspect('malik-syncOutbox'), outbox);
+    assert.equal(storage.inspect('malik-syncCursor'), '3');
+  }
+});
+
 test('duplicate local record IDs block applying pulled events without mutating data or sync progress', () => {
   const orders = JSON.stringify([{ id: 'o-1', total: 10 }, { id: 'o-1', total: 20 }]);
   const versions = JSON.stringify({ 'orders:o-1': 4 });
