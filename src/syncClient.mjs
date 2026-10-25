@@ -280,10 +280,12 @@ export async function syncSnapshot({ baseUrl, token, storage, role = 'admin', fe
     throw new Error('Saved sync cursor is invalid. Its contents were preserved; do not clear app data before recovery.');
   }
   const baseline = readBaseline(storage);
+  // Validate every persisted sync metadata structure before snapshot building can
+  // create or rewrite outbox entries.
+  const existingConflicts = readConflicts(storage);
   const pending = buildSnapshotEvents(storage, role);
   const pendingByKey = new Map(pending.map(event => [event.entity + ':' + event.recordId, event]));
   const observedRemote = new Map();
-  const existingConflicts = readConflicts(storage);
   const conflictKeys = new Set(existingConflicts.map(item => item.entity + ':' + item.recordId));
   let cursor = cursorValue;
   let downloaded = 0;
