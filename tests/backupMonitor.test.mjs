@@ -43,6 +43,15 @@ test('backup monitor exits cleanly when backup and health check pass', async t =
   assert.equal(result.status, 0, result.stderr);
 });
 
+test('backup monitor alerts when the backup command fails even if an older backup remains healthy', async t => {
+  const f = await fixture(t);
+  await writeFile(f.backup, '#!/bin/sh\\nexit 1\\n');
+  const result = run(f, { BACKUP_ALERT_WEBHOOK_URL: 'https://example.invalid/webhook' });
+  assert.equal(result.status, 1);
+  const logged = await readFile(f.log, 'utf8');
+  assert.match(logged, /Malik POS database backup is missing, stale, or invalid/);
+});
+
 test('backup monitor sends a static alert when health check fails', async t => {
   const f = await fixture(t);
   await writeFile(f.health, '#!/bin/sh\necho unhealthy >&2\nexit 1\n');
