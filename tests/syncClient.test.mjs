@@ -619,3 +619,20 @@ test('applyPulledEvents preserves local records and sync metadata when the saved
   assert.equal(storage.inspect('malik-syncCursor'), '1.5');
   assert.equal(storage.inspect('malik-syncVersions'), versions);
 });
+
+
+test('duplicate local record IDs block applying pulled events without mutating data or sync progress', () => {
+  const orders = JSON.stringify([{ id: 'o-1', total: 10 }, { id: 'o-1', total: 20 }]);
+  const versions = JSON.stringify({ 'orders:o-1': 4 });
+  const storage = fakeStorage({
+    'malik-orders': orders,
+    'malik-syncCursor': '4',
+    'malik-syncVersions': versions
+  });
+  assert.throws(() => applyPulledEvents(storage, [
+    { sequence: 5, entity: 'orders', record_id: 'o-2', operation: 'upsert', payload: { id: 'o-2', total: 30 } }
+  ]), /duplicate record ID "o-1".*preserved/i);
+  assert.equal(storage.inspect('malik-orders'), orders);
+  assert.equal(storage.inspect('malik-syncCursor'), '4');
+  assert.equal(storage.inspect('malik-syncVersions'), versions);
+});
