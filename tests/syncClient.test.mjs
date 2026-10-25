@@ -12,6 +12,31 @@ function fakeStorage(initial = {}) {
   };
 }
 
+
+test('corrupt sync baseline metadata is preserved and blocks a destructive rebuild', () => {
+  const corrupt = '{"orders":';
+  const outbox = JSON.stringify([{ eventId: 'saved-event', entity: 'orders', recordId: 'o-1', operation: 'upsert', payload: { id: 'o-1' } }]);
+  const storage = fakeStorage({
+    'malik-orders': JSON.stringify([{ id: 'o-1', total: 10 }]),
+    'malik-syncBaseline': corrupt,
+    'malik-syncOutbox': outbox
+  });
+  assert.throws(() => buildSnapshotEvents(storage, 'admin'), /sync metadata "malik-syncBaseline".*preserved/i);
+  assert.equal(storage.inspect('malik-syncBaseline'), corrupt);
+  assert.equal(storage.inspect('malik-syncOutbox'), outbox);
+});
+
+test('corrupt sync version metadata is preserved and blocks creating replacement event IDs', () => {
+  const corrupt = '{';
+  const storage = fakeStorage({
+    'malik-orders': JSON.stringify([{ id: 'o-1', total: 10 }]),
+    'malik-syncVersions': corrupt
+  });
+  assert.throws(() => buildSnapshotEvents(storage, 'admin'), /sync metadata "malik-syncVersions".*preserved/i);
+  assert.equal(storage.inspect('malik-syncVersions'), corrupt);
+  assert.equal(storage.inspect('malik-syncOutbox'), undefined);
+});
+
 test('malformed sync outbox is preserved and blocks a destructive snapshot rebuild', () => {
   const corrupt = '{"eventId":';
   const storage = fakeStorage({ 'malik-orders': JSON.stringify([{ id: 'o-1', total: 10 }]), 'malik-syncOutbox': corrupt });
