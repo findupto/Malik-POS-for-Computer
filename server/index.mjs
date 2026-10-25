@@ -572,6 +572,69 @@ const server = http.createServer(async (req, res) => {
         return send(res, 200, { ok: true });
       }
     }
+    if (req.method === 'GET' && url.pathname === '/api/admin/overview') {
+      if (user.role !== 'admin') return send(res, 403, { error: 'Administrator role required.' });
+      const location = await pool.query('SELECT timezone FROM locations WHERE id=$1 AND active=true', [user.locationId]);
+      if (!location.rowCount) return send(res, 404, { error: 'Active location not found.' });
+      const timezone = location.rows[0].timezone || 'Asia/Karachi';
+      const datePattern = /^\\d{4}-\\d{2}-\\d{2}$/;
+      const isRealDate = value => datePattern.test(value) && !Number.isNaN(Date.parse(value + 'T00:00:00Z')) && new Date(value + 'T00:00:00Z').toISOString().slice(0, 10) === value;
+      const todayResult = await pool.query('SELECT (now() AT TIME ZONE $1)::date::text AS today', [timezone]);
+      const today = todayResult.rows[0].today;
+      const from = url.searchParams.get('from') || today;
+      const to = url.searchParams.get('to') || today;
+      if (!isRealDate(from) || !isRealDate(to) || from > to) return send(res, 400, { error: 'Use valid from/to dates in YYYY-MM-DD format, with from no later than to.' });
+      const rangeDays = (Date.parse(to + 'T00:00:00Z') - Date.parse(from + 'T00:00:00Z')) / 86400000 + 1;
+      if (rangeDays > 366) return send(res, 400, { error: 'The overview date range cannot exceed 366 days.' });
+      const sales = await pool.query(
+        `SELECT count(*)::int AS transaction_count,
+                COALESCE(sum(total),0)::numeric(14,2)::text AS gross_sales,
+                COALESCE(avg(total),0)::numeric(14,2)::text AS average_sale
+           FROM pos_transactions
+          WHERE location_id=$1
+            AND created_at >= ($2::date::timestamp AT TIME ZONE $4)
+            AND created_at < (($3::date + 1)::timestamp AT TIME ZONE $4)`,
+        [user.locationId, from, to, timezone]
+      );
+      const refunds = await pool.query(
+        `SELECT count(*)::int AS refund_count, COALESCE(sum(amount),0)::numeric(14,2)::text AS refunded
+           FROM pos_refunds
+          WHERE location_id=$1
+            AND created_at >= ($2::date::timestamp AT TIME ZONE $4)
+            AND created_at < (($3::date + 1)::timestamp AT TIME ZONE $4)`,
+        [user.locationId, from, to, timezone]
+      );
+      const inventory = await pool.query(
+        `SELECT count(*)::int AS tracked_products,
+                COALESCE(sum(quantity),0)::numeric(14,3)::text AS units_on_hand
+           FROM inventory_balances WHERE location_id=$1`,
+        [user.locationId]
+      );
+      const staff = await pool.query(
+        'SELECT count(*)::int AS active_staff FROM staff_users WHERE location_id=$1 AND active=true',
+        [user.locationId]
+      );
+      const activity = await pool.query(
+        `SELECT id, action, entity, record_id, details, created_at
+           FROM audit_events
+          WHERE location_id=$1
+            AND created_at >= ($2::date::timestamp AT TIME ZONE $4)
+            AND created_at < (($3::date + 1)::timestamp AT TIME ZONE $4)
+          ORDER BY created_at DESC LIMIT 10`,
+        [user.locationId, from, to, timezone]
+      );
+      const sale = sales.rows[0];
+      const refund = refunds.rows[0];
+      const grossSales = Number(sale.gross_sales);
+      const refunded = Number(refund.refunded);
+      return send(res, 200, {
+        locationId: user.locationId, timezone, from, to,
+        sales: { transactionCount: sale.transaction_count, grossSales, averageSale: Number(sale.average_sale), refundsCount: refund.refund_count, refunded, netSales: Math.round((grossSales - refunded + Number.EPSILON) * 100) / 100, currency: 'PKR' },
+        inventory: { trackedProducts: inventory.rows[0].tracked_products, unitsOnHand: Number(inventory.rows[0].units_on_hand) },
+        activeStaff: staff.rows[0].active_staff,
+        recentActivity: activity.rows
+      });
+    }
     if (req.method === 'GET' && url.pathname === '/api/admin/locations') {
       if (user.role !== 'admin') return send(res, 403, { error: 'Administrator role required.' });
       const result = await pool.query('SELECT id,name,timezone,active,created_at FROM locations ORDER BY name');
