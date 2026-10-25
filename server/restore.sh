@@ -9,11 +9,14 @@ if [ "${CONFIRM_RESTORE:-}" != "YES" ]; then
   exit 2
 fi
 [ -f "$ARCHIVE" ] || { echo "Backup archive not found: $ARCHIVE" >&2; exit 2; }
-if [ -f "$ARCHIVE.sha256" ]; then
-  archive_dir="$(dirname "$ARCHIVE")"
-  archive_name="$(basename "$ARCHIVE")"
-  (cd "$archive_dir" && sha256sum --check "$archive_name.sha256")
+archive_dir="$(dirname "$ARCHIVE")"
+archive_name="$(basename "$ARCHIVE")"
+if [ ! -f "$ARCHIVE.sha256" ]; then
+  echo "Refusing to restore: checksum file not found: $ARCHIVE.sha256" >&2
+  echo "Use a verified backup created by server/backup.sh, or validate the archive and generate its checksum through your approved recovery procedure." >&2
+  exit 2
 fi
+(cd "$archive_dir" && sha256sum --check "$archive_name.sha256")
 pg_restore --list "$ARCHIVE" >/dev/null
 pg_restore --clean --if-exists --exit-on-error --no-owner --no-acl --dbname="$DATABASE_URL" "$ARCHIVE"
 echo "Restore completed. Verify application health and perform a test login before reopening registers."
