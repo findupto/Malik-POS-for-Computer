@@ -50,5 +50,7 @@ jobs:
         run: npm test
       - name: Build API container image
         run: docker build -f server/Dockerfile -t malik-pos-api:ci .
+      - name: Verify API runtime modules are packaged
+        run: docker run --rm --entrypoint sh malik-pos-api:ci -c 'test -f /app/server/index.mjs && test -f /app/server/schema.sql && test -f /app/server/syncPolicy.mjs && test -f /app/server/sessionClaims.mjs && test -f /app/server/quantity.mjs && test -f /app/server/loginRateLimit.mjs'
       - name: Build web application
         run: npm run build
