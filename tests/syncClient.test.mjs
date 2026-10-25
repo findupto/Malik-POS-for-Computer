@@ -22,7 +22,9 @@ test('valid JSON with malformed baseline or conflict metadata is preserved and b
     ['malik-syncBaseline', '{"orders":[]}'],
     ['malik-syncConflicts', '{}'],
     ['malik-syncConflicts', '[null]'],
-    ['malik-syncConflicts', '[{"reason":"missing id"}]']
+    ['malik-syncConflicts', '[{"reason":"missing id"}]'],
+    ['malik-syncConflicts', '[{"id":"c-1","entity":"orders","recordId":"o-1"}]'],
+    ['malik-syncConflicts', '[{"id":"c-1","entity":"orders","recordId":"o-1","remoteEvent":{"sequence":0,"entity":"orders","record_id":"o-1","operation":"upsert","payload":{"id":"o-1"}}}]']
   ]) {
     const outbox = JSON.stringify([{ eventId: '123e4567-e89b-42d3-a456-426614174000', entity: 'orders', recordId: 'o-1', operation: 'upsert', payload: { id: 'o-1' } }]);
     const storage = fakeStorage({

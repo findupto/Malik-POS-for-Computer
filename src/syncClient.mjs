@@ -58,7 +58,20 @@ function readBaseline(storage) {
 
 function readConflicts(storage) {
   const conflicts = readJson(storage, CONFLICTS_KEY, []);
-  if (!Array.isArray(conflicts) || conflicts.some(item => !item || typeof item !== 'object' || Array.isArray(item) || typeof item.id !== 'string' || !item.id || typeof item.entity !== 'string' || typeof item.recordId !== 'string')) {
+  const invalid = !Array.isArray(conflicts) || conflicts.some(item => {
+    if (!item || typeof item !== 'object' || Array.isArray(item) ||
+        typeof item.id !== 'string' || !item.id.trim() ||
+        typeof item.entity !== 'string' || !/^[a-z][a-z0-9_-]{0,63}$/.test(item.entity) ||
+        typeof item.recordId !== 'string' || !item.recordId.trim() || item.recordId.length > 200 ||
+        !item.remoteEvent || typeof item.remoteEvent !== 'object' || Array.isArray(item.remoteEvent)) return true;
+    try {
+      validatePulledEvents([item.remoteEvent]);
+      return item.remoteEvent.entity !== item.entity || String(item.remoteEvent.record_id) !== item.recordId;
+    } catch {
+      return true;
+    }
+  });
+  if (invalid) {
     throw new Error('Saved sync conflict metadata has an invalid format. Its contents were preserved; do not clear app data before recovery.');
   }
   return conflicts;
