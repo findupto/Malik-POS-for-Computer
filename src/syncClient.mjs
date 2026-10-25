@@ -139,7 +139,27 @@ export function buildSnapshotEvents(storage, role = 'admin', definitions = DEFAU
 }
 
 
+function validatePulledEvents(events) {
+  if (!Array.isArray(events)) {
+    throw new Error('The sync server returned an invalid event batch. Local POS data and sync progress were preserved.');
+  }
+  for (const event of events) {
+    const sequence = Number(event?.sequence);
+    const recordId = event?.record_id;
+    if (!event || typeof event !== 'object' ||
+        !Number.isSafeInteger(sequence) || sequence < 0 ||
+        typeof event.entity !== 'string' || !/^[a-z][a-z0-9_-]{0,63}$/.test(event.entity) ||
+        !['string', 'number'].includes(typeof recordId) || !String(recordId).trim() || String(recordId).length > 200 ||
+        !['upsert', 'delete'].includes(event.operation) ||
+        (event.operation === 'upsert' && (!event.payload || typeof event.payload !== 'object' || Array.isArray(event.payload)))) {
+      throw new Error('The sync server returned an invalid event. Local POS data and sync progress were preserved; retry sync after checking the server.');
+    }
+  }
+  return events;
+}
+
 export function applyPulledEvents(storage, events, cursorKey = CURSOR_KEY, definitions = DEFAULT_SYNC_ENTITIES) {
+  validatePulledEvents(events || []);
   const byEntity = new Map(definitions.map(def => [def.entity, def]));
   const grouped = new Map();
   let nextCursor = Number(storage.getItem(cursorKey) || 0);
@@ -212,7 +232,7 @@ export async function syncSnapshot({ baseUrl, token, storage, role = 'admin', fe
     const response = await fetchImpl(base + '/api/sync/pull?after=' + encodeURIComponent(cursor), { headers: authHeaders });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || 'Download failed.');
-    const batch = data.events || [];
+    const batch = validatePulledEvents(data.events || []);
     const safeBatch = [];
     for (const event of batch) {
       const key = event.entity + ':' + event.record_id;
