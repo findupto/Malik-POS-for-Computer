@@ -629,7 +629,7 @@ const server = http.createServer(async (req, res) => {
         [user.locationId]
       );
       const outOfStock = await pool.query(
-        `SELECT product_id, sku, product_name, quantity::numeric(14,3)::text AS quantity, updated_at, count(*) OVER()::int AS total_count
+        `SELECT product_id, sku, product_name, quantity::numeric(14,3)::text AS quantity, reorder_point::numeric(14,3)::text AS reorder_point, updated_at, count(*) OVER()::int AS total_count
            FROM inventory_balances
           WHERE location_id=$1 AND quantity <= reorder_point
           ORDER BY product_name
