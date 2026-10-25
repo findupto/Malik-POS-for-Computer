@@ -325,12 +325,12 @@ const server = http.createServer(async (req, res) => {
       try {
         await client.query('BEGIN');
         await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [user.locationId + ':inventory:' + productId]);
-        const existing = await client.query('SELECT product_id,sku,product_name,quantity,updated_at FROM inventory_balances WHERE location_id=$1 AND product_id=$2 FOR UPDATE', [user.locationId,productId]);
+        const existing = await client.query('SELECT product_id,sku,product_name,quantity,reorder_point,updated_at FROM inventory_balances WHERE location_id=$1 AND product_id=$2 FOR UPDATE', [user.locationId,productId]);
         if (existing.rowCount) {
           await client.query('COMMIT');
           return send(res, 200, { status: 'already_initialized', inventory: existing.rows[0] });
         }
-        const created = await client.query('INSERT INTO inventory_balances(location_id,product_id,sku,product_name,quantity,updated_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING product_id,sku,product_name,quantity,updated_at', [user.locationId,productId,sku,productName,quantity,user.sub]);
+        const created = await client.query('INSERT INTO inventory_balances(location_id,product_id,sku,product_name,quantity,updated_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING product_id,sku,product_name,quantity,reorder_point,updated_at', [user.locationId,productId,sku,productName,quantity,user.sub]);
         if (quantity > 0) {
           await client.query('INSERT INTO inventory_movements(location_id,idempotency_key,product_id,sku,product_name,quantity_delta,quantity_after,reason,reference_type,actor_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', [user.locationId,crypto.randomUUID(),productId,sku,productName,quantity,quantity,'Initial stock imported from desktop catalog','adjustment',user.sub]);
         }
@@ -357,8 +357,26 @@ const server = http.createServer(async (req, res) => {
       );
       return send(res, 200, { movements: result.rows });
     }
+    if (req.method === 'POST' && url.pathname === '/api/inventory/reorder-point') {
+      if (!['admin','manager'].includes(user.role)) return send(res, 403, { error: 'Administrator or manager role required to change reorder points.' });
+      const input = await bodyJson(req, 16_000);
+      const productId = String(input.productId || '').trim();
+      const reorderPoint = Number(input.reorderPoint);
+      if (!productId || productId.length > 200) return send(res, 400, { error: 'A valid productId is required.' });
+      if (!Number.isFinite(reorderPoint) || reorderPoint < 0 || reorderPoint > 1000000000 || !hasAtMostThreeDecimalPlaces(reorderPoint)) return send(res, 400, { error: 'reorderPoint must be zero or greater with at most three decimal places.' });
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const updated = await client.query('UPDATE inventory_balances SET reorder_point=$1,updated_by=$2,updated_at=now() WHERE location_id=$3 AND product_id=$4 RETURNING product_id,sku,product_name,quantity,reorder_point,updated_at', [reorderPoint,user.sub,user.locationId,productId]);
+        if (!updated.rowCount) { await client.query('ROLLBACK'); return send(res, 404, { error: 'Tracked inventory product not found at this location.' }); }
+        await client.query('INSERT INTO audit_events(location_id,actor_id,action,entity,record_id,details) VALUES ($1,$2,$3,$4,$5,$6)', [user.locationId,user.sub,'inventory.reorder_point_changed','inventory_balances',productId,JSON.stringify({ reorderPoint })]);
+        await client.query('COMMIT');
+        return send(res, 200, { inventory: updated.rows[0] });
+      } catch (error) { await client.query('ROLLBACK'); throw error; }
+      finally { client.release(); }
+    }
     if (req.method === 'GET' && url.pathname === '/api/inventory') {
-      const result = await pool.query('SELECT product_id,sku,product_name,quantity,updated_at FROM inventory_balances WHERE location_id=$1 ORDER BY product_name', [user.locationId]);
+      const result = await pool.query('SELECT product_id,sku,product_name,quantity,reorder_point,updated_at FROM inventory_balances WHERE location_id=$1 ORDER BY product_name', [user.locationId]);
       return send(res, 200, { inventory: result.rows });
     }
     const refundMatch = url.pathname.match(/^\/api\/transactions\/([0-9a-f-]{36})\/refunds$/i);
@@ -613,13 +631,14 @@ const server = http.createServer(async (req, res) => {
       const outOfStock = await pool.query(
         `SELECT product_id, sku, product_name, quantity::numeric(14,3)::text AS quantity, updated_at, count(*) OVER()::int AS total_count
            FROM inventory_balances
-          WHERE location_id=$1 AND quantity <= 0
+          WHERE location_id=$1 AND quantity <= reorder_point
           ORDER BY product_name
           LIMIT 100`,
         [user.locationId]
       );
-      const outOfStockCount = Number(outOfStock.rows[0]?.total_count || 0);
-      const outOfStockProducts = outOfStock.rows.map(({ total_count, ...product }) => product);
+      const lowStockCount = Number(outOfStock.rows[0]?.total_count || 0);
+      const lowStockProducts = outOfStock.rows.map(({ total_count, ...product }) => product);
+      const outOfStockCount = lowStockProducts.filter(product => Number(product.quantity) <= 0).length;
       const staff = await pool.query(
         'SELECT count(*)::int AS active_staff FROM staff_users WHERE location_id=$1 AND active=true',
         [user.locationId]
@@ -640,7 +659,7 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, {
         locationId: user.locationId, timezone, from, to,
         sales: { transactionCount: sale.transaction_count, grossSales, averageSale: Number(sale.average_sale), refundsCount: refund.refund_count, refunded, netSales: Math.round((grossSales - refunded + Number.EPSILON) * 100) / 100, currency: 'PKR' },
-        inventory: { trackedProducts: inventory.rows[0].tracked_products, unitsOnHand: Number(inventory.rows[0].units_on_hand), outOfStockCount, outOfStockProducts },
+        inventory: { trackedProducts: inventory.rows[0].tracked_products, unitsOnHand: Number(inventory.rows[0].units_on_hand), outOfStockCount, lowStockCount, lowStockProducts },
         activeStaff: staff.rows[0].active_staff,
         recentActivity: activity.rows
       });
