@@ -144,6 +144,19 @@ test('server rejection is surfaced so checkout can remain pending', async () => 
 });
 
 
+test('rejected shared sale remains in the durable outbox for recovery', async () => {
+  const storage = fakeStorage();
+  const key = '33333333-3333-4333-8333-333333333333';
+  await assert.rejects(() => recordSaleTransaction({
+    baseUrl: 'http://localhost:8787', token: 'expired-token', order, payment: 'Cash', storage,
+    makeId: () => key,
+    fetchImpl: async () => ({ ok: false, status: 401, json: async () => ({ error: 'Session expired' }) })
+  }), /Session expired/);
+  const queued = JSON.parse(storage.inspect('malik-transactionOutbox'));
+  assert.equal(queued[order.id].idempotencyKey, key);
+  assert.equal(queued[order.id].items.length, order.items.length);
+});
+
 test('shared refund is recorded server-first and retries with the same key', async () => {
   const storage = fakeStorage();
   const calls = [];
