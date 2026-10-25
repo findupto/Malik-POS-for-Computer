@@ -97,8 +97,23 @@ export function buildSnapshotEvents(storage, role = 'admin', definitions = DEFAU
       }
     }
   }
+  // A queued write may have been accepted by the server even if its response was lost.
+  // If local state later returns to its baseline (or a queued new record is removed),
+  // emit a compensating event instead of silently discarding the only recovery record.
+  const desiredByKey = new Map(desired.map(item => [item.entity + ':' + item.recordId, item]));
+  for (const prior of priorOutbox) {
+    if (!permittedEntities.has(prior.entity)) continue;
+    const key = prior.entity + ':' + prior.recordId;
+    if (desiredByKey.has(key)) continue;
+    const def = definitions.find(item => item.entity === prior.entity);
+    if (!def) continue;
+    const current = currentRecords(storage, def);
+    desiredByKey.set(key, Object.hasOwn(current, prior.recordId)
+      ? { entity: prior.entity, recordId: prior.recordId, operation: 'upsert', payload: current[prior.recordId] }
+      : { entity: prior.entity, recordId: prior.recordId, operation: 'delete' });
+  }
   const nextOutbox = priorOutbox.filter(event => !permittedEntities.has(event.entity));
-  const events = desired.map(item => {
+  const events = [...desiredByKey.values()].map(item => {
     const key = item.entity + ':' + item.recordId;
     const prior = priorByKey.get(key);
     const reusable = prior && prior.operation === item.operation &&

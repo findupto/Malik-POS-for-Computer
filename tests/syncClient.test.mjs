@@ -237,3 +237,23 @@ test('sync drops a pending write when the server already has the identical recor
   assert.equal(pushes, 0);
   assert.deepEqual(JSON.parse(storage.inspect('malik-syncOutbox')), []);
 });
+
+
+test('pending sync write is compensated when local state returns to its previous baseline', () => {
+  const priorEventId = '123e4567-e89b-42d3-a456-426614174000';
+  const storage = fakeStorage({
+    'malik-orders': JSON.stringify([{ id: 'o-1', total: 10 }]),
+    'malik-syncBaseline': JSON.stringify({ orders: { 'o-1': { id: 'o-1', total: 10 } } }),
+    'malik-syncOutbox': JSON.stringify([{
+      eventId: priorEventId, entity: 'orders', recordId: 'o-1', operation: 'upsert',
+      payload: { id: 'o-1', total: 20 }, expectedSequence: 4, occurredAt: '2026-01-01T00:00:00.000Z'
+    }]),
+    'malik-syncVersions': JSON.stringify({ 'orders:o-1': 4 })
+  });
+  const events = buildSnapshotEvents(storage, 'admin');
+  assert.equal(events.length, 1, 'do not silently discard a potentially server-accepted event');
+  assert.equal(events[0].operation, 'upsert');
+  assert.deepEqual(events[0].payload, { id: 'o-1', total: 10 });
+  assert.notEqual(events[0].eventId, priorEventId, 'changed payload must use a fresh event ID');
+  assert.equal(events[0].expectedSequence, 4);
+});
