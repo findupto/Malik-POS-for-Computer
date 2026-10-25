@@ -199,6 +199,21 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   });
   assert.equal(adjustmentRetryMismatch.status, 409, 'same adjustment idempotency key with changed details must be rejected');
 
+  const invalidTimestampOrderId = 'invalid-timestamp-' + crypto.randomUUID();
+  const invalidTimestamp = await request('/api/transactions', {
+    token: cashierToken, method: 'POST',
+    body: {
+      idempotencyKey: crypto.randomUUID(),
+      orderId: invalidTimestampOrderId,
+      items: [{ productId: '', sku: 'BAD-DATE', productName: 'Invalid timestamp validation', quantity: 1, unitPrice: 10 }],
+      occurredAt: 'not-a-real-date-time',
+      tenders: []
+    }
+  });
+  assert.equal(invalidTimestamp.status, 400, 'server must reject malformed sale timestamps');
+  const rejectedTimestampLookup = await request('/api/transactions?limit=10&orderId=' + encodeURIComponent(invalidTimestampOrderId), { token: cashierToken });
+  assert.equal(rejectedTimestampLookup.data.transactions.length, 0, 'rejected timestamp must not create a ledger entry');
+
   const overpaidOrderId = 'overpaid-sale-' + crypto.randomUUID();
   const overpaid = await request('/api/transactions', {
     token: cashierToken, method: 'POST',
