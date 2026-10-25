@@ -19,6 +19,13 @@ test('malformed sync outbox is preserved and blocks a destructive snapshot rebui
   assert.equal(storage.inspect('malik-syncOutbox'), corrupt);
 });
 
+test('invalid queued sync events are preserved rather than uploaded', () => {
+  const corrupt = JSON.stringify([{ eventId: 'not-a-valid-event', entity: 'orders', recordId: 'o-1', operation: 'overwrite', payload: { id: 'o-1' } }]);
+  const storage = fakeStorage({ 'malik-orders': JSON.stringify([{ id: 'o-1', total: 10 }]), 'malik-syncOutbox': corrupt });
+  assert.throws(() => buildSnapshotEvents(storage, 'admin'), /outbox has an invalid format.*preserved/i);
+  assert.equal(storage.inspect('malik-syncOutbox'), corrupt);
+});
+
 test('snapshot excludes staff secrets and cashier catalog writes', () => {
   const storage = fakeStorage({
     'malik-orders': JSON.stringify([{ id: 'o-1', total: 500 }]),
