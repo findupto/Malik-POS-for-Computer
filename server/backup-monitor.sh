@@ -25,7 +25,7 @@ fi
 
 # Keep the payload static: no secret, database URL, or user data is sent.
 if ! wget -q -O /dev/null --header='Content-Type: application/json' \
-  --post-data='{"text":"ALERT: Malik POS database backup is missing, stale, or invalid. Check the backup container logs and restore readiness."}' \
+  --post-data='{"text":"ALERT: Malik POS backup cycle failed or the newest backup is missing, stale, or invalid. Check the backup container logs and restore readiness."}' \
   "$WEBHOOK_URL"; then
   echo "ERROR: Failed to deliver the backup alert webhook." >&2
   exit 1
