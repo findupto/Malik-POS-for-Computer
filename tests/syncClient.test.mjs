@@ -104,6 +104,35 @@ test('snapshot sync uploads only changed records and emits delete tombstones', a
   assert.equal(pushed.find(e => e.recordId === 'o-2').operation, 'delete');
 });
 
+test('failed upload retries only local changes and does not re-upload downloaded server records', async () => {
+  const { syncSnapshot } = await import('../src/syncClient.mjs');
+  const storage = fakeStorage({ 'malik-orders': JSON.stringify([{ id: 'local-order', total: 10 }]) });
+  let failPush = true;
+  const pushed = [];
+  const fetchMock = async (url, options = {}) => {
+    if (String(url).includes('/api/sync/pull')) {
+      const after = Number(new URL(String(url)).searchParams.get('after') || 0);
+      return { ok: true, json: async () => ({ events: after === 0 ? [
+        { sequence: 1, entity: 'orders', record_id: 'server-order', operation: 'upsert', payload: { id: 'server-order', total: 25 } }
+      ] : [] }) };
+    }
+    const body = JSON.parse(options.body || '{"events":[]}');
+    pushed.push(...body.events);
+    if (failPush) { failPush = false; throw new Error('temporary upload failure'); }
+    return { ok: true, json: async () => ({ accepted: body.events.length, results: body.events.map(event => ({ eventId: event.eventId, status: 'applied', sequence: 2 })) }) };
+  };
+  await assert.rejects(() => syncSnapshot({ baseUrl: 'https://pos.example.test', token: 'token', storage, fetchImpl: fetchMock }), /temporary upload failure/);
+  assert.deepEqual(JSON.parse(storage.inspect('malik-orders')), [
+    { id: 'local-order', total: 10 },
+    { id: 'server-order', total: 25 }
+  ]);
+  await syncSnapshot({ baseUrl: 'https://pos.example.test', token: 'token', storage, fetchImpl: fetchMock });
+  assert.ok(pushed.length >= 2);
+  const retryPayloads = pushed.slice(1);
+  assert.ok(retryPayloads.every(event => event.recordId === 'local-order'),
+    'retry must not treat downloaded server records as new local edits');
+});
+
 test('concurrent local and server edits are held for explicit conflict review', async () => {
   const { syncSnapshot } = await import('../src/syncClient.mjs');
   const storage = fakeStorage({ 'malik-orders': JSON.stringify([{ id: 'o-1', total: 10 }]) });

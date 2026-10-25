@@ -229,6 +229,12 @@ export async function syncSnapshot({ baseUrl, token, storage, role = 'admin', fe
   }
   storage.setItem(CONFLICTS_KEY, JSON.stringify(nextConflicts));
 
+  // Persist the downloaded server baseline before upload, but keep each locally
+  // changed record's previous baseline so a failed upload remains dirty and retryable.
+  // Without this checkpoint, the next attempt can mistake freshly downloaded server
+  // records for local changes and push them back as new writes.
+  captureBaseline(storage, DEFAULT_SYNC_ENTITIES, new Set([...pendingByKey.keys(), ...conflictKeys]), role);
+
   const satisfiedEventIds = new Set();
   const outgoing = pending.filter(event => {
     const key = event.entity + ':' + event.recordId;
