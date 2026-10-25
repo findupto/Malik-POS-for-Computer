@@ -214,6 +214,23 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
     body: { ...refundBody, reason: 'Different reason' }
   });
   assert.equal(mismatchedRefundReason.status, 409, 'same refund idempotency key with changed reason must be rejected');
+  const ownerOverview = await request('/api/admin/overview', { token: adminToken });
+  assert.equal(ownerOverview.status, 200);
+  assert.equal(ownerOverview.data.sales.currency, 'PKR');
+  assert.ok(ownerOverview.data.sales.transactionCount >= 1);
+  assert.ok(ownerOverview.data.sales.grossSales >= 265);
+  assert.ok(ownerOverview.data.sales.refundsCount >= 1);
+  assert.equal(ownerOverview.data.sales.netSales, Number((ownerOverview.data.sales.grossSales - ownerOverview.data.sales.refunded).toFixed(2)));
+  assert.ok(ownerOverview.data.inventory.trackedProducts >= 2);
+  assert.ok(ownerOverview.data.activeStaff >= 2);
+  assert.ok(Array.isArray(ownerOverview.data.recentActivity));
+  const cashierOverview = await request('/api/admin/overview', { token: cashierToken });
+  assert.equal(cashierOverview.status, 403, 'cashiers must not access owner financial overview');
+  const invalidOverviewDate = await request('/api/admin/overview?from=not-a-date', { token: adminToken });
+  assert.equal(invalidOverviewDate.status, 400);
+  const excessiveOverviewRange = await request('/api/admin/overview?from=2024-01-01&to=2025-01-01', { token: adminToken });
+  assert.equal(excessiveOverviewRange.status, 400);
+
   const inventoryAfterRefund = await request('/api/inventory', { token: cashierToken });
   assert.equal(Number(inventoryAfterRefund.data.inventory.find(item => item.product_id === 'tea-1').quantity), 4);
 
