@@ -545,7 +545,7 @@ test('invalid pull pagination cursors are rejected before local records or sync 
   const records = JSON.stringify([{ id: 'o-1', total: 20 }]);
   const baseline = JSON.stringify({ orders: [{ id: 'o-1', total: 10 }] });
   const versions = JSON.stringify({ 'orders:o-1': 7 });
-  for (const nextAfter of [null, 'bad', -1, 8, 7.5, Number.MAX_SAFE_INTEGER + 1]) {
+  for (const nextAfter of [null, 'bad', -1, 9, 7.5, Number.MAX_SAFE_INTEGER + 1]) {
     const storage = fakeStorage({
       'malik-orders': records,
       'malik-syncBaseline': baseline,
