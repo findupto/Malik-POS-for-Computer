@@ -760,3 +760,20 @@ test('queued upsert with mismatched payload ID is preserved and blocks upload', 
   assert.throws(() => buildSnapshotEvents(storage, 'admin'), /outbox has an invalid format.*preserved/i);
   assert.equal(storage.inspect('malik-syncOutbox'), corrupt);
 });
+
+
+test('pulled upserts with mismatched uuid identity are rejected without applying data', () => {
+  const records = JSON.stringify([{ id: 'o-1', total: 20 }]);
+  const versions = JSON.stringify({ 'orders:o-1': 7 });
+  const storage = fakeStorage({
+    'malik-orders': records,
+    'malik-syncCursor': '7',
+    'malik-syncVersions': versions
+  });
+  assert.throws(() => applyPulledEvents(storage, [
+    { sequence: 8, entity: 'orders', record_id: 'o-2', operation: 'upsert', payload: { uuid: 'different-record', total: 30 } }
+  ]), /invalid event batch.*preserved/i);
+  assert.equal(storage.inspect('malik-orders'), records);
+  assert.equal(storage.inspect('malik-syncCursor'), '7');
+  assert.equal(storage.inspect('malik-syncVersions'), versions);
+});
