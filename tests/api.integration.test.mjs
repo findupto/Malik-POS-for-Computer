@@ -85,6 +85,11 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   assert.equal(cashierLogin.status, 200);
   cashierToken = cashierLogin.data.token;
 
+  for (const invalidCursor of ['-1', '1.5', 'Infinity']) {
+    const invalidPull = await request('/api/sync/pull?after=' + encodeURIComponent(invalidCursor), { token: adminToken });
+    assert.equal(invalidPull.status, 400, 'invalid sync cursor ' + invalidCursor + ' must be rejected');
+  }
+
   const initKey = crypto.randomUUID();
   const firstInitialization = await request('/api/inventory/initialize', {
     token: adminToken, method: 'POST',

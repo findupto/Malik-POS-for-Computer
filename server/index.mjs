@@ -466,8 +466,9 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { accepted: results.length, results });
     }
     if (req.method === 'GET' && url.pathname === '/api/sync/pull') {
-      const after = Math.max(0, Number(url.searchParams.get('after') || 0));
-      if (!Number.isSafeInteger(after)) return send(res, 400, { error: 'after must be a non-negative event sequence.' });
+      const rawAfter = url.searchParams.get('after');
+      const after = rawAfter === null || rawAfter === '' ? 0 : Number(rawAfter);
+      if (!Number.isSafeInteger(after) || after < 0) return send(res, 400, { error: 'after must be a non-negative event sequence.' });
       const result = await pool.query('SELECT sequence,event_id,entity,record_id,operation,payload,actor_id,occurred_at,received_at FROM sync_events WHERE location_id=$1 AND sequence>$2 ORDER BY sequence LIMIT 500', [user.locationId, after]);
       return send(res, 200, { events: result.rows, nextAfter: result.rows.length ? Number(result.rows[result.rows.length - 1].sequence) : after });
     }
