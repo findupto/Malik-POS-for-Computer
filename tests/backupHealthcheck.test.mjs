@@ -57,3 +57,15 @@ test('backup health check rejects a checksum mismatch', async t => {
   const result = runCheck(f);
   assert.notEqual(result.status, 0);
 });
+
+test('backup health check rejects a checksum manifest for a different archive', async t => {
+  const f = await fixture(t);
+  await writeFile(f.archive, 'corrupted newest archive');
+  const other = path.join(f.backups, 'malik-pos-other.dump');
+  await writeFile(other, 'different valid archive');
+  const digest = crypto.createHash('sha256').update('different valid archive').digest('hex');
+  await writeFile(f.archive + '.sha256', digest + '  malik-pos-other.dump\\n');
+  const result = runCheck(f);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /does not name the newest archive/);
+});
