@@ -222,6 +222,9 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   assert.ok(ownerOverview.data.sales.refundsCount >= 1);
   assert.equal(ownerOverview.data.sales.netSales, Number((ownerOverview.data.sales.grossSales - ownerOverview.data.sales.refunded).toFixed(2)));
   assert.ok(ownerOverview.data.inventory.trackedProducts >= 2);
+  assert.ok(Number.isInteger(ownerOverview.data.inventory.outOfStockCount));
+  assert.ok(Array.isArray(ownerOverview.data.inventory.outOfStockProducts));
+  assert.ok(ownerOverview.data.inventory.outOfStockProducts.length <= 100);
   assert.ok(ownerOverview.data.activeStaff >= 2);
   assert.ok(Array.isArray(ownerOverview.data.recentActivity));
   const cashierOverview = await request('/api/admin/overview', { token: cashierToken });
