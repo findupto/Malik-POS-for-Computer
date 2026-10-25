@@ -256,3 +256,27 @@ test('inventory movement history helper surfaces API errors', async () => {
     /Not authorized/
   );
 });
+
+test('malformed transaction outbox is preserved and blocks new sale writes', async () => {
+  const corrupt = '{broken recovery data';
+  const storage = fakeStorage({ 'malik-transactionOutbox': corrupt });
+  await assert.rejects(
+    recordSaleTransaction({
+      baseUrl: 'http://localhost:8787',
+      token: 'token',
+      order,
+      payment: 'Cash',
+      storage,
+      makeId: () => '55555555-5555-4555-8555-555555555555',
+      fetchImpl: async () => { throw new Error('fetch must not be called'); }
+    }),
+    /invalid JSON/
+  );
+  assert.equal(storage.inspect('malik-transactionOutbox'), corrupt);
+  assert.equal(storage.inspect('malik-transactionIdempotency'), undefined);
+});
+
+test('malformed transaction outbox is reported instead of being presented as empty', () => {
+  const storage = fakeStorage({ 'malik-transactionOutbox': '[]' });
+  assert.throws(() => getPendingSaleTransactions(storage), /must be an object/);
+});
