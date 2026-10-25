@@ -7,7 +7,6 @@ import pg from 'pg';
 import { canPushEntity, isValidSyncPayload } from './syncPolicy.mjs';
 import { hasValidSessionClaims } from './sessionClaims.mjs';
 import { hasAtMostThreeDecimalPlaces } from './quantity.mjs';
-import { checkLoginRateLimit, clearLoginFailures, recordLoginFailure } from './loginRateLimit.mjs';
 
 const { Pool } = pg;
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -19,7 +18,9 @@ const bootstrapUser = process.env.BOOTSTRAP_ADMIN_USERNAME;
 const bootstrapPassword = process.env.BOOTSTRAP_ADMIN_PASSWORD;
 const defaultLocationName = process.env.DEFAULT_LOCATION_NAME || 'Main location';
 const allowedOrigin = process.env.CORS_ORIGIN || '';
-const loginAttempts = new Map();
+const LOGIN_WINDOW_MINUTES = 15;
+const LOGIN_MAX_ATTEMPTS = 10;
+let loginCleanupCounter = 0;
 if (!databaseUrl || !jwtSecret || jwtSecret.length < 32) {
   console.error('Set DATABASE_URL and JWT_SECRET (at least 32 characters) before starting the API.');
   process.exit(1);
@@ -115,17 +116,39 @@ const server = http.createServer(async (req, res) => {
       const password = String(input.password || '');
       if (!username || !password || password.length > 1024) return send(res, 400, { error: 'Username and password are required.' });
       const ip = String(req.socket.remoteAddress || 'unknown');
-      const limit = checkLoginRateLimit(loginAttempts, ip, Date.now());
-      if (limit.limited) {
+      const rateLimitKey = crypto.createHash('sha256').update(ip).digest('hex');
+      // Increment atomically in PostgreSQL so multiple API replicas share one limit.
+      // Successful authentication clears the address window; only a digest is stored.
+      const rate = await pool.query(
+        `INSERT INTO login_rate_limits (key_hash, window_started_at, attempt_count, updated_at)
+         VALUES ($1, now(), 1, now())
+         ON CONFLICT (key_hash) DO UPDATE SET
+           attempt_count = CASE
+             WHEN login_rate_limits.window_started_at <= now() - ($2 * interval '1 minute') THEN 1
+             ELSE login_rate_limits.attempt_count + 1
+           END,
+           window_started_at = CASE
+             WHEN login_rate_limits.window_started_at <= now() - ($2 * interval '1 minute') THEN now()
+             ELSE login_rate_limits.window_started_at
+           END,
+           updated_at = now()
+         RETURNING attempt_count`,
+        [rateLimitKey, LOGIN_WINDOW_MINUTES]
+      );
+      if (Number(rate.rows[0]?.attempt_count || 0) > LOGIN_MAX_ATTEMPTS) {
         return send(res, 429, { error: 'Too many sign-in attempts. Wait 15 minutes and try again.' });
+      }
+      loginCleanupCounter += 1;
+      if (loginCleanupCounter >= 100) {
+        loginCleanupCounter = 0;
+        await pool.query(`DELETE FROM login_rate_limits WHERE window_started_at <= now() - ($1 * interval '1 minute')`, [LOGIN_WINDOW_MINUTES]).catch(error => console.error('Login rate-limit cleanup failed:', error.message));
       }
       const found = await pool.query('SELECT id,location_id,username,password_hash,display_name,role,active FROM staff_users WHERE username=$1', [username]);
       const user = found.rows[0];
       if (!user || !user.active || !(await verifyPassword(password, user.password_hash))) {
-        recordLoginFailure(loginAttempts, ip);
         return send(res, 401, { error: 'Invalid username or password.' });
       }
-      clearLoginFailures(loginAttempts, ip);
+      await pool.query('DELETE FROM login_rate_limits WHERE key_hash=$1', [rateLimitKey]);
       return send(res, 200, { token: tokenFor(user), user: { id: user.id, username: user.username, name: user.display_name, role: user.role, locationId: user.location_id } });
     }
     const claims = authFrom(req);
