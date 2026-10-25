@@ -6,6 +6,17 @@ import StaffAccountsPanel from './StaffAccountsPanel.jsx';
 
 const CONFLICTS_KEY = 'malik-syncConflicts';
 
+function readPendingSaleState(storage) {
+  try {
+    return { sales: getPendingSaleTransactions(storage), error: '' };
+  } catch (cause) {
+    return {
+      sales: [],
+      error: String(cause?.message || 'Saved shared-sale recovery data could not be read.')
+    };
+  }
+}
+
 export default function CloudSyncPanel() {
   const [baseUrl, setBaseUrl] = useState(() => localStorage.getItem('malik-syncBaseUrl') || 'http://127.0.0.1:8787');
   const [username, setUsername] = useState(() => localStorage.getItem('malik-syncUsername') || '');
@@ -17,9 +28,10 @@ export default function CloudSyncPanel() {
   const busyRef = useRef(false);
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
-  const [pendingSales, setPendingSales] = useState(() => getPendingSaleTransactions(localStorage));
+  const [pendingSaleState, setPendingSaleState] = useState(() => readPendingSaleState(localStorage));
+  const { sales: pendingSales, error: pendingSalesError } = pendingSaleState;
   function refreshPendingSales() {
-    setPendingSales(getPendingSaleTransactions(localStorage));
+    setPendingSaleState(readPendingSaleState(localStorage));
   }
   const [conflicts, setConflicts] = useState(() => {
     try { return JSON.parse(localStorage.getItem(CONFLICTS_KEY) || '[]'); } catch { return []; }
@@ -106,6 +118,11 @@ export default function CloudSyncPanel() {
       <div className="stock-row"><div className="stock-row-info"><b>{session.user.name}</b><small>{session.user.role} · {session.user.locationId}</small></div><span className="status-pill status-good">Connected</span></div>
       <label className="field-label">SERVER</label><p className="settings-description">{session.baseUrl}</p>
       <button className="btn btn-primary full-btn" onClick={()=>runSync()} disabled={busy}><RefreshCw size={16}/>{busy?'Syncing…':'Sync now'}</button>
+      {pendingSalesError&&<div className="sync-conflicts" role="alert">
+        <h3><AlertTriangle size={17} style={{verticalAlign:'middle',marginRight:6}}/>Shared-sale recovery data needs attention</h3>
+        <p className="settings-description">{pendingSalesError} The original data has been preserved. Do not clear browser data or create replacement sales; restore this register's data from a verified backup or get technical help before retrying shared checkout.</p>
+        <button className="btn btn-secondary full-btn" onClick={refreshPendingSales}>Check recovery data again</button>
+      </div>}
       {pendingSales.length>0&&<div className="sync-conflicts" role="status">
         <h3><AlertTriangle size={17} style={{verticalAlign:'middle',marginRight:6}}/>Shared sales need retry ({pendingSales.length})</h3>
         <p className="settings-description">These requests lost a reliable server response. Their original payloads are saved on this register. Open the matching pending order and retry its payment to safely replay the same request; do not create a replacement order.</p>
