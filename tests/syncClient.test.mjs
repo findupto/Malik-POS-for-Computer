@@ -777,3 +777,23 @@ test('pulled upserts with mismatched uuid identity are rejected without applying
   assert.equal(storage.inspect('malik-syncCursor'), '7');
   assert.equal(storage.inspect('malik-syncVersions'), versions);
 });
+
+
+test('records with conflicting id and uuid fields are rejected before syncing or applying', () => {
+  const localRecords = JSON.stringify([{ id: 'o-1', uuid: 'o-2', total: 10 }]);
+  const localStorage = fakeStorage({ 'malik-orders': localRecords });
+  assert.throws(() => buildSnapshotEvents(localStorage, 'admin'), /missing or invalid ID.*preserved/i);
+  assert.equal(localStorage.inspect('malik-orders'), localRecords);
+
+  const remoteRecords = JSON.stringify([{ id: 'o-1', total: 10 }]);
+  const remoteStorage = fakeStorage({
+    'malik-orders': remoteRecords,
+    'malik-syncCursor': '7',
+    'malik-syncVersions': JSON.stringify({ 'orders:o-1': 7 })
+  });
+  assert.throws(() => applyPulledEvents(remoteStorage, [
+    { sequence: 8, entity: 'orders', record_id: 'o-1', operation: 'upsert', payload: { id: 'o-1', uuid: 'o-2', total: 20 } }
+  ]), /invalid event batch.*preserved/i);
+  assert.equal(remoteStorage.inspect('malik-orders'), remoteRecords);
+  assert.equal(remoteStorage.inspect('malik-syncCursor'), '7');
+});

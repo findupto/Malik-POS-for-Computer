@@ -19,6 +19,16 @@ const uuid = () => {
   throw new Error('This device cannot create secure sync event IDs. Update the browser or desktop app.');
 };
 const stable = value => JSON.stringify(value);
+function identityMatches(record, expectedId) {
+  const ids = ['id', 'uuid'].filter(key => Object.hasOwn(record, key));
+  if (!ids.length) return false;
+  const values = ids.map(key => record[key]);
+  if (values.some(value => !['string', 'number'].includes(typeof value) ||
+      !String(value).trim() || String(value).length > 200)) return false;
+  const normalized = values.map(String);
+  return normalized.every(value => value === normalized[0]) &&
+    (expectedId === undefined || normalized[0] === String(expectedId));
+}
 function readJson(storage, key, fallback) {
   const raw = storage.getItem(key);
   if (raw == null || raw === '') return fallback;
@@ -58,7 +68,7 @@ function readBaseline(storage) {
       for (const record of savedRecords) {
         if (!record || typeof record !== 'object' || Array.isArray(record)) fail();
         const rawId = record.id ?? record.uuid;
-        if (!['string', 'number'].includes(typeof rawId) || !String(rawId).trim() || String(rawId).length > 200) fail();
+        if (!['string', 'number'].includes(typeof rawId) || !String(rawId).trim() || String(rawId).length > 200 || !identityMatches(record, rawId)) fail();
         const id = String(rawId);
         if (Object.hasOwn(records, id)) fail();
         records[id] = record;
@@ -71,7 +81,7 @@ function readBaseline(storage) {
       if (!id.trim() || id.length > 200 ||
           !record || typeof record !== 'object' || Array.isArray(record)) fail();
       const rawId = record.id ?? record.uuid;
-      if (!['string', 'number'].includes(typeof rawId) || String(rawId) !== id) fail();
+      if (!['string', 'number'].includes(typeof rawId) || String(rawId) !== id || !identityMatches(record, id)) fail();
       records[id] = record;
     }
     normalized[entity] = records;
@@ -119,8 +129,7 @@ function readOutbox(storage) {
     seenEventIds.add(event.eventId.toLowerCase());
     if (event.operation === 'upsert' && (!event.payload || typeof event.payload !== 'object' || Array.isArray(event.payload))) return true;
     if (event.operation === 'upsert') {
-      const payloadId = event.payload.id ?? event.payload.uuid;
-      if (payloadId !== undefined && String(payloadId) !== event.recordId) return true;
+      if ((Object.hasOwn(event.payload, 'id') || Object.hasOwn(event.payload, 'uuid')) && !identityMatches(event.payload, event.recordId)) return true;
     }
     if (Object.hasOwn(event, 'expectedSequence') && event.expectedSequence !== null && (!Number.isSafeInteger(event.expectedSequence) || event.expectedSequence < 0)) return true;
     if (Object.hasOwn(event, 'occurredAt') && event.occurredAt !== null &&
@@ -148,7 +157,7 @@ function currentRecords(storage, def) {
       throw new Error(`Saved POS data "${storageKey}" contains a record that is not an object at index ${i}. Its contents were preserved; resolve the invalid record before syncing.`);
     }
     const rawId = record.id ?? record.uuid;
-    if (!['string', 'number'].includes(typeof rawId) || !String(rawId).trim() || String(rawId).length > 200) {
+    if (!['string', 'number'].includes(typeof rawId) || !String(rawId).trim() || String(rawId).length > 200 || !identityMatches(record, rawId)) {
       throw new Error(`Saved POS data "${storageKey}" contains a record with a missing or invalid ID at index ${i}. Its contents were preserved; resolve the record ID before syncing.`);
     }
     const id = String(rawId);
@@ -256,7 +265,7 @@ function validatePulledEvents(events) {
         (Object.hasOwn(event, 'occurred_at') && event.occurred_at !== null &&
           (typeof event.occurred_at !== 'string' || !event.occurred_at.trim() || !Number.isFinite(Date.parse(event.occurred_at)))) ||
         (event.operation === 'upsert' && (!event.payload || typeof event.payload !== 'object' || Array.isArray(event.payload))) ||
-        (event.operation === 'upsert' && event.payload && (event.payload.id ?? event.payload.uuid) !== undefined && String(event.payload.id ?? event.payload.uuid) !== String(recordId)) ||
+        (event.operation === 'upsert' && event.payload && (Object.hasOwn(event.payload, 'id') || Object.hasOwn(event.payload, 'uuid')) && !identityMatches(event.payload, recordId)) ||
         (event.operation === 'delete' && event.payload != null)) {
       throw new Error('The sync server returned an invalid event batch or non-increasing event sequence. Local POS data and sync progress were preserved; retry sync after checking the server.');
     }
