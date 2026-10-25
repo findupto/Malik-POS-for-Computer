@@ -24,7 +24,17 @@ A desktop point-of-sale workspace built with React, Vite, and Electron.
 
 The Electron desktop app now writes a daily JSON snapshot of its `malik-*` local POS records to the application's user-data `backups` folder, refreshes the snapshot every 15 minutes while the app is open, and retains the most recent 30 daily files. Session/token/password/credential-like keys are excluded. The latest snapshot is also written as `latest.json`. In the desktop app, the folder can be opened through the exposed desktop backup action. These files are local backups, not Google Drive backups; protect the Windows user account and copy backups to encrypted off-device storage.
 
-**Google Drive is not yet configured automatically.** A Drive upload cannot be safely enabled just because a browser or Windows account is signed in. It requires a Google Cloud OAuth client, consent configuration, secure token storage, explicit user authorization, and a tested upload/restore path. Do not treat local backups as off-device disaster recovery. Also, automatic backups require the POS app to have been opened at least once to capture data; background scheduling only runs while the desktop app is running.
+**Google Drive setup is available in the desktop app, but requires your own OAuth client ID and explicit account authorization.** It cannot silently reuse a browser or Windows sign-in.
+
+1. In [Google Cloud Console](https://console.cloud.google.com/), create/select a project and enable the Google Drive API.
+2. Configure the OAuth consent screen. If the app is in Testing mode, add the Google account you will use as a test user.
+3. Create an OAuth client ID with application type **Desktop app**. Do not create or share a client secret for this desktop flow.
+4. Open Malik POS → **Settings** → **Automatic local backups**. Paste the client ID and select **Connect Google Drive**. Complete Google's consent flow in the browser.
+5. The app stores the refresh token encrypted using the operating system's secure credential storage, uploads daily JSON snapshots to the **Malik POS Backups** Drive folder, and updates the current day's file while the app is running. The app shows a one-second daily reminder if Drive is not connected, and a one-second daily alert if an upload keeps failing.
+
+Use **Restore from backup file** in Settings to select and validate a JSON backup. The app asks for confirmation and creates a safety backup before replacing saved `malik-*` business records.
+
+**Limitations:** these are snapshots of the POS records stored in browser localStorage, not a replacement for a fully server-authoritative database backup. Automatic snapshots and uploads require Malik POS to be running and online. No Drive account is connected until you complete the OAuth steps above. Test restoration on a non-production copy before relying on these backups for disaster recovery.
 
 ## Run locally
 Requires Node.js 22 or newer.
