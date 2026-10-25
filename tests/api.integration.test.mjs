@@ -120,6 +120,28 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
     body: { idempotencyKey: crypto.randomUUID(), productId: 'bread-1', sku: 'BREAD-1', productName: 'Bread', quantityDelta: 4, reason: 'Integration test opening stock' }
   });
   assert.equal(breadOpening.status, 201);
+  const setTeaReorderPoint = await request('/api/inventory/reorder-point', {
+    token: adminToken, method: 'POST',
+    body: { productId: 'tea-1', reorderPoint: 6 }
+  });
+  assert.equal(setTeaReorderPoint.status, 200);
+  assert.equal(Number(setTeaReorderPoint.data.inventory.reorder_point), 6);
+  const cashierReorderPoint = await request('/api/inventory/reorder-point', {
+    token: cashierToken, method: 'POST',
+    body: { productId: 'tea-1', reorderPoint: 8 }
+  });
+  assert.equal(cashierReorderPoint.status, 403);
+  const invalidReorderPoint = await request('/api/inventory/reorder-point', {
+    token: adminToken, method: 'POST',
+    body: { productId: 'tea-1', reorderPoint: 1.2345 }
+  });
+  assert.equal(invalidReorderPoint.status, 400);
+  const missingReorderPoint = await request('/api/inventory/reorder-point', {
+    token: adminToken, method: 'POST',
+    body: { productId: 'not-tracked', reorderPoint: 2 }
+  });
+  assert.equal(missingReorderPoint.status, 404);
+
   const adjustmentRetryMismatch = await request('/api/inventory/adjustments', {
     token: adminToken, method: 'POST',
     body: { idempotencyKey: teaAdjustmentKey, productId: 'tea-1', sku: 'TEA-1', productName: 'Tea', quantityDelta: 6, reason: 'Changed retry payload' }
@@ -225,6 +247,9 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   assert.ok(Number.isInteger(ownerOverview.data.inventory.outOfStockCount));
   assert.ok(Array.isArray(ownerOverview.data.inventory.outOfStockProducts));
   assert.ok(ownerOverview.data.inventory.outOfStockProducts.length <= 100);
+  assert.ok(Number.isInteger(ownerOverview.data.inventory.lowStockCount));
+  assert.ok(Array.isArray(ownerOverview.data.inventory.lowStockProducts));
+  assert.ok(ownerOverview.data.inventory.lowStockProducts.some(item => item.product_id === 'tea-1' && Number(item.reorder_point) === 6));
   assert.ok(ownerOverview.data.activeStaff >= 2);
   assert.ok(Array.isArray(ownerOverview.data.recentActivity));
   const cashierOverview = await request('/api/admin/overview', { token: cashierToken });
@@ -236,6 +261,7 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
 
   const inventoryAfterRefund = await request('/api/inventory', { token: cashierToken });
   assert.equal(Number(inventoryAfterRefund.data.inventory.find(item => item.product_id === 'tea-1').quantity), 4);
+  assert.equal(Number(inventoryAfterRefund.data.inventory.find(item => item.product_id === 'tea-1').reorder_point), 6);
 
   const movementHistory = await request('/api/inventory/movements?limit=500', { token: cashierToken });
   assert.equal(movementHistory.status, 200);
