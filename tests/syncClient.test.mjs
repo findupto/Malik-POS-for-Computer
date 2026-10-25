@@ -13,6 +13,34 @@ function fakeStorage(initial = {}) {
 }
 
 
+test('valid JSON with malformed baseline or conflict metadata is preserved and blocks sync', () => {
+  for (const [key, corrupt] of [
+    ['malik-syncBaseline', '[]'],
+    ['malik-syncBaseline', '42'],
+    ['malik-syncConflicts', '{}'],
+    ['malik-syncConflicts', '[null]'],
+    ['malik-syncConflicts', '[{"reason":"missing id"}]']
+  ]) {
+    const outbox = JSON.stringify([{ eventId: '123e4567-e89b-42d3-a456-426614174000', entity: 'orders', recordId: 'o-1', operation: 'upsert', payload: { id: 'o-1' } }]);
+    const storage = fakeStorage({
+      'malik-orders': JSON.stringify([{ id: 'o-1', total: 10 }]),
+      'malik-syncBaseline': key === 'malik-syncBaseline' ? corrupt : JSON.stringify({ orders: { 'o-1': { id: 'o-1', total: 10 } } }),
+      'malik-syncConflicts': key === 'malik-syncConflicts' ? corrupt : '[]',
+      'malik-syncOutbox': outbox
+    });
+    if (key === 'malik-syncConflicts') {
+      assert.throws(() => syncSnapshot({
+        baseUrl: 'https://pos.example.test', token: 'test-token', storage,
+        fetchImpl: async () => { throw new Error('network should not be called for invalid local metadata'); }
+      }), /Saved sync conflict metadata.*invalid.*preserved/i);
+    } else {
+      assert.throws(() => buildSnapshotEvents(storage, 'admin'), /Saved sync baseline.*invalid.*preserved/i);
+    }
+    assert.equal(storage.inspect(key), corrupt);
+    assert.equal(storage.inspect('malik-syncOutbox'), outbox);
+  }
+});
+
 test('corrupt sync baseline metadata is preserved and blocks a destructive rebuild', () => {
   const corrupt = '{"orders":';
   const outbox = JSON.stringify([{ eventId: 'saved-event', entity: 'orders', recordId: 'o-1', operation: 'upsert', payload: { id: 'o-1' } }]);

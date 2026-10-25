@@ -41,6 +41,22 @@ function readVersions(storage) {
   return versions;
 }
 
+function readBaseline(storage) {
+  const baseline = readJson(storage, BASELINE_KEY, null);
+  if (baseline !== null && (!baseline || typeof baseline !== 'object' || Array.isArray(baseline))) {
+    throw new Error('Saved sync baseline has an invalid format. Its contents were preserved; do not clear app data before recovery.');
+  }
+  return baseline;
+}
+
+function readConflicts(storage) {
+  const conflicts = readJson(storage, CONFLICTS_KEY, []);
+  if (!Array.isArray(conflicts) || conflicts.some(item => !item || typeof item !== 'object' || Array.isArray(item) || typeof item.id !== 'string' || !item.id || typeof item.entity !== 'string' || typeof item.recordId !== 'string')) {
+    throw new Error('Saved sync conflict metadata has an invalid format. Its contents were preserved; do not clear app data before recovery.');
+  }
+  return conflicts;
+}
+
 function readOutbox(storage) {
   const raw = storage.getItem(OUTBOX_KEY);
   if (raw == null) return [];
@@ -116,7 +132,7 @@ function captureBaseline(storage, definitions = DEFAULT_SYNC_ENTITIES, preserve 
 }
 
 export function buildSnapshotEvents(storage, role = 'admin', definitions = DEFAULT_SYNC_ENTITIES) {
-  const baseline = readJson(storage, BASELINE_KEY, null);
+  const baseline = readBaseline(storage);
   const priorOutbox = readOutbox(storage);
   const versions = readVersions(storage);
   const priorByKey = new Map(priorOutbox.map(event => [event.entity + ':' + event.recordId, event]));
@@ -226,7 +242,7 @@ export function applyPulledEvents(storage, events, cursorKey = CURSOR_KEY, defin
 }
 
 export function resolveSyncConflict(storage, conflictId, choice, role = 'admin', definitions = DEFAULT_SYNC_ENTITIES) {
-  const conflicts = readJson(storage, CONFLICTS_KEY, []);
+  const conflicts = readConflicts(storage);
   const conflict = conflicts.find(item => item.id === conflictId);
   if (!conflict) throw new Error('This sync conflict no longer exists.');
   if (choice !== 'local' && choice !== 'remote') throw new Error('Choose local or remote data.');
@@ -263,11 +279,11 @@ export async function syncSnapshot({ baseUrl, token, storage, role = 'admin', fe
   if (!Number.isSafeInteger(cursorValue) || cursorValue < 0) {
     throw new Error('Saved sync cursor is invalid. Its contents were preserved; do not clear app data before recovery.');
   }
-  const baseline = readJson(storage, BASELINE_KEY, null);
+  const baseline = readBaseline(storage);
   const pending = buildSnapshotEvents(storage, role);
   const pendingByKey = new Map(pending.map(event => [event.entity + ':' + event.recordId, event]));
   const observedRemote = new Map();
-  const existingConflicts = readJson(storage, CONFLICTS_KEY, []);
+  const existingConflicts = readConflicts(storage);
   const conflictKeys = new Set(existingConflicts.map(item => item.entity + ':' + item.recordId));
   let cursor = cursorValue;
   let downloaded = 0;
