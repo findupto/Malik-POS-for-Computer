@@ -125,7 +125,57 @@ ipcMain.handle('malik-pos:print', async (event, options = {}) => {
     pageSize: options.pageSize === '58mm' ? { width: 58000, height: Math.max(45000, Math.min(300000, Number(options.pageHeightMicrons) || 100000)) } : options.pageSize === '80mm' ? { width: 80000, height: Math.max(45000, Math.min(300000, Number(options.pageHeightMicrons) || 100000)) } : undefined
   }, (success, failureReason) => resolve({ success, error: failureReason || '' })));
 });
+
+const BACKUP_RETENTION_DAYS = 30;
+let latestBackupSnapshot = null;
+let backupScheduleTimer = null;
+function backupDirectory() { return path.join(app.getPath('userData'), 'backups'); }
+async function writeDailyBackup(snapshot) {
+  if (!snapshot || !Array.isArray(snapshot.entries) || !snapshot.entries.length) return { success: false, error: 'No POS data snapshot is available yet.' };
+  const dir = backupDirectory();
+  await fs.mkdir(dir, { recursive: true });
+  const day = new Date().toISOString().slice(0, 10);
+  const file = path.join(dir, 'malik-pos-' + day + '.json');
+  const payload = JSON.stringify({ format: 'malik-pos-local-backup-v1', createdAt: new Date().toISOString(), snapshotAt: snapshot.snapshotAt, entries: snapshot.entries }, null, 2);
+  const temp = file + '.tmp';
+  await fs.writeFile(temp, payload, { encoding: 'utf8', mode: 0o600 });
+  await fs.rename(temp, file);
+  const names = (await fs.readdir(dir)).filter(name => /^malik-pos-\d{4}-\d{2}-\d{2}\.json$/.test(name)).sort().reverse();
+  await Promise.all(names.slice(BACKUP_RETENTION_DAYS).map(name => fs.unlink(path.join(dir, name)).catch(() => {})));
+  return { success: true, file, day, bytes: Buffer.byteLength(payload) };
+}
+ipcMain.handle('malik-pos:save-backup-snapshot', async (_event, snapshot) => {
+  try {
+    if (!snapshot || !Array.isArray(snapshot.entries) || snapshot.entries.length > 500) return { success: false, error: 'Invalid backup snapshot.' };
+    const entries = snapshot.entries.filter(entry => entry && typeof entry.key === 'string' && entry.key.startsWith('malik-') && typeof entry.value === 'string' && !/session|token|password|credential|secret/i.test(entry.key));
+    const safeSnapshot = { snapshotAt: new Date().toISOString(), entries };
+    if (Buffer.byteLength(JSON.stringify(safeSnapshot)) > 25 * 1024 * 1024) return { success: false, error: 'Backup snapshot exceeds the 25 MB safety limit.' };
+    latestBackupSnapshot = safeSnapshot;
+    const dir = backupDirectory();
+    await fs.mkdir(dir, { recursive: true });
+    const latestTemp = path.join(dir, 'latest.json.tmp');
+    await fs.writeFile(latestTemp, JSON.stringify({ format: 'malik-pos-local-backup-v1', ...safeSnapshot }, null, 2), { encoding: 'utf8', mode: 0o600 });
+    await fs.rename(latestTemp, path.join(dir, 'latest.json'));
+    return await writeDailyBackup(safeSnapshot);
+  } catch (error) {
+    console.error('Malik POS backup failed:', error);
+    return { success: false, error: String(error && error.message || error).slice(0, 240) };
+  }
+});
+ipcMain.handle('malik-pos:open-backup-folder', async () => {
+  try {
+    const dir = backupDirectory();
+    await fs.mkdir(dir, { recursive: true });
+    const error = await shell.openPath(dir);
+    return error ? { success: false, error } : { success: true, path: dir };
+  } catch (error) { return { success: false, error: String(error && error.message || error).slice(0, 240) }; }
+});
+
 app.whenReady().then(() => {
+  backupScheduleTimer = setInterval(() => {
+    if (latestBackupSnapshot) writeDailyBackup(latestBackupSnapshot).catch(error => console.error('Scheduled Malik POS backup failed:', error));
+  }, 60 * 60 * 1000);
+
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
