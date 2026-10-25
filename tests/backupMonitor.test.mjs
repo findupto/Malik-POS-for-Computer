@@ -49,7 +49,7 @@ test('backup monitor alerts when the backup command fails even if an older backu
   const result = run(f, { BACKUP_ALERT_WEBHOOK_URL: 'https://example.invalid/webhook' });
   assert.equal(result.status, 1);
   const logged = await readFile(f.log, 'utf8');
-  assert.match(logged, /Malik POS database backup is missing, stale, or invalid/);
+  assert.match(logged, /Malik POS backup cycle failed or the newest backup is missing, stale, or invalid/);
 });
 
 test('backup monitor sends a static alert when health check fails', async t => {
@@ -59,7 +59,7 @@ test('backup monitor sends a static alert when health check fails', async t => {
   assert.equal(result.status, 1);
   const logged = await readFile(f.log, 'utf8');
   assert.match(logged, /--post-data=/);
-  assert.match(logged, /Malik POS database backup is missing, stale, or invalid/);
+  assert.match(logged, /Malik POS backup cycle failed or the newest backup is missing, stale, or invalid/);
   assert.doesNotMatch(logged, /DATABASE_URL|password/i);
 });
 
