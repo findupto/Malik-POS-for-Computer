@@ -245,8 +245,8 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   assert.equal(ownerOverview.data.sales.netSales, Number((ownerOverview.data.sales.grossSales - ownerOverview.data.sales.refunded).toFixed(2)));
   assert.ok(ownerOverview.data.inventory.trackedProducts >= 2);
   assert.ok(Number.isInteger(ownerOverview.data.inventory.outOfStockCount));
-  assert.ok(Array.isArray(ownerOverview.data.inventory.outOfStockProducts));
-  assert.ok(ownerOverview.data.inventory.outOfStockProducts.length <= 100);
+  assert.ok(Array.isArray(ownerOverview.data.inventory.lowStockProducts));
+  assert.ok(ownerOverview.data.inventory.lowStockProducts.length <= 100);
   assert.ok(Number.isInteger(ownerOverview.data.inventory.lowStockCount));
   assert.ok(Array.isArray(ownerOverview.data.inventory.lowStockProducts));
   assert.ok(ownerOverview.data.inventory.lowStockProducts.some(item => item.product_id === 'tea-1' && Number(item.reorder_point) === 6));
