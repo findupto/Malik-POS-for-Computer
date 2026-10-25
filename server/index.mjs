@@ -422,7 +422,7 @@ const server = http.createServer(async (req, res) => {
       const productId = String(input.productId || '').trim();
       const reorderPoint = Number(input.reorderPoint);
       if (!productId || productId.length > 200) return send(res, 400, { error: 'A valid productId is required.' });
-      if (!Number.isFinite(reorderPoint) || reorderPoint < 0 || reorderPoint > 1000000000 || !hasAtMostThreeDecimalPlaces(reorderPoint)) return send(res, 400, { error: 'reorderPoint must be zero or greater with at most three decimal places.' });
+      if (!Number.isFinite(reorderPoint) || reorderPoint < 0 || reorderPoint > MAX_INVENTORY_QUANTITY || !hasAtMostThreeDecimalPlaces(reorderPoint)) return send(res, 400, { error: 'reorderPoint must be zero or greater, within the supported inventory range, and have at most three decimal places.' });
       const client = await pool.connect();
       try {
         await client.query('BEGIN');

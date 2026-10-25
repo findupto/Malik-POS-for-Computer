@@ -155,6 +155,16 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   const maximumInventoryAfter = await request('/api/inventory', { token: adminToken });
   assert.equal(Number(maximumInventoryAfter.data.inventory.find(item => item.product_id === maximumInventoryId).quantity), 99_999_999_999.999,
     'overflow rejection must leave the stored inventory unchanged');
+  const maximumReorderPoint = await request('/api/inventory/reorder-point', {
+    token: adminToken, method: 'POST',
+    body: { productId: maximumInventoryId, reorderPoint: 99_999_999_999.999 }
+  });
+  assert.equal(maximumReorderPoint.status, 200, 'reorder points at the supported numeric(14,3) maximum should be accepted');
+  const overflowingReorderPoint = await request('/api/inventory/reorder-point', {
+    token: adminToken, method: 'POST',
+    body: { productId: maximumInventoryId, reorderPoint: 100_000_000_000 }
+  });
+  assert.equal(overflowingReorderPoint.status, 400, 'reorder points above the database numeric range must be rejected before writing');
 
   const initKey = crypto.randomUUID();
   const firstInitialization = await request('/api/inventory/initialize', {
