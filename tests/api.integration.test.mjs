@@ -124,6 +124,17 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   const invalidBranchOverview = await request('/api/admin/overview?locationId=not-a-uuid', { token: adminToken });
   assert.equal(invalidBranchOverview.status, 400);
 
+  const branchOpeningStock = await request('/api/inventory/initialize', {
+    token: branchLogin.data.token, method: 'POST',
+    body: { productId: 'branch-only-' + crypto.randomUUID(), sku: 'BRANCH-ONLY', productName: 'Branch-only product', quantity: 4 }
+  });
+  assert.equal(branchOpeningStock.status, 201);
+  const branchOverviewWithStock = await request('/api/admin/overview?locationId=' + encodeURIComponent(branch.data.location.id), { token: adminToken });
+  assert.equal(branchOverviewWithStock.status, 200);
+  assert.equal(branchOverviewWithStock.data.inventory.trackedProducts, 1, 'selected branch overview must use that branch inventory');
+  assert.equal(branchOverviewWithStock.data.inventory.unitsOnHand, 4);
+  assert.equal(branchOverviewWithStock.data.activeStaff, 1, 'selected branch overview must count staff at that branch');
+
 
   for (const invalidCursor of ['-1', '1.5', 'Infinity']) {
     const invalidPull = await request('/api/sync/pull?after=' + encodeURIComponent(invalidCursor), { token: adminToken });
