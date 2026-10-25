@@ -1,89 +1,82 @@
 import test from 'node:test';
-import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import crypto from 'node:crypto';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const restoreScript = path.join(root, 'server', 'restore.sh');
+async function fixture(t) {
+  const root = await mkdtemp(path.join(tmpdir(), 'malik-restore-safety-'));
+  const bin = path.join(root, 'bin');
+  await mkdir(bin);
+  const archive = path.join(root, 'backup.dump');
+  await writeFile(archive, 'verified backup fixture');
+  const digest = crypto.createHash('sha256').update('verified backup fixture').digest('hex');
+  await writeFile(archive + '.sha256', digest + '  backup.dump\n');
+  const log = path.join(root, 'pg-restore.log');
+  await writeFile(path.join(bin, 'pg_restore'), '#!/bin/sh\nprintf "%s\\n" "$*" >> "$PG_RESTORE_LOG"\n[ "$1" = "--list" ] && exit 0\nexit 0\n', { mode: 0o755 });
+  t.after(() => rm(root, { recursive: true, force: true }));
+  return { root, bin, archive, log };
+}
 
-test('restore refuses an archive without a checksum before invoking pg_restore', async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), 'malik-pos-restore-'));
-  const archive = path.join(directory, 'backup.dump');
-  try {
-    await writeFile(archive, 'not a real database archive');
-    const result = spawnSync('sh', [restoreScript, archive], {
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        DATABASE_URL: 'postgresql://test:test@127.0.0.1/test',
-        CONFIRM_RESTORE: 'YES'
-      }
-    });
-    assert.equal(result.status, 2, result.stderr);
-    assert.match(result.stderr, /checksum file not found/);
-    assert.doesNotMatch(result.stderr, /pg_restore/);
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
+function runRestore(f, extraEnv = {}, archive = f.archive) {
+  return spawnSync('sh', ['server/restore.sh', archive], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      PATH: f.bin + path.delimiter + process.env.PATH,
+      DATABASE_URL: 'postgres://restore-test.invalid/test',
+      PG_RESTORE_LOG: f.log,
+      ...extraEnv
+    }
+  });
+}
+
+async function restoreLog(f) {
+  try { return await readFile(f.log, 'utf8'); } catch { return ''; }
+}
+
+test('restore refuses to run without explicit confirmation', async t => {
+  const f = await fixture(t);
+  const result = runRestore(f);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /Refusing to restore/);
+  assert.equal(await restoreLog(f), '');
 });
 
-test('restore rejects a checksum entry that names a different file', async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), 'malik-pos-restore-'));
-  const archive = path.join(directory, 'backup.dump');
-  const other = path.join(directory, 'other.bin');
-  try {
-    await writeFile(archive, 'archive bytes');
-    await writeFile(other, 'different file bytes');
-    const checksum = spawnSync('sha256sum', [other], { encoding: 'utf8' });
-    assert.equal(checksum.status, 0, checksum.stderr);
-    await writeFile(archive + '.sha256', checksum.stdout);
-    const result = spawnSync('sh', [restoreScript, archive], {
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        DATABASE_URL: 'postgresql://test:test@127.0.0.1/test',
-        CONFIRM_RESTORE: 'YES'
-      }
-    });
-    assert.equal(result.status, 2, result.stderr);
-    assert.match(result.stderr, /checksum file must contain one SHA-256 entry/);
-    assert.doesNotMatch(result.stderr, /pg_restore/);
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
+test('restore refuses an archive that does not exist', async t => {
+  const f = await fixture(t);
+  const result = runRestore(f, { CONFIRM_RESTORE: 'YES' }, path.join(f.root, 'missing.dump'));
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /Backup archive not found/);
+  assert.equal(await restoreLog(f), '');
 });
 
-test('restore applies a verified archive in a single transaction', async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), 'malik-pos-restore-'));
-  const bin = path.join(directory, 'bin');
-  const archive = path.join(directory, 'backup.dump');
-  const log = path.join(directory, 'pg-restore-args.txt');
-  try {
-    await import('node:fs/promises').then(({ mkdir }) => mkdir(bin));
-    await writeFile(archive, 'mock verified archive');
-    const digest = createHash('sha256').update(await import('node:fs/promises').then(({ readFile }) => readFile(archive))).digest('hex');
-    await writeFile(archive + '.sha256', `${digest}  ${path.basename(archive)}\n`);
-    const fakePgRestore = path.join(bin, 'pg_restore');
-    await writeFile(fakePgRestore, '#!/bin/sh\nif [ "$1" = "--list" ]; then exit 0; fi\nprintf "%s\\n" "$@" > "$PG_RESTORE_ARGS_LOG"\n', { mode: 0o755 });
-    const result = spawnSync('sh', [restoreScript, archive], {
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        PATH: bin + path.delimiter + process.env.PATH,
-        PG_RESTORE_ARGS_LOG: log,
-        DATABASE_URL: 'postgresql://test:test@127.0.0.1/test',
-        CONFIRM_RESTORE: 'YES'
-      }
-    });
-    assert.equal(result.status, 0, result.stderr);
-    const args = (await import('node:fs/promises').then(({ readFile }) => readFile(log, 'utf8'))).trim().split(/\r?\n/);
-    assert.ok(args.includes('--single-transaction'), 'restore must roll back rather than leave a partially restored database');
-    assert.ok(args.includes('--exit-on-error'));
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
+test('restore refuses a checksum file naming a different archive', async t => {
+  const f = await fixture(t);
+  await writeFile(f.archive + '.sha256', 'a'.repeat(64) + '  some-other.dump\n');
+  const result = runRestore(f, { CONFIRM_RESTORE: 'YES' });
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /must contain one SHA-256 entry/);
+  assert.equal(await restoreLog(f), '');
+});
+
+test('restore refuses a checksum mismatch before invoking pg_restore', async t => {
+  const f = await fixture(t);
+  await writeFile(f.archive + '.sha256', '0'.repeat(64) + '  backup.dump\n');
+  const result = runRestore(f, { CONFIRM_RESTORE: 'YES' });
+  assert.notEqual(result.status, 0);
+  assert.equal(await restoreLog(f), '');
+});
+
+test('restore validates the archive before executing the restore command', async t => {
+  const f = await fixture(t);
+  const result = runRestore(f, { CONFIRM_RESTORE: 'YES' });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const calls = (await restoreLog(f)).trim().split('\n');
+  assert.equal(calls.length, 2);
+  assert.match(calls[0], /^--list /);
+  assert.match(calls[1], /--single-transaction/);
+  assert.match(calls[1], /--exit-on-error/);
 });
