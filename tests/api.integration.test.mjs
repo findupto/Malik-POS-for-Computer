@@ -117,6 +117,12 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   const branchInventory = await request('/api/inventory', { token: branchLogin.data.token });
   assert.equal(branchInventory.status, 200);
   assert.equal(branchInventory.data.inventory.length, 0, 'new branch inventory must be location-scoped');
+  const branchOverview = await request('/api/admin/overview?locationId=' + encodeURIComponent(branch.data.location.id), { token: adminToken });
+  assert.equal(branchOverview.status, 200);
+  assert.equal(branchOverview.data.locationId, branch.data.location.id);
+  assert.equal(branchOverview.data.sales.transactionCount, 0, 'branch overview must not include another location sales');
+  const invalidBranchOverview = await request('/api/admin/overview?locationId=not-a-uuid', { token: adminToken });
+  assert.equal(invalidBranchOverview.status, 400);
 
 
   for (const invalidCursor of ['-1', '1.5', 'Infinity']) {
