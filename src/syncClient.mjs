@@ -224,13 +224,18 @@ export async function syncSnapshot({ baseUrl, token, storage, role = 'admin', fe
   if (!token) throw new Error('Sign in to the sync server first.');
   if (!/^https?:\/\//i.test(base)) throw new Error('Enter the API URL including http:// or https://.');
   const authHeaders = { Authorization: 'Bearer ' + token };
+  const rawCursor = storage.getItem(CURSOR_KEY);
+  const cursorValue = rawCursor == null || rawCursor === '' ? 0 : Number(rawCursor);
+  if (!Number.isSafeInteger(cursorValue) || cursorValue < 0) {
+    throw new Error('Saved sync cursor is invalid. Its contents were preserved; do not clear app data before recovery.');
+  }
   const baseline = readJson(storage, BASELINE_KEY, null);
   const pending = buildSnapshotEvents(storage, role);
   const pendingByKey = new Map(pending.map(event => [event.entity + ':' + event.recordId, event]));
   const observedRemote = new Map();
   const existingConflicts = readJson(storage, CONFLICTS_KEY, []);
   const conflictKeys = new Set(existingConflicts.map(item => item.entity + ':' + item.recordId));
-  let cursor = Number(storage.getItem(CURSOR_KEY) || 0);
+  let cursor = cursorValue;
   let downloaded = 0;
   let nextConflicts = [...existingConflicts];
 

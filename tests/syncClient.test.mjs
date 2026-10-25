@@ -482,3 +482,28 @@ test('sync pull response without an events array is rejected before checkpointin
     assert.equal(storage.inspect('malik-syncVersions'), JSON.stringify({ 'orders:o-1': 7 }));
   }
 });
+
+
+test('invalid saved sync cursors are preserved and block sync before the outbox changes', async () => {
+  const { syncSnapshot } = await import('../src/syncClient.mjs');
+  for (const invalidCursor of ['not-a-number', '-1', '1.5', '9007199254740992']) {
+    const outbox = JSON.stringify([{
+      eventId: '123e4567-e89b-42d3-a456-426614174000',
+      entity: 'orders', recordId: 'o-1', operation: 'upsert',
+      payload: { id: 'o-1', total: 20 }, expectedSequence: null
+    }]);
+    const storage = fakeStorage({
+      'malik-orders': JSON.stringify([{ id: 'o-1', total: 20 }]),
+      'malik-syncCursor': invalidCursor,
+      'malik-syncOutbox': outbox
+    });
+    let called = false;
+    await assert.rejects(() => syncSnapshot({
+      baseUrl: 'https://pos.example.test', token: 'test-token', storage,
+      fetchImpl: async () => { called = true; throw new Error('fetch should not be called'); }
+    }), /saved sync cursor is invalid.*preserved/i);
+    assert.equal(called, false);
+    assert.equal(storage.inspect('malik-syncCursor'), invalidCursor);
+    assert.equal(storage.inspect('malik-syncOutbox'), outbox);
+  }
+});
