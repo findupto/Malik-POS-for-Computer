@@ -332,3 +332,19 @@ test('choosing remote sync conflict applies server value and clears the stale lo
   assert.deepEqual(buildSnapshotEvents(storage, 'admin'), []);
   assert.deepEqual(JSON.parse(storage.inspect('malik-syncConflicts')), []);
 });
+
+
+test('valid JSON with the wrong collection shape is preserved and blocks destructive sync', () => {
+  const malformed = JSON.stringify({ unexpected: 'object instead of records array' });
+  const baseline = JSON.stringify({ orders: { 'o-1': { id: 'o-1', total: 10 } } });
+  const outbox = JSON.stringify([{ eventId: '123e4567-e89b-42d3-a456-426614174000', entity: 'orders', recordId: 'o-1', operation: 'upsert', payload: { id: 'o-1', total: 10 } }]);
+  const storage = fakeStorage({
+    'malik-orders': malformed,
+    'malik-syncBaseline': baseline,
+    'malik-syncOutbox': outbox
+  });
+  assert.throws(() => buildSnapshotEvents(storage, 'admin'), /malik-orders.*unexpected format.*preserved/i);
+  assert.equal(storage.inspect('malik-orders'), malformed);
+  assert.equal(storage.inspect('malik-syncBaseline'), baseline);
+  assert.equal(storage.inspect('malik-syncOutbox'), outbox);
+});

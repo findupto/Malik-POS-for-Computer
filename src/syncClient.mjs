@@ -50,8 +50,12 @@ function roleAllowed(role, entity) {
     (role === 'cashier' && ['orders','timechargesessions','cashentries','attendance','audittrail'].includes(entity));
 }
 function currentRecords(storage, def) {
-  const parsed = readJson(storage, 'malik-' + def.key, def.collection ? [] : null);
-  const values = def.collection ? (Array.isArray(parsed) ? parsed : []) : (parsed == null ? [] : [{ id: 'singleton', value: parsed }]);
+  const storageKey = 'malik-' + def.key;
+  const parsed = readJson(storage, storageKey, def.collection ? [] : null);
+  if (def.collection && !Array.isArray(parsed)) {
+    throw new Error(`Saved POS data "${storageKey}" has an unexpected format. Its contents were preserved; do not sync or clear app data before recovery.`);
+  }
+  const values = def.collection ? parsed : (parsed == null ? [] : [{ id: 'singleton', value: parsed }]);
   return Object.fromEntries(values.map((record, i) => [String(record?.id ?? record?.uuid ?? i), record]));
 }
 function writeCurrentRecords(storage, def, records) {
