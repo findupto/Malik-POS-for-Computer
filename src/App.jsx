@@ -66,6 +66,29 @@ const BUSINESS_TYPES = ['Fastfood Store','Medical Store','Super Store','Restaura
 const nav = [{label:'Overview',icon:LayoutDashboard},{label:'Point of Sale',icon:ShoppingCart},{label:'Orders',icon:ClipboardList},{label:'Time Charges',icon:Activity},{label:'Inventory',icon:Boxes},{label:'Kitchen Stock',icon:ClipboardList},{label:'Customers',icon:Users},{label:'Reports',icon:BarChart3}];
 function read(key,fallback){try{return JSON.parse(localStorage.getItem('malik-'+key)) ?? fallback}catch{return fallback}}
 export default function App(){
+ useEffect(() => {
+  if (!window.malikPOS?.saveBackupSnapshot) return;
+  let active = true;
+  const sendSnapshot = async () => {
+   try {
+    const entries = [];
+    for (let i = 0; i < localStorage.length; i += 1) {
+     const key = localStorage.key(i);
+     if (!key || !key.startsWith('malik-') || /session|token|password|credential|secret/i.test(key)) continue;
+     const value = localStorage.getItem(key);
+     if (value !== null) entries.push({ key, value });
+    }
+    const result = await window.malikPOS.saveBackupSnapshot({ entries, snapshotAt: new Date().toISOString() });
+    if (active && !result?.success) console.error('Malik POS automatic backup:', result?.error || 'Backup failed');
+   } catch (error) { console.error('Malik POS automatic backup failed:', error); }
+  };
+  sendSnapshot();
+  const interval = window.setInterval(sendSnapshot, 15 * 60 * 1000);
+  const onStorage = () => sendSnapshot();
+  window.addEventListener('storage', onStorage);
+  return () => { active = false; window.clearInterval(interval); window.removeEventListener('storage', onStorage); };
+ }, []);
+
  const [page,setPageState]=useState('Point of Sale');
  const [ownerCloudSession,setOwnerCloudSession]=useState(()=>{try{return JSON.parse(localStorage.getItem('malik-syncSession')||'null')}catch{return null}});
  const [ownerOverview,setOwnerOverview]=useState(null); const [ownerOverviewLoading,setOwnerOverviewLoading]=useState(false); const [ownerOverviewError,setOwnerOverviewError]=useState('');
