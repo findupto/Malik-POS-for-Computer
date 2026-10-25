@@ -17,8 +17,11 @@ CREATE TABLE IF NOT EXISTS staff_users (
   role text NOT NULL CHECK (role IN ('admin','manager','cashier')),
   active boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  session_version integer NOT NULL DEFAULT 1 CHECK (session_version > 0)
 );
+
+ALTER TABLE staff_users ADD COLUMN IF NOT EXISTS session_version integer NOT NULL DEFAULT 1 CHECK (session_version > 0);
 
 CREATE TABLE IF NOT EXISTS pos_records (
   location_id uuid NOT NULL REFERENCES locations(id),

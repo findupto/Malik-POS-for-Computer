@@ -51,7 +51,7 @@ async function verifyPassword(password, encoded) {
 }
 function tokenFor(user) {
   const header = b64(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const payload = b64(JSON.stringify({ sub: user.id, username: user.username, role: user.role, locationId: user.location_id, iatMs: Date.now(), exp: Math.floor(Date.now() / 1000) + 8 * 60 * 60 }));
+  const payload = b64(JSON.stringify({ sub: user.id, username: user.username, role: user.role, locationId: user.location_id, sessionVersion: user.session_version, exp: Math.floor(Date.now() / 1000) + 8 * 60 * 60 }));
   const unsigned = header + '.' + payload;
   return unsigned + '.' + sign(unsigned);
 }
@@ -154,7 +154,7 @@ const server = http.createServer(async (req, res) => {
         loginCleanupCounter = 0;
         await pool.query(`DELETE FROM login_rate_limits WHERE window_started_at <= now() - ($1 * interval '1 minute')`, [LOGIN_WINDOW_MINUTES]).catch(error => console.error('Login rate-limit cleanup failed:', error.message));
       }
-      const found = await pool.query('SELECT id,location_id,username,password_hash,display_name,role,active FROM staff_users WHERE username=$1', [username]);
+      const found = await pool.query('SELECT id,location_id,username,password_hash,display_name,role,active,session_version FROM staff_users WHERE username=$1', [username]);
       const user = found.rows[0];
       if (!user || !user.active || !(await verifyPassword(password, user.password_hash))) {
         return send(res, 401, { error: 'Invalid username or password.' });
@@ -164,12 +164,12 @@ const server = http.createServer(async (req, res) => {
     }
     const claims = authFrom(req);
     if (!claims) return send(res, 401, { error: 'Authentication required or session expired.' });
-    const activeUserResult = await pool.query('SELECT id,username,display_name,role,location_id,active,updated_at FROM staff_users WHERE id=$1', [claims.sub]);
+    const activeUserResult = await pool.query('SELECT id,username,display_name,role,location_id,active,session_version FROM staff_users WHERE id=$1', [claims.sub]);
     const activeUser = activeUserResult.rows[0];
     if (!activeUser || !activeUser.active || activeUser.location_id !== claims.locationId) {
       return send(res, 401, { error: 'This staff account is inactive or no longer valid. Sign in again.' });
     }
-    if (claims.iatMs && new Date(activeUser.updated_at).getTime() > Number(claims.iatMs)) {
+    if (!Number.isSafeInteger(claims.sessionVersion) || claims.sessionVersion !== activeUser.session_version) {
       return send(res, 401, { error: 'Your staff account or password changed. Sign in again.' });
     }
     // Always authorize with current database role, not the role captured in a long-lived token.
@@ -657,7 +657,7 @@ const server = http.createServer(async (req, res) => {
         const count = await pool.query("SELECT count(*)::int AS n FROM staff_users WHERE location_id=$1 AND role='admin' AND active=true", [user.locationId]);
         if (count.rows[0].n <= 1) return send(res, 409, { error: 'Keep at least one active administrator at this location.' });
       }
-      const updated = await pool.query('UPDATE staff_users SET role=$1,updated_at=now() WHERE id=$2 AND location_id=$3 RETURNING id,username,display_name,role,active,created_at', [role,targetId,user.locationId]);
+      const updated = await pool.query('UPDATE staff_users SET role=$1,session_version=session_version+1,updated_at=now() WHERE id=$2 AND location_id=$3 RETURNING id,username,display_name,role,active,created_at', [role,targetId,user.locationId]);
       return send(res, 200, { user: updated.rows[0] });
     }
     const userActionMatch = url.pathname.match(/^\/api\/admin\/users\/([0-9a-f-]{36})\/(deactivate|activate|reset-password)$/i);
@@ -675,14 +675,14 @@ const server = http.createServer(async (req, res) => {
           const count = await pool.query("SELECT count(*)::int AS n FROM staff_users WHERE location_id=$1 AND role='admin' AND active=true", [user.locationId]);
           if (count.rows[0].n <= 1) return send(res, 409, { error: 'Keep at least one active administrator at this location.' });
         }
-        const updated = await pool.query('UPDATE staff_users SET active=$1,updated_at=now() WHERE id=$2 AND location_id=$3 RETURNING id,username,display_name,role,active,created_at', [active, targetId, user.locationId]);
+        const updated = await pool.query('UPDATE staff_users SET active=$1,session_version=session_version+1,updated_at=now() WHERE id=$2 AND location_id=$3 RETURNING id,username,display_name,role,active,created_at', [active, targetId, user.locationId]);
         return send(res, 200, { user: updated.rows[0] });
       }
       if (action === 'reset-password') {
         const input = await bodyJson(req, 16_000);
         const password = String(input.password || '');
         if (password.length < 12 || password.length > 1024) return send(res, 400, { error: 'Password must be at least 12 characters.' });
-        await pool.query('UPDATE staff_users SET password_hash=$1,updated_at=now() WHERE id=$2 AND location_id=$3', [await hashPassword(password), targetId, user.locationId]);
+        await pool.query('UPDATE staff_users SET password_hash=$1,session_version=session_version+1,updated_at=now() WHERE id=$2 AND location_id=$3', [await hashPassword(password), targetId, user.locationId]);
         return send(res, 200, { ok: true });
       }
     }
