@@ -16,6 +16,16 @@ if [ ! -f "$ARCHIVE.sha256" ]; then
   echo "Use a verified backup created by server/backup.sh, or validate the archive and generate its checksum through your approved recovery procedure." >&2
   exit 2
 fi
+# A checksum file must name this exact archive; otherwise sha256sum could
+# validate a different file while pg_restore consumes the requested archive.
+if ! awk -v expected="$archive_name" '
+  NR != 1 { exit 1 }
+  NF != 2 || length($1) != 64 || $1 !~ /^[[:xdigit:]]+$/ || $2 != expected { exit 1 }
+  END { if (NR != 1) exit 1 }
+' "$ARCHIVE.sha256"; then
+  echo "Refusing to restore: checksum file must contain one SHA-256 entry for $archive_name." >&2
+  exit 2
+fi
 (cd "$archive_dir" && sha256sum --check "$archive_name.sha256")
 pg_restore --list "$ARCHIVE" >/dev/null
 pg_restore --clean --if-exists --exit-on-error --no-owner --no-acl --dbname="$DATABASE_URL" "$ARCHIVE"
