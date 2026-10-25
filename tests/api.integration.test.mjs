@@ -475,4 +475,19 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   const pulled = await request('/api/sync/pull?after=0', { token: adminToken });
   assert.equal(pulled.status, 200);
   assert.ok(pulled.data.events.some(event => event.record_id === recordId && event.operation === 'upsert'));
+
+  // Exercise the shared PostgreSQL login throttle last, because all test
+  // requests originate from this integration-test process's client address.
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const failedLogin = await request('/api/auth/login', {
+      method: 'POST',
+      body: { username: 'missing-login-user', password: 'wrong-test-password' }
+    });
+    assert.equal(failedLogin.status, 401, 'attempts below the configured threshold should return generic credentials errors');
+  }
+  const throttledLogin = await request('/api/auth/login', {
+    method: 'POST',
+    body: { username: 'missing-login-user', password: 'wrong-test-password' }
+  });
+  assert.equal(throttledLogin.status, 429, 'the shared database counter must throttle the next attempt');
 });
