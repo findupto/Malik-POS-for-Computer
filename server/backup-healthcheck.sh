@@ -40,7 +40,7 @@ if [ ! -f "$BACKUP_DIR/$checksum" ]; then
 fi
 # Require the checksum manifest to name the newest archive itself. A valid
 # checksum for a different file must never certify this backup as healthy.
-if ! awk -v expected="$(basename "$latest")" 'NR == 1 && length($1) == 64 && $1 ~ /^[[:xdigit:]]+$/ { name = $2; sub(/^\\*/, "", name); if (name == expected) valid = 1 } END { exit !(NR == 1 && valid) }' "$BACKUP_DIR/$checksum"; then
+if ! awk -v expected="$(basename "$latest")" 'NR == 1 && length($1) == 64 && $1 ~ /^[[:xdigit:]]+$/ { name = $2; sub(/^\*/, "", name); if (name == expected) valid = 1 } END { exit !(NR == 1 && valid) }' "$BACKUP_DIR/$checksum"; then
   echo "Backup checksum manifest does not name the newest archive: $checksum" >&2
   exit 1
 fi
