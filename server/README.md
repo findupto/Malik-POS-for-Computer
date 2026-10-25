@@ -55,7 +55,7 @@ Use a strong unique `POSTGRES_PASSWORD`, `JWT_SECRET` (at least 32 characters), 
 - `POST /api/admin/users/:id/role` — change a staff role; demoting the last active administrator is blocked.
 - `POST /api/admin/users/:id/reset-password` — set a new password (minimum 12 characters) for a staff account at the administrator's location.
 
-The service uses parameterized SQL, scrypt password hashes, 8-hour HMAC-signed tokens, role-aware entity permissions on write ingestion, request-size limits, database transactions, per-record optimistic concurrency checks for updated sync clients, and basic in-memory per-IP login throttling. Configure CORS to the exact trusted client origin if browser clients need it. Login throttling is process-local and should be replaced with a shared reverse-proxy or datastore-backed limiter for multi-instance production.
+The service uses parameterized SQL, scrypt password hashes, 8-hour HMAC-signed tokens, role-aware entity permissions on write ingestion, request-size limits, database transactions, per-record optimistic concurrency checks for updated sync clients, and PostgreSQL-backed login throttling shared across API replicas. The limiter stores a SHA-256 digest of the client address, allows up to 10 attempts per 15-minute window, clears the window after successful sign-in, and periodically removes expired rows. Configure CORS to the exact trusted client origin if browser clients need it.
 
 ## Database backup and restore
 
