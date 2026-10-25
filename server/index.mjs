@@ -705,7 +705,7 @@ const server = http.createServer(async (req, res) => {
       if (rangeDays > 366) return send(res, 400, { error: 'The overview date range cannot exceed 366 days.' });
       const sales = await pool.query(
         `SELECT count(*)::int AS transaction_count,
-                COALESCE(sum(total),0)::numeric(14,2)::text AS gross_sales,
+                COALESCE(sum(total),0)::numeric::text AS gross_sales,
                 COALESCE(avg(total),0)::numeric(14,2)::text AS average_sale
            FROM pos_transactions
           WHERE location_id=$1
@@ -714,7 +714,7 @@ const server = http.createServer(async (req, res) => {
         [overviewLocationId, from, to, timezone]
       );
       const refunds = await pool.query(
-        `SELECT count(*)::int AS refund_count, COALESCE(sum(amount),0)::numeric(14,2)::text AS refunded
+        `SELECT count(*)::int AS refund_count, COALESCE(sum(amount),0)::numeric::text AS refunded
            FROM pos_refunds
           WHERE location_id=$1
             AND created_at >= ($2::date::timestamp AT TIME ZONE $4)
