@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -64,9 +65,8 @@ test('restore applies a verified archive in a single transaction', async () => {
   try {
     await import('node:fs/promises').then(({ mkdir }) => mkdir(bin));
     await writeFile(archive, 'mock verified archive');
-    const checksum = spawnSync('sha256sum', [path.basename(archive)], { cwd: directory, encoding: 'utf8' });
-    assert.equal(checksum.status, 0, checksum.stderr);
-    await writeFile(archive + '.sha256', checksum.stdout);
+    const digest = createHash('sha256').update(await import('node:fs/promises').then(({ readFile }) => readFile(archive))).digest('hex');
+    await writeFile(archive + '.sha256', `${digest}  ${path.basename(archive)}\n`);
     const fakePgRestore = path.join(bin, 'pg_restore');
     await writeFile(fakePgRestore, '#!/bin/sh\nif [ "$1" = "--list" ]; then exit 0; fi\nprintf "%s\\n" "$@" > "$PG_RESTORE_ARGS_LOG"\n', { mode: 0o755 });
     const result = spawnSync('sh', [restoreScript, archive], {
