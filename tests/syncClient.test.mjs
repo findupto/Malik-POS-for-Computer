@@ -430,3 +430,32 @@ test('sync rejects a malformed server event batch before persisting its cursor',
   assert.equal(storage.inspect('malik-syncCursor'), '3');
 });
 
+
+
+test('non-increasing pulled event sequences are rejected before local data or sync progress changes', () => {
+  for (const events of [
+    [
+      { sequence: 4, entity: 'orders', record_id: 'o-2', operation: 'upsert', payload: { id: 'o-2', total: 20 } },
+      { sequence: 4, entity: 'orders', record_id: 'o-3', operation: 'upsert', payload: { id: 'o-3', total: 30 } }
+    ],
+    [
+      { sequence: 5, entity: 'orders', record_id: 'o-2', operation: 'upsert', payload: { id: 'o-2', total: 20 } },
+      { sequence: 3, entity: 'orders', record_id: 'o-3', operation: 'upsert', payload: { id: 'o-3', total: 30 } }
+    ],
+    [
+      { sequence: 0, entity: 'orders', record_id: 'o-2', operation: 'upsert', payload: { id: 'o-2', total: 20 } }
+    ]
+  ]) {
+    const records = JSON.stringify([{ id: 'o-1', total: 10 }]);
+    const versions = JSON.stringify({ 'orders:o-1': 2 });
+    const storage = fakeStorage({
+      'malik-orders': records,
+      'malik-syncCursor': '2',
+      'malik-syncVersions': versions
+    });
+    assert.throws(() => applyPulledEvents(storage, events), /invalid event batch or non-increasing event sequence/i);
+    assert.equal(storage.inspect('malik-orders'), records);
+    assert.equal(storage.inspect('malik-syncCursor'), '2');
+    assert.equal(storage.inspect('malik-syncVersions'), versions);
+  }
+});

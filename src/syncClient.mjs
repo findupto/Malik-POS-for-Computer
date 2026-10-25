@@ -145,11 +145,12 @@ function validatePulledEvents(events) {
   if (!Array.isArray(events)) {
     throw new Error('The sync server returned an invalid event batch. Local POS data and sync progress were preserved.');
   }
+  let previousSequence = 0;
   for (const event of events) {
     const sequence = Number(event?.sequence);
     const recordId = event?.record_id;
     if (!event || typeof event !== 'object' ||
-        !Number.isSafeInteger(sequence) || sequence < 0 ||
+        !Number.isSafeInteger(sequence) || sequence <= previousSequence ||
         typeof event.entity !== 'string' || !/^[a-z][a-z0-9_-]{0,63}$/.test(event.entity) ||
         !['string', 'number'].includes(typeof recordId) || !String(recordId).trim() || String(recordId).length > 200 ||
         !['upsert', 'delete'].includes(event.operation) ||
@@ -157,8 +158,9 @@ function validatePulledEvents(events) {
           (typeof event.occurred_at !== 'string' || !event.occurred_at.trim() || !Number.isFinite(Date.parse(event.occurred_at)))) ||
         (event.operation === 'upsert' && (!event.payload || typeof event.payload !== 'object' || Array.isArray(event.payload))) ||
         (event.operation === 'delete' && event.payload != null)) {
-      throw new Error('The sync server returned an invalid event. Local POS data and sync progress were preserved; retry sync after checking the server.');
+      throw new Error('The sync server returned an invalid event batch or non-increasing event sequence. Local POS data and sync progress were preserved; retry sync after checking the server.');
     }
+    previousSequence = sequence;
   }
   return events;
 }
