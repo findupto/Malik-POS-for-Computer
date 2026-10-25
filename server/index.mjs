@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { canPushEntity } from './syncPolicy.mjs';
+import { hasValidSessionClaims } from './sessionClaims.mjs';
 import { hasAtMostThreeDecimalPlaces } from './quantity.mjs';
 import { checkLoginRateLimit, clearLoginFailures, recordLoginFailure } from './loginRateLimit.mjs';
 
@@ -53,7 +54,7 @@ function authFrom(req) {
   if (expected.length !== supplied.length || !crypto.timingSafeEqual(expected, supplied)) return null;
   try {
     const claims = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
-    if (!claims.sub || !claims.locationId || claims.exp <= Math.floor(Date.now() / 1000)) return null;
+    if (!hasValidSessionClaims(claims)) return null;
     return claims;
   } catch { return null; }
 }
