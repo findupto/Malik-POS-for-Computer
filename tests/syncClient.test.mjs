@@ -257,3 +257,53 @@ test('pending sync write is compensated when local state returns to its previous
   assert.notEqual(events[0].eventId, priorEventId, 'changed payload must use a fresh event ID');
   assert.equal(events[0].expectedSequence, 4);
 });
+
+
+test('choosing local sync conflict creates a fresh write against the latest remote version', async () => {
+  const { resolveSyncConflict } = await import('../src/syncClient.mjs');
+  const storage = fakeStorage({
+    'malik-orders': JSON.stringify([{ id: 'o-1', total: 20 }]),
+    'malik-syncBaseline': JSON.stringify({ orders: { 'o-1': { id: 'o-1', total: 10 } } }),
+    'malik-syncVersions': JSON.stringify({ 'orders:o-1': 12 }),
+    'malik-syncOutbox': JSON.stringify([{
+      eventId: '123e4567-e89b-42d3-a456-426614174000', entity: 'orders', recordId: 'o-1',
+      operation: 'upsert', payload: { id: 'o-1', total: 20 }, expectedSequence: 8,
+      occurredAt: '2026-01-01T00:00:00.000Z'
+    }]),
+    'malik-syncConflicts': JSON.stringify([{
+      id: 'conflict-1', entity: 'orders', recordId: 'o-1', local: { id: 'o-1', total: 20 },
+      remote: { id: 'o-1', total: 30 },
+      remoteEvent: { sequence: 12, entity: 'orders', record_id: 'o-1', operation: 'upsert', payload: { id: 'o-1', total: 30 } }
+    }])
+  });
+  resolveSyncConflict(storage, 'conflict-1', 'local');
+  const events = buildSnapshotEvents(storage, 'admin');
+  assert.equal(events.length, 1);
+  assert.deepEqual(events[0].payload, { id: 'o-1', total: 20 });
+  assert.equal(events[0].expectedSequence, 12);
+  assert.notEqual(events[0].eventId, '123e4567-e89b-42d3-a456-426614174000');
+  assert.deepEqual(JSON.parse(storage.inspect('malik-syncConflicts')), []);
+});
+
+test('choosing remote sync conflict applies server value and clears the stale local write', async () => {
+  const { resolveSyncConflict } = await import('../src/syncClient.mjs');
+  const storage = fakeStorage({
+    'malik-orders': JSON.stringify([{ id: 'o-1', total: 20 }]),
+    'malik-syncBaseline': JSON.stringify({ orders: { 'o-1': { id: 'o-1', total: 10 } } }),
+    'malik-syncVersions': JSON.stringify({ 'orders:o-1': 12 }),
+    'malik-syncOutbox': JSON.stringify([{
+      eventId: '123e4567-e89b-42d3-a456-426614174000', entity: 'orders', recordId: 'o-1',
+      operation: 'upsert', payload: { id: 'o-1', total: 20 }, expectedSequence: 8,
+      occurredAt: '2026-01-01T00:00:00.000Z'
+    }]),
+    'malik-syncConflicts': JSON.stringify([{
+      id: 'conflict-1', entity: 'orders', recordId: 'o-1', local: { id: 'o-1', total: 20 },
+      remote: { id: 'o-1', total: 30 },
+      remoteEvent: { sequence: 12, entity: 'orders', record_id: 'o-1', operation: 'upsert', payload: { id: 'o-1', total: 30 } }
+    }])
+  });
+  resolveSyncConflict(storage, 'conflict-1', 'remote');
+  assert.deepEqual(JSON.parse(storage.inspect('malik-orders')), [{ id: 'o-1', total: 30 }]);
+  assert.deepEqual(buildSnapshotEvents(storage, 'admin'), []);
+  assert.deepEqual(JSON.parse(storage.inspect('malik-syncConflicts')), []);
+});
