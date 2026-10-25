@@ -166,12 +166,12 @@ function validatePulledEvents(events) {
 }
 
 export function applyPulledEvents(storage, events, cursorKey = CURSOR_KEY, definitions = DEFAULT_SYNC_ENTITIES) {
-  validatePulledEvents(events || []);
+  validatePulledEvents(events);
   const byEntity = new Map(definitions.map(def => [def.entity, def]));
   const grouped = new Map();
   let nextCursor = Number(storage.getItem(cursorKey) || 0);
   const versions = readJson(storage, VERSIONS_KEY, {});
-  for (const event of events || []) {
+  for (const event of events) {
     const sequence = Number(event.sequence);
     if (Number.isSafeInteger(sequence)) {
       nextCursor = Math.max(nextCursor, sequence);
@@ -239,7 +239,7 @@ export async function syncSnapshot({ baseUrl, token, storage, role = 'admin', fe
     const response = await fetchImpl(base + '/api/sync/pull?after=' + encodeURIComponent(cursor), { headers: authHeaders });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || 'Download failed.');
-    const batch = validatePulledEvents(data.events || []);
+    const batch = validatePulledEvents(data.events);
     const safeBatch = [];
     for (const event of batch) {
       const key = event.entity + ':' + event.record_id;

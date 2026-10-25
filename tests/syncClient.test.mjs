@@ -459,3 +459,26 @@ test('non-increasing pulled event sequences are rejected before local data or sy
     assert.equal(storage.inspect('malik-syncVersions'), versions);
   }
 });
+
+
+test('sync pull response without an events array is rejected before checkpointing local data', async () => {
+  const { syncSnapshot } = await import('../src/syncClient.mjs');
+  for (const responseBody of [{}, { events: null }, { events: {} }]) {
+    const baseline = JSON.stringify({ orders: { 'o-1': { id: 'o-1', total: 10 } } });
+    const records = JSON.stringify([{ id: 'o-1', total: 10 }]);
+    const storage = fakeStorage({
+      'malik-orders': records,
+      'malik-syncBaseline': baseline,
+      'malik-syncCursor': '7',
+      'malik-syncVersions': JSON.stringify({ 'orders:o-1': 7 })
+    });
+    await assert.rejects(() => syncSnapshot({
+      baseUrl: 'https://pos.example.test', token: 'test-token', storage,
+      fetchImpl: async () => ({ ok: true, json: async () => responseBody })
+    }), /invalid event batch/i);
+    assert.equal(storage.inspect('malik-orders'), records);
+    assert.equal(storage.inspect('malik-syncBaseline'), baseline);
+    assert.equal(storage.inspect('malik-syncCursor'), '7');
+    assert.equal(storage.inspect('malik-syncVersions'), JSON.stringify({ 'orders:o-1': 7 }));
+  }
+});
