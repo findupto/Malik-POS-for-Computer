@@ -441,6 +441,14 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
     }] }
   });
   assert.equal(malformedExpectedSequence.status, 400, 'expectedSequence must be null or a non-negative safe integer');
+  const malformedOccurredAt = await request('/api/sync/push', {
+    token: adminToken, method: 'POST',
+    body: { events: [{
+      eventId: crypto.randomUUID(), entity: 'orders', recordId: 'invalid-timestamp-' + crypto.randomUUID(),
+      operation: 'upsert', payload: { id: 'invalid-timestamp' }, expectedSequence: null, occurredAt: 'not-a-date'
+    }] }
+  });
+  assert.equal(malformedOccurredAt.status, 400, 'occurredAt must be null or a valid date-time string');
 
   const recordId = 'integration-order-' + crypto.randomUUID();
   const firstEventId = crypto.randomUUID();

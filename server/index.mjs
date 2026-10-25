@@ -513,6 +513,10 @@ const server = http.createServer(async (req, res) => {
               (!Number.isSafeInteger(event.expectedSequence) || event.expectedSequence < 0)) {
             throw Object.assign(new Error('expectedSequence must be null or a non-negative safe integer.'), { status: 400 });
           }
+          if (Object.hasOwn(event, 'occurredAt') && event.occurredAt !== null &&
+              (typeof event.occurredAt !== 'string' || !event.occurredAt.trim() || !Number.isFinite(Date.parse(event.occurredAt)))) {
+            throw Object.assign(new Error('occurredAt must be null or a non-empty valid date-time string.'), { status: 400 });
+          }
           if (!isValidSyncPayload(event.operation, event.payload)) throw Object.assign(new Error(event.operation === 'upsert' ? 'Upsert events require a non-array object payload.' : 'Delete events must not include a payload.'), { status: 400 });
           const priorEvent = await client.query(
             'SELECT sequence,location_id,entity,record_id,operation,occurred_at, (payload IS NOT DISTINCT FROM $2::jsonb) AS same_payload FROM sync_events WHERE event_id=$1',
