@@ -193,8 +193,6 @@ const server = http.createServer(async (req, res) => {
         if (reference.length > 200) return send(res, 400, { error: 'Tender reference must be at most 200 characters.' });
         tenderRows.push({ method, amount, reference });
       }
-      const tenderTotal = Math.round((tenderRows.reduce((sum, tender) => sum + tender.amount, 0) + Number.EPSILON) * 100) / 100;
-      if (tenderTotal > total + 0.000001) return send(res, 400, { error: 'Payment tenders cannot exceed the sale total. Record change returned to the customer separately.' });
       const customerName = String(input.customerName || 'Walk-in Customer').trim().slice(0, 200) || 'Walk-in Customer';
       const notes = String(input.notes || '').slice(0, 2000);
       const occurredAt = input.occurredAt && Number.isFinite(Date.parse(input.occurredAt)) ? new Date(input.occurredAt).toISOString() : null;
@@ -231,6 +229,11 @@ const server = http.createServer(async (req, res) => {
           await client.query('COMMIT');
           if (!samePayload) return send(res, 409, { error: 'This idempotency key was already used for a different sale payload. Retry with the original sale details or use a new key for a new sale.' });
           return send(res, 200, { status: 'duplicate', transaction: { id: prior.id, order_id: prior.order_id, total: prior.total, created_at: prior.created_at } });
+        }
+        const tenderTotal = Math.round((tenderRows.reduce((sum, tender) => sum + tender.amount, 0) + Number.EPSILON) * 100) / 100;
+        if (tenderTotal > total + 0.000001) {
+          await client.query('ROLLBACK');
+          return send(res, 400, { error: 'Payment tenders cannot exceed the sale total. Record change returned to the customer separately.' });
         }
         const inserted = await client.query(
           'INSERT INTO pos_transactions(location_id,idempotency_key,order_id,customer_name,subtotal,discount_amount,tax_amount,service_charge_amount,delivery_fee,total,notes,payload,created_by,occurred_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id,order_id,total,created_at',
