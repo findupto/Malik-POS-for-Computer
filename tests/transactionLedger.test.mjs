@@ -164,7 +164,12 @@ test('shared refund is recorded server-first and retries with the same key', asy
   const refund = { amount: '25', method: 'Cash', reason: 'Wrong item', reference: 'receipt 1', returnItems: [{ productId: 'tea-1', productName: 'Tea', quantity: '1' }], restock: true };
   const fetchImpl = async (url, options = {}) => {
     calls.push({ url, options });
-    if (url.includes('/api/transactions?limit=200')) return { ok: true, json: async () => ({ transactions: [{ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', order_id: order.id, total: 100 }] }) };
+    if (url.includes('/api/transactions?orderId=')) {
+      const lookup = new URL(url);
+      assert.equal(lookup.searchParams.get('orderId'), order.id, 'refund lookup must target the exact original sale');
+      assert.equal(lookup.searchParams.get('limit'), '1', 'exact sale lookup should not depend on recent transaction history');
+      return { ok: true, json: async () => ({ transactions: [{ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', order_id: order.id, total: 100 }] }) };
+    }
     return { ok: true, status: 201, json: async () => ({ status: 'created' }) };
   };
   const args = { baseUrl: 'http://localhost:8787', token: 'token', order, refund, storage, fetchImpl, makeId: () => '44444444-4444-4444-8444-444444444444' };

@@ -169,7 +169,7 @@ export async function recordRefundTransaction({ baseUrl, token, order, refund, s
   if (!baseUrl || !token) throw new Error('Connect this register to the Malik POS API before recording a shared refund.');
   if (!order?.id || !refund || !Number.isFinite(Number(refund.amount)) || Number(refund.amount) <= 0) throw new Error('A valid sale and positive refund amount are required.');
   if (!storage || typeof fetchImpl !== 'function') throw new Error('Shared refund recording is unavailable in this environment.');
-  const response = await fetchImpl(new URL('/api/transactions?limit=200', baseUrl).toString(), {
+  const response = await fetchImpl(new URL('/api/transactions?orderId=' + encodeURIComponent(String(order.id)) + '&limit=1', baseUrl).toString(), {
     headers: { authorization: 'Bearer ' + token }
   });
   let data = {};
