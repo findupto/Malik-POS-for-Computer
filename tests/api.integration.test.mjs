@@ -586,6 +586,20 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   assert.equal(pulled.status, 200);
   assert.ok(pulled.data.events.some(event => event.record_id === recordId && event.operation === 'upsert'));
 
+  // Password resets must invalidate already-issued sessions immediately.
+  const resetPassword = await request('/api/admin/users/' + created.data.user.id + '/reset-password', {
+    token: adminToken, method: 'POST',
+    body: { password: 'test-only-cashier-password-reset-456' }
+  });
+  assert.equal(resetPassword.status, 200);
+  const revokedSession = await request('/api/me', { token: cashierToken });
+  assert.equal(revokedSession.status, 401, 'password reset must revoke the cashier’s existing token');
+  const resetPasswordLogin = await request('/api/auth/login', {
+    method: 'POST',
+    body: { username: 'integration-cashier', password: 'test-only-cashier-password-reset-456' }
+  });
+  assert.equal(resetPasswordLogin.status, 200, 'the new password should allow a fresh session');
+
   // Exercise the shared PostgreSQL login throttle last, because all test
   // requests originate from this integration-test process's client address.
   for (let attempt = 0; attempt < 10; attempt += 1) {
