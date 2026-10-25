@@ -230,7 +230,11 @@ const server = http.createServer(async (req, res) => {
       }
       const customerName = String(input.customerName || 'Walk-in Customer').trim().slice(0, 200) || 'Walk-in Customer';
       const notes = String(input.notes || '').slice(0, 2000);
-      const occurredAt = input.occurredAt && Number.isFinite(Date.parse(input.occurredAt)) ? new Date(input.occurredAt).toISOString() : null;
+      if (input.occurredAt !== undefined && input.occurredAt !== null &&
+          (typeof input.occurredAt !== 'string' || !input.occurredAt.trim() || !Number.isFinite(Date.parse(input.occurredAt)))) {
+        return send(res, 400, { error: 'occurredAt must be a valid date-time string when provided.' });
+      }
+      const occurredAt = input.occurredAt == null ? null : new Date(input.occurredAt).toISOString();
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
