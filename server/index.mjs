@@ -664,10 +664,30 @@ const server = http.createServer(async (req, res) => {
         recentActivity: activity.rows
       });
     }
-    if (req.method === 'GET' && url.pathname === '/api/admin/locations') {
+    if (url.pathname === '/api/admin/locations') {
       if (user.role !== 'admin') return send(res, 403, { error: 'Administrator role required.' });
-      const result = await pool.query('SELECT id,name,timezone,active,created_at FROM locations ORDER BY name');
-      return send(res, 200, { locations: result.rows });
+      if (req.method === 'GET') {
+        const result = await pool.query('SELECT id,name,timezone,active,created_at FROM locations ORDER BY name');
+        return send(res, 200, { locations: result.rows });
+      }
+      if (req.method === 'POST') {
+        const input = await bodyJson(req, 16_000);
+        const name = String(input.name || '').trim();
+        const timezone = String(input.timezone || 'Asia/Karachi').trim();
+        if (!name || name.length > 120) return send(res, 400, { error: 'Location name is required (maximum 120 characters).' });
+        if (!timezone || timezone.length > 100) return send(res, 400, { error: 'A valid timezone is required.' });
+        try { new Intl.DateTimeFormat('en', { timeZone: timezone }); } catch { return send(res, 400, { error: 'Timezone must be a valid IANA timezone.' }); }
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+          const inserted = await client.query('INSERT INTO locations(name,timezone) VALUES ($1,$2) RETURNING id,name,timezone,active,created_at', [name,timezone]);
+          await client.query('INSERT INTO audit_events(location_id,actor_id,action,entity,record_id,details) VALUES ($1,$2,$3,$4,$5,$6)', [user.locationId,user.sub,'location.created','locations',inserted.rows[0].id,JSON.stringify({ name, timezone, locationId: inserted.rows[0].id })]);
+          await client.query('COMMIT');
+          return send(res, 201, { location: inserted.rows[0] });
+        } catch (error) { await client.query('ROLLBACK'); throw error; }
+        finally { client.release(); }
+      }
+      return send(res, 405, { error: 'Method not allowed.' });
     }
     return send(res, 404, { error: 'Route not found.' });
   } catch (error) {
