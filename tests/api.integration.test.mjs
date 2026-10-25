@@ -109,9 +109,10 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   });
   assert.equal(cashierInitialization.status, 403);
 
+  const teaAdjustmentKey = crypto.randomUUID();
   const teaOpening = await request('/api/inventory/adjustments', {
     token: adminToken, method: 'POST',
-    body: { idempotencyKey: crypto.randomUUID(), productId: 'tea-1', sku: 'TEA-1', productName: 'Tea', quantityDelta: 5, reason: 'Integration test opening stock' }
+    body: { idempotencyKey: teaAdjustmentKey, productId: 'tea-1', sku: 'TEA-1', productName: 'Tea', quantityDelta: 5, reason: 'Integration test opening stock' }
   });
   assert.equal(teaOpening.status, 201);
   const breadOpening = await request('/api/inventory/adjustments', {
@@ -119,6 +120,11 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
     body: { idempotencyKey: crypto.randomUUID(), productId: 'bread-1', sku: 'BREAD-1', productName: 'Bread', quantityDelta: 4, reason: 'Integration test opening stock' }
   });
   assert.equal(breadOpening.status, 201);
+  const adjustmentRetryMismatch = await request('/api/inventory/adjustments', {
+    token: adminToken, method: 'POST',
+    body: { idempotencyKey: teaAdjustmentKey, productId: 'tea-1', sku: 'TEA-1', productName: 'Tea', quantityDelta: 6, reason: 'Changed retry payload' }
+  });
+  assert.equal(adjustmentRetryMismatch.status, 409, 'same adjustment idempotency key with changed details must be rejected');
 
   const saleKey = crypto.randomUUID();
   const saleOrderId = 'integration-sale-' + crypto.randomUUID();

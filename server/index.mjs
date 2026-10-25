@@ -288,8 +288,17 @@ const server = http.createServer(async (req, res) => {
       try {
         await client.query('BEGIN');
         await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [user.locationId + ':inventory-adjustment:' + idempotencyKey]);
-        const prior = await client.query('SELECT id,product_id,quantity_delta,quantity_after,created_at FROM inventory_movements WHERE location_id=$1 AND idempotency_key=$2', [user.locationId,idempotencyKey]);
-        if (prior.rowCount) { await client.query('COMMIT'); return send(res, 200, { status: 'duplicate', movement: prior.rows[0] }); }
+        const prior = await client.query('SELECT id,product_id,sku,product_name,quantity_delta,quantity_after,reason,created_at FROM inventory_movements WHERE location_id=$1 AND idempotency_key=$2', [user.locationId,idempotencyKey]);
+        if (prior.rowCount) {
+          const existingMovement = prior.rows[0];
+          const sameAdjustment = existingMovement.product_id === productId &&
+            existingMovement.sku === sku && existingMovement.product_name === productName &&
+            Math.abs(Number(existingMovement.quantity_delta) - delta) < 0.000001 &&
+            existingMovement.reason === reason;
+          await client.query('COMMIT');
+          if (!sameAdjustment) return send(res, 409, { error: 'This idempotency key was already used for a different stock adjustment. Retry with the original details or use a new key for a new adjustment.' });
+          return send(res, 200, { status: 'duplicate', movement: existingMovement });
+        }
         await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [user.locationId + ':inventory:' + productId]);
         const existing = await client.query('SELECT quantity FROM inventory_balances WHERE location_id=$1 AND product_id=$2 FOR UPDATE', [user.locationId,productId]);
         const before = existing.rowCount ? Number(existing.rows[0].quantity) : 0;
