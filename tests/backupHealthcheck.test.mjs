@@ -63,6 +63,8 @@ test('backup health check rejects a checksum manifest for a different archive', 
   await writeFile(f.archive, 'corrupted newest archive');
   const other = path.join(f.backups, 'malik-pos-other.dump');
   await writeFile(other, 'different valid archive');
+  const older = new Date(Date.now() - 60_000);
+  await utimes(other, older, older);
   const digest = crypto.createHash('sha256').update('different valid archive').digest('hex');
   await writeFile(f.archive + '.sha256', digest + '  malik-pos-other.dump\n');
   const result = runCheck(f);
