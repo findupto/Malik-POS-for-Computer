@@ -189,7 +189,6 @@ async function driveAccessToken(config) {
 async function uploadBackupToDrive(file, day) {
   const config = readDriveConfig();
   if (!config?.refreshToken) return { success: false, connected: false, error: 'Google Drive is not connected.' };
-  if (config.uploadedDay === day) return { success: true, skipped: true };
   const accessToken = await driveAccessToken(config);
   const query = encodeURIComponent("name = 'Malik POS Backups' and mimeType = 'application/vnd.google-apps.folder' and trashed = false");
   const folderResponse = await fetch('https://www.googleapis.com/drive/v3/files?q=' + query + '&fields=files(id,name)&pageSize=10', { headers: { authorization: 'Bearer ' + accessToken } });
@@ -203,12 +202,24 @@ async function uploadBackupToDrive(file, day) {
     folderId = folder.id;
   }
   const bytes = await fs.readFile(file);
-  const boundary = 'malikpos_' + crypto.randomBytes(18).toString('hex');
-  const metadata = JSON.stringify({ name: 'malik-pos-' + day + '.json', mimeType: 'application/json', parents: [folderId] });
-  const body = Buffer.concat([Buffer.from('--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + metadata + '\r\n--' + boundary + '\r\nContent-Type: application/json\r\n\r\n'), bytes, Buffer.from('\r\n--' + boundary + '--')]);
-  const upload = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,size', { method: 'POST', headers: { authorization: 'Bearer ' + accessToken, 'content-type': 'multipart/related; boundary=' + boundary }, body });
-  const uploaded = await upload.json();
-  if (!upload.ok || !uploaded.id) throw new Error('Google Drive upload failed (' + upload.status + '): ' + (uploaded.error?.message || 'unknown error'));
+  const backupName = 'malik-pos-' + day + '.json';
+  const existingQuery = encodeURIComponent("name = '" + backupName + "' and '" + folderId + "' in parents and trashed = false");
+  const existingResponse = await fetch('https://www.googleapis.com/drive/v3/files?q=' + existingQuery + '&fields=files(id,name)&pageSize=10', { headers: { authorization: 'Bearer ' + accessToken } });
+  if (!existingResponse.ok) throw new Error('Could not check existing Drive backup (' + existingResponse.status + ').');
+  const existingData = await existingResponse.json();
+  let uploaded;
+  if (existingData.files?.[0]?.id) {
+    const update = await fetch('https://www.googleapis.com/upload/drive/v3/files/' + encodeURIComponent(existingData.files[0].id) + '?uploadType=media&fields=id,name,size', { method: 'PATCH', headers: { authorization: 'Bearer ' + accessToken, 'content-type': 'application/json' }, body: bytes });
+    uploaded = await update.json();
+    if (!update.ok || !uploaded.id) throw new Error('Google Drive backup update failed (' + update.status + '): ' + (uploaded.error?.message || 'unknown error'));
+  } else {
+    const boundary = 'malikpos_' + crypto.randomBytes(18).toString('hex');
+    const metadata = JSON.stringify({ name: backupName, mimeType: 'application/json', parents: [folderId] });
+    const body = Buffer.concat([Buffer.from('--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + metadata + '\r\n--' + boundary + '\r\nContent-Type: application/json\r\n\r\n'), bytes, Buffer.from('\r\n--' + boundary + '--')]);
+    const upload = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,size', { method: 'POST', headers: { authorization: 'Bearer ' + accessToken, 'content-type': 'multipart/related; boundary=' + boundary }, body });
+    uploaded = await upload.json();
+    if (!upload.ok || !uploaded.id) throw new Error('Google Drive upload failed (' + upload.status + '): ' + (uploaded.error?.message || 'unknown error'));
+  }
   saveDriveConfig({ ...config, uploadedDay: day, lastUploadAt: new Date().toISOString() });
   return { success: true, fileId: uploaded.id, name: uploaded.name };
 }
