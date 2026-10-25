@@ -421,6 +421,19 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   assert.equal(missingOrderLookup.status, 200);
   assert.equal(missingOrderLookup.data.transactions.length, 0);
 
+  const malformedSyncEvents = await request('/api/sync/push', {
+    token: adminToken, method: 'POST', body: { events: [null] }
+  });
+  assert.equal(malformedSyncEvents.status, 400, 'null sync events should be rejected as client input, not crash the API');
+  const malformedExpectedSequence = await request('/api/sync/push', {
+    token: adminToken, method: 'POST',
+    body: { events: [{
+      eventId: crypto.randomUUID(), entity: 'orders', recordId: 'invalid-sequence-' + crypto.randomUUID(),
+      operation: 'upsert', payload: { id: 'invalid-sequence' }, expectedSequence: 'not-a-number'
+    }] }
+  });
+  assert.equal(malformedExpectedSequence.status, 400, 'expectedSequence must be null or a non-negative safe integer');
+
   const recordId = 'integration-order-' + crypto.randomUUID();
   const firstEventId = crypto.randomUUID();
   const first = await request('/api/sync/push', {

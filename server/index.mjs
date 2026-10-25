@@ -502,9 +502,16 @@ const server = http.createServer(async (req, res) => {
       try {
         await client.query('BEGIN');
         for (const event of input.events) {
+          if (!event || typeof event !== 'object' || Array.isArray(event)) {
+            throw Object.assign(new Error('Each sync event must be a JSON object.'), { status: 400 });
+          }
           if (!canPushEntity(user.role, String(event.entity || ''))) throw Object.assign(new Error('Your role cannot sync this record type.'), { status: 403 });
           if (!isUuid(event.eventId) || !/^[a-z][a-z0-9_-]{0,63}$/.test(String(event.entity || '')) || !String(event.recordId || '').trim() || String(event.recordId).length > 200 || !['upsert','delete'].includes(event.operation)) {
             throw Object.assign(new Error('Each event needs a UUID eventId, valid entity/recordId and upsert/delete operation.'), { status: 400 });
+          }
+          if (Object.hasOwn(event, 'expectedSequence') && event.expectedSequence !== null &&
+              (!Number.isSafeInteger(event.expectedSequence) || event.expectedSequence < 0)) {
+            throw Object.assign(new Error('expectedSequence must be null or a non-negative safe integer.'), { status: 400 });
           }
           if (!isValidSyncPayload(event.operation, event.payload)) throw Object.assign(new Error(event.operation === 'upsert' ? 'Upsert events require a non-array object payload.' : 'Delete events must not include a payload.'), { status: 400 });
           const priorEvent = await client.query(
