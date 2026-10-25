@@ -508,7 +508,26 @@ const server = http.createServer(async (req, res) => {
           }
           const inserted = await client.query('INSERT INTO sync_events(event_id,location_id,entity,record_id,operation,payload,actor_id,occurred_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(event_id) DO NOTHING RETURNING sequence',
             [event.eventId,user.locationId,event.entity,event.recordId,event.operation,event.payload === undefined ? null : JSON.stringify(event.payload),user.sub,event.occurredAt && Number.isFinite(Date.parse(event.occurredAt)) ? new Date(event.occurredAt).toISOString() : null]);
-          if (!inserted.rowCount) { results.push({ eventId: event.eventId, status: 'duplicate' }); continue; }
+          if (!inserted.rowCount) {
+            // A concurrent request may win the unique event_id insert after our earlier
+            // lookup found nothing. Verify the winner's full event before calling this a retry.
+            const conflict = await client.query(
+              'SELECT sequence,location_id,entity,record_id,operation,occurred_at,(payload IS NOT DISTINCT FROM $2::jsonb) AS same_payload FROM sync_events WHERE event_id=$1',
+              [event.eventId, event.payload === undefined ? null : JSON.stringify(event.payload)]
+            );
+            const prior = conflict.rows[0];
+            const occurredAt = event.occurredAt && Number.isFinite(Date.parse(event.occurredAt)) ? new Date(event.occurredAt).toISOString() : null;
+            const sameEvent = prior &&
+              prior.location_id === user.locationId &&
+              prior.entity === event.entity &&
+              prior.record_id === event.recordId &&
+              prior.operation === event.operation &&
+              prior.same_payload &&
+              (prior.occurred_at ? new Date(prior.occurred_at).toISOString() : null) === occurredAt;
+            if (!sameEvent) throw Object.assign(new Error('Sync event ID was already used for different event details.'), { status: 409 });
+            results.push({ eventId: event.eventId, status: 'duplicate', sequence: Number(prior.sequence) });
+            continue;
+          }
           if (event.operation === 'delete') {
             await client.query('DELETE FROM pos_records WHERE location_id=$1 AND entity=$2 AND record_id=$3', [user.locationId,event.entity,event.recordId]);
           } else {

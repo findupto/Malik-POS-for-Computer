@@ -432,6 +432,23 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   });
   assert.equal(mismatchedEventRetry.status, 409);
 
+  const racedEventId = crypto.randomUUID();
+  const racedRecordId = 'integration-race-' + crypto.randomUUID();
+  const race = await Promise.all([
+    request('/api/sync/push', {
+      token: adminToken, method: 'POST',
+      body: { events: [{ eventId: racedEventId, entity: 'orders', recordId: racedRecordId, operation: 'upsert', payload: { id: racedRecordId, total: 15 } }] }
+    }),
+    request('/api/sync/push', {
+      token: adminToken, method: 'POST',
+      body: { events: [{ eventId: racedEventId, entity: 'orders', recordId: racedRecordId + '-other', operation: 'upsert', payload: { id: racedRecordId + '-other', total: 16 } }] }
+    })
+  ]);
+  assert.equal(race.filter(result => result.status === 200).length, 1,
+    'only one distinct event payload may claim a shared event ID');
+  assert.equal(race.filter(result => result.status === 409).length, 1,
+    'a concurrent event ID collision with different details must be rejected');
+
   const staleWrite = await request('/api/sync/push', {
     token: adminToken, method: 'POST',
     body: { events: [{ eventId: crypto.randomUUID(), entity: 'orders', recordId, operation: 'upsert', payload: { id: recordId, total: 999 }, expectedSequence: null }] }
