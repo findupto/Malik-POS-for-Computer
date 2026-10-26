@@ -114,6 +114,20 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   const branchMe = await request('/api/me', { token: branchLogin.data.token });
   assert.equal(branchMe.status, 200);
   assert.equal(branchMe.data.locationId, branch.data.location.id, 'branch staff must be assigned to the created branch');
+  const branchCannotListAllLocations = await request('/api/admin/locations', { token: branchLogin.data.token });
+  assert.equal(branchCannotListAllLocations.status, 403, 'branch admins must not enumerate every location');
+  const branchCannotCreateLocation = await request('/api/admin/locations', {
+    token: branchLogin.data.token, method: 'POST', body: { name: 'Unauthorized Branch ' + crypto.randomUUID().slice(0, 8) }
+  });
+  assert.equal(branchCannotCreateLocation.status, 403, 'only global administrators may create locations');
+  const mainLocationId = login.data.user.locationId;
+  const branchCannotViewMainOverview = await request('/api/admin/overview?locationId=' + encodeURIComponent(mainLocationId), { token: branchLogin.data.token });
+  assert.equal(branchCannotViewMainOverview.status, 403, 'branch admins must not view another location overview');
+  const branchCannotProvisionMainStaff = await request('/api/admin/users', {
+    token: branchLogin.data.token, method: 'POST',
+    body: { username: 'cross-branch-' + crypto.randomUUID().slice(0, 8), displayName: 'Unauthorized Cross-Branch User', role: 'cashier', password: 'test-only-cross-branch-password-123', locationId: mainLocationId }
+  });
+  assert.equal(branchCannotProvisionMainStaff.status, 403, 'branch admins must not provision staff at another location');
   const branchInventory = await request('/api/inventory', { token: branchLogin.data.token });
   assert.equal(branchInventory.status, 200);
   assert.equal(branchInventory.data.inventory.length, 0, 'new branch inventory must be location-scoped');
