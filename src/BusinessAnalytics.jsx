@@ -3,8 +3,12 @@ import { BarChart3, Users, Package, BriefcaseBusiness, CalendarDays, Search, Tre
 
 const money = n => 'Rs. ' + new Intl.NumberFormat('en-PK', { maximumFractionDigits: 0 }).format(Number(n) || 0);
 const dateOf = value => String(value || '').slice(0, 10);
-const completed = order => !['cancelled', 'waste', 'pending'].includes(String(order.status || 'completed').toLowerCase());
+const orderStatus = order => { const status=String(order?.status||'completed').toLowerCase(); if(/cancel|void/.test(status))return 'Cancelled'; if(/waste|spoiled|damaged|write.?off/.test(status))return 'Waste'; if(/pending|hold|draft|unpaid/.test(status))return 'Pending'; if(/refund|return/.test(status))return 'Refunded'; return 'Completed'; };
+const completed = order => orderStatus(order)==='Completed';
 const totalOf = order => Math.max(0, Number(order.total || 0) - Number(order.refundedTotal || 0));
+const timestampOf = value => value?.paidAt || value?.completedAt || value?.createdAt || value?.date || value?.timestamp || value?.checkIn || '';
+const itemQuantity = item => Math.max(0,Number(item?.qty ?? item?.quantity)||0);
+const itemSale = item => Math.max(0,Number(item?.price ?? item?.unitPrice ?? item?.salePrice)||0)*itemQuantity(item);
 const safeName = value => String(value || 'Unknown').trim() || 'Unknown';
 const getItemCost = item => {
   const value = item.unitCost ?? item.costPrice ?? item.cost ?? item.purchasePrice;
@@ -56,19 +60,23 @@ export default function BusinessAnalytics({ orders=[], products=[], customers=[]
   const [selectedBucket,setSelectedBucket] = useState('');
   const [selectedRecord,setSelectedRecord] = useState('');
   const inRange = value => { const date=dateOf(value); return (!from || (date && date>=from)) && (!to || (date && date<=to)); };
-  const sales = useMemo(()=>orders.filter(o=>completed(o)&&inRange(o.date)),[orders,from,to]);
-  const visibleOrders = useMemo(()=>sales.filter(o=>!search||[o.id,o.customer,o.payment,o.status,(o.items||[]).map(i=>i.name+' '+i.sku).join(' ')].join(' ').toLowerCase().includes(search.toLowerCase())),[sales,search]);
+  const rangeOrders = useMemo(()=>orders.filter(o=>inRange(timestampOf(o))),[orders,from,to]);
+  const sales = useMemo(()=>rangeOrders.filter(completed),[rangeOrders]);
+  const visibleOrders = useMemo(()=>rangeOrders.filter(o=>!search||[o.id,o.customer,o.payment,o.status,(o.items||[]).map(i=>i.name+' '+i.sku).join(' ')].join(' ').toLowerCase().includes(search.toLowerCase())),[rangeOrders,search]);
+  const orderStatusTotals = useMemo(()=>rangeOrders.reduce((out,o)=>{const status=orderStatus(o);out[status]=(out[status]||0)+1;out[status+'Value']=(out[status+'Value']||0)+(Number(o.total)||0);return out;},{ }),[rangeOrders]);
+  const catalogCost = item => { const p=products.find(p=>String(p.id)===String(item?.productId??item?.id??'') || (item?.sku&&String(p.sku)===String(item.sku)) || (item?.name&&String(p.name)===String(item.name))); const cost=getItemCost(item); return cost===null&&p?getItemCost(p):cost; };
+  const itemCostTotal = item => {const cost=catalogCost(item);return cost===null?null:cost*itemQuantity(item);};
   const productRows = useMemo(()=>{
     const map=new Map();
-    for(const order of sales) for(const item of order.items||[]) {
-      const key=String(item.productId??item.id??item.sku??(item.name+'|'+(item.variant||'')));
-      const row=map.get(key)||{key,name:safeName(item.name),variant:item.variant||'',sku:item.sku||'',qty:0,revenue:0,cost:0,costKnown:true,orders:0,days:new Set(),transactions:[]};
-      const qty=Math.max(0,Number(item.qty)||0); row.qty+=qty; row.revenue+=Math.max(0,Number(item.price)||0)*qty;
-      const unitCost=getItemCost(item); if(unitCost===null)row.costKnown=false; else row.cost+=unitCost*qty;
-      row.orders+=1; row.days.add(dateOf(order.date)); row.transactions.push({order,item,amount:Math.max(0,Number(item.price)||0)*qty});map.set(key,row);
+    const ensure=(item)=>{const key=String(item.productId??item.id??item.sku??(item.name+'|'+(item.variant||'')));const row=map.get(key)||{key,name:safeName(item.name),variant:item.variant||'',sku:item.sku||'',qty:0,revenue:0,cost:0,costKnown:true,orders:0,days:new Set(),transactions:[],cancelledQty:0,wasteQty:0,pendingQty:0};map.set(key,row);return row;};
+    for(const order of rangeOrders) for(const item of order.items||[]) {
+      const row=ensure(item);const qty=itemQuantity(item);const status=orderStatus(order);const sale=itemSale(item);const costUnit=catalogCost(item);const cost=costUnit===null?null:costUnit*qty;
+      if(status==='Completed'){row.qty+=qty;row.revenue+=sale;if(cost===null)row.costKnown=false;else row.cost+=cost;row.orders+=1;row.days.add(dateOf(timestampOf(order)));}
+      if(status==='Cancelled')row.cancelledQty+=qty;if(status==='Waste')row.wasteQty+=qty;if(status==='Pending')row.pendingQty+=qty;
+      row.transactions.push({order,item,amount:sale,cost,status,profit:status==='Completed'&&cost!==null?sale-cost:null});
     }
     return [...map.values()].map(row=>({...row,profit:row.costKnown?row.revenue-row.cost:null})).sort((a,b)=>b.qty-a.qty);
-  },[sales]);
+  },[rangeOrders,products]);
   const productRowsWithCatalog = useMemo(()=>products.map(p=>{const row=productRows.find(x=>String(x.key)===String(p.id)||String(x.sku)===String(p.sku)||x.name===p.name);return row||{key:String(p.id),name:p.name,variant:p.variant||'',sku:p.sku||'',qty:0,revenue:0,cost:0,costKnown:false,profit:null,orders:0,days:new Set(),transactions:[]}}),[products,productRows]);
   const customerRows = useMemo(()=>customers.map(c=>{const tx=sales.filter(o=>safeName(o.customer)===safeName(c.name));const paid=tx.reduce((n,o)=>n+totalOf(o),0);const payments=ledgerPayments.filter(p=>String(p.customer||p.entityName||'')===String(c.name));return {...c,key:String(c.id??c.name),transactions:tx,total:paid,visits:tx.length,avg:tx.length?paid/tx.length:0,payments,due:Number(c.dueBalance||c.due||0)}}).sort((a,b)=>b.total-a.total),[customers,sales,ledgerPayments]);
   const supplierRows = useMemo(()=>suppliers.map(s=>{const name=safeName(s.name);const allPurchases=stockPurchases.filter(p=>safeName(p.supplier)===name);const purchases=allPurchases.filter(p=>inRange(p.date||p.createdAt));const paid=purchases.reduce((n,p)=>n+Math.max(0,Number(p.paid)||0),0);const spend=purchases.reduce((n,p)=>n+Math.max(0,Number(p.total)||0),0);const payments=ledgerPayments.filter(p=>String(p.supplier||p.entityName||'')===name&&inRange(p.date||p.createdAt));return {...s,key:String(s.id??name),transactions:purchases,total:spend,paid,due:allPurchases.reduce((n,p)=>n+Math.max(0,Number(p.total||0)-Number(p.paid||0)),0)+Math.max(0,Number(s.due)||0),payments}}).sort((a,b)=>b.total-a.total),[suppliers,stockPurchases,ledgerPayments,from,to]);
