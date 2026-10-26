@@ -66,7 +66,6 @@ export default function BusinessAnalytics({ orders=[], products=[], customers=[]
   const rangeOrders = useMemo(()=>orders.filter(o=>inRange(eventTimestamp(o))),[orders,from,to]);
   const filteredOrders = useMemo(()=>statusFilter==='all'?rangeOrders:rangeOrders.filter(o=>orderStatus(o).toLowerCase()===statusFilter),[rangeOrders,statusFilter]);
   const sales = useMemo(()=>filteredOrders.filter(completed),[filteredOrders]);
-  const visibleOrders = useMemo(()=>filteredOrders.filter(o=>!search||[o.id,o.customer,o.payment,o.status,(o.items||[]).map(i=>i.name+' '+i.sku).join(' ')].join(' ').toLowerCase().includes(search.toLowerCase())),[filteredOrders,search]);
   const orderStatusTotals = useMemo(()=>rangeOrders.reduce((out,o)=>{const status=orderStatus(o);out[status]=(out[status]||0)+1;out[status+'Value']=(out[status+'Value']||0)+(Number(o.total)||0);return out;},{ }),[rangeOrders]);
   const catalogCost = item => { const p=products.find(p=>String(p.id)===String(item?.productId??item?.id??'') || (item?.sku&&String(p.sku)===String(item.sku)) || (item?.name&&String(p.name)===String(item.name))); const direct=getItemCost(item)??(p?getItemCost(p):null); if(direct!==null)return direct;try{const qty=itemQuantity(item);const estimate=estimateOrderIngredientCost([item]);if(qty>0&&Number(estimate?.coveredUnits)>=qty&&Number(estimate?.uncoveredUnits)===0&&Number.isFinite(Number(estimate?.cost)))return Number(estimate.cost)/qty;}catch{}return null; };
   const itemCostTotal = item => {const cost=catalogCost(item);return cost===null?null:cost*itemQuantity(item);};
@@ -146,7 +145,6 @@ export default function BusinessAnalytics({ orders=[], products=[], customers=[]
   const sectionButtons=['Products','Customers','Suppliers',...(canManageStaff?['Staff']:[])];
   const overallSales=sales.reduce((n,o)=>n+totalOf(o),0);
   const overallExpenses=expenses.filter(e=>inRange(e.date)).reduce((n,e)=>n+Math.max(0,Number(e.amount)||0),0);
-  const allItemCosts=sales.flatMap(o=>(o.items||[]).map(item=>({item,qty:itemQuantity(item)})));
   const orderCosts=sales.map(order=>{if(order.ingredientCostEstimate!==undefined&&order.ingredientCostEstimate!==null&&order.ingredientCostEstimate!==''&&Number.isFinite(Number(order.ingredientCostEstimate))&&Number(order.recipeCostUncoveredUnits||0)===0)return {known:true,cost:Math.max(0,Number(order.ingredientCostEstimate)||0),sale:totalOf(order)};const items=order.items||[];const costs=items.map(item=>{const unit=catalogCost(item);return unit===null?null:unit*itemQuantity(item)});return {known:costs.length>0&&costs.every(v=>v!==null),cost:costs.reduce((n,v)=>n+(v||0),0),sale:totalOf(order)}});
   const costDataComplete=orderCosts.length>0&&orderCosts.every(x=>x.known);
   const estimatedGrossProfit=costDataComplete?orderCosts.reduce((n,x)=>n+x.sale-x.cost,0):null;
