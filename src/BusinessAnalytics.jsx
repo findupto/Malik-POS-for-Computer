@@ -102,7 +102,7 @@ export default function BusinessAnalytics({ orders=[], products=[], customers=[]
     if(section==='Suppliers') return filteredEntities.slice(0,12).map(r=>({key:r.key,label:r.name,value:r.total}));
     return filteredEntities.slice(0,12).map(r=>({key:r.key,label:r.name,value:r.paid}));
   },[chartView,section,filteredEntities,entityId,sales,productRowsWithCatalog,customerRows,supplierRows,staffRows,stockPurchases,staffPayments,from,to]);
-  const selectedTransactions = selected ? section==='Products' ? selected.transactions||[] : section==='Customers' ? selected.transactions||[] : section==='Suppliers' ? selected.transactions||[] : [...(selected.payments||[]),...(selected.attendance||[]).map(a=>({...a,type:'Attendance'}))] : [];
+  const selectedTransactions = selected ? section==='Products' ? selected.transactions||[] : section==='Customers' ? [...(selected.transactions||[]),...(selected.payments||[])] : section==='Suppliers' ? [...(selected.transactions||[]),...(selected.payments||[])] : [...(selected.payments||[]),...(selected.attendance||[]).map(a=>({...a,type:'Attendance'}))] : [];
   const selectedTxFiltered = selectedTransactions.filter(tx=>{const order=tx.order||tx;const txDate=dateOf(order.date||tx.date||tx.createdAt);return !selectedBucket || String(order.id??tx.id??tx.date??'')===selectedBucket || txDate.startsWith(selectedBucket);});
   const metric = section==='Products' ? [
     ['Units sold',filteredEntities.reduce((n,r)=>n+r.qty,0)],
