@@ -164,7 +164,7 @@ const server = http.createServer(async (req, res) => {
         return send(res, 401, { error: 'Invalid username or password.' });
       }
       await pool.query('DELETE FROM login_rate_limits WHERE key_hash=$1', [rateLimitKey]);
-      return send(res, 200, { token: tokenFor(user), user: { id: user.id, username: user.username, name: user.display_name, role: user.role, locationId: user.location_id } });
+      return send(res, 200, { token: tokenFor(user), user: { id: user.id, username: user.username, name: user.display_name, role: user.role, locationId: user.location_id, isGlobalAdmin: user.is_global_admin === true } });
     }
     const claims = authFrom(req);
     if (!claims) return send(res, 401, { error: 'Authentication required or session expired.' });
@@ -178,7 +178,7 @@ const server = http.createServer(async (req, res) => {
     }
     // Always authorize with current database role, not the role captured in a long-lived token.
     const user = { ...claims, username: activeUser.username, role: activeUser.role, locationId: activeUser.location_id, isGlobalAdmin: activeUser.is_global_admin === true };
-    if (req.method === 'GET' && url.pathname === '/api/me') return send(res, 200, { id: user.sub, username: user.username, name: activeUser.display_name, role: user.role, locationId: user.locationId });
+    if (req.method === 'GET' && url.pathname === '/api/me') return send(res, 200, { id: user.sub, username: user.username, name: activeUser.display_name, role: user.role, locationId: user.locationId, isGlobalAdmin: user.isGlobalAdmin });
     if (req.method === 'GET' && url.pathname === '/api/records') {
       const entity = String(url.searchParams.get('entity') || '').trim();
       if (!/^[a-z][a-z0-9_-]{0,63}$/.test(entity)) return send(res, 400, { error: 'A valid entity filter is required.' });
