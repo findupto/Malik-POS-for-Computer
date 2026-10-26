@@ -37,6 +37,12 @@ Use **Restore from backup file** in Settings to select and validate a JSON backu
 
 **Limitations:** these are snapshots of the POS records stored in browser localStorage, not a replacement for a fully server-authoritative database backup. Automatic snapshots and uploads require Malik POS to be running and online. No Drive account is connected until you complete the OAuth steps above. Test restoration on a non-production copy before relying on these backups for disaster recovery.
 
+## Easy cloud-folder backups (no Google OAuth)
+
+If creating a Google OAuth client is too difficult, install and sign in to Google Drive for desktop, OneDrive, or Dropbox on each Windows computer. In Malik POS → Settings → **Easy cloud-folder backup**, choose the provider's local synced folder. Malik POS will copy snapshots there every 15 minutes while the app is open and online, using a separate subfolder per computer. No API client ID or browser authorization is required.
+
+This is a simpler way to keep and transfer backup files; it is **not live two-way POS synchronization**. To move data to another register, use **Restore from backup file** and select that computer's `Malik POS Backups/<computer-name>/latest.json` file. Restoring replaces the current business records after creating a safety backup. Do not restore into a register that is actively taking sales. For live shared sales and stock, use the separate **Multi-computer sync** server workflow; do not treat shared backup files as a shared database.
+
 ## Run locally
 Requires Node.js 22 or newer.
 
