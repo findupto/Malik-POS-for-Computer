@@ -136,6 +136,34 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   assert.equal(branchOverviewWithStock.data.activeStaff, 1, 'selected branch overview must count staff at that branch');
 
 
+  // A sale committed at a new branch must stay in that branch's ledger and overview.
+  const branchOrderId = 'branch-isolation-' + crypto.randomUUID();
+  const branchSale = await request('/api/transactions', {
+    token: branchLogin.data.token, method: 'POST',
+    body: {
+      idempotencyKey: crypto.randomUUID(), orderId: branchOrderId,
+      customerName: 'Branch Isolation Test',
+      items: [{ productId: '', sku: 'BRANCH-SALE', productName: 'Branch-only sale', quantity: 1, unitPrice: 25 }],
+      discountAmount: 0, taxAmount: 0, serviceChargeAmount: 0, deliveryFee: 0,
+      tenders: [{ method: 'Cash', amount: 25 }]
+    }
+  });
+  assert.equal(branchSale.status, 201, 'branch staff should be able to record a sale at their own location');
+  const branchLedger = await request('/api/transactions?limit=10&orderId=' + encodeURIComponent(branchOrderId), { token: branchLogin.data.token });
+  assert.equal(branchLedger.status, 200);
+  assert.equal(branchLedger.data.transactions.length, 1, 'branch ledger should include its own sale');
+  const mainCannotReadBranchSale = await request('/api/transactions?limit=10&orderId=' + encodeURIComponent(branchOrderId), { token: adminToken });
+  assert.equal(mainCannotReadBranchSale.status, 200);
+  assert.equal(mainCannotReadBranchSale.data.transactions.length, 0, 'location-scoped ledger must not expose another branch sale');
+  const branchOverviewWithSale = await request('/api/admin/overview?locationId=' + encodeURIComponent(branch.data.location.id), { token: adminToken });
+  assert.equal(branchOverviewWithSale.status, 200);
+  assert.equal(branchOverviewWithSale.data.sales.transactionCount, 1, 'branch overview must include its own transaction');
+  assert.equal(branchOverviewWithSale.data.sales.grossSales, 25);
+  const mainOverviewBeforeMainSale = await request('/api/admin/overview', { token: adminToken });
+  assert.equal(mainOverviewBeforeMainSale.status, 200);
+  assert.equal(mainOverviewBeforeMainSale.data.sales.transactionCount, 0, 'main location overview must exclude branch transactions');
+
+
   for (const invalidCursor of ['-1', '1.5', 'Infinity']) {
     const invalidPull = await request('/api/sync/pull?after=' + encodeURIComponent(invalidCursor), { token: adminToken });
     assert.equal(invalidPull.status, 400, 'invalid sync cursor ' + invalidCursor + ' must be rejected');
