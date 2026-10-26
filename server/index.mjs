@@ -101,10 +101,14 @@ async function bootstrap() {
   if (bootstrapUser && bootstrapPassword) {
     const existing = await pool.query('SELECT id FROM staff_users WHERE username=$1', [bootstrapUser.toLowerCase()]);
     if (!existing.rowCount) {
-      await pool.query('INSERT INTO staff_users(location_id,username,password_hash,display_name,role) VALUES ($1,$2,$3,$4,$5)',
+      await pool.query('INSERT INTO staff_users(location_id,username,password_hash,display_name,role,is_global_admin) VALUES ($1,$2,$3,$4,$5,true)',
         [locationId, bootstrapUser.toLowerCase(), await hashPassword(bootstrapPassword), 'Administrator', 'admin']);
       console.log('Created bootstrap administrator. Change credentials using your deployment secret manager before production.');
     }
+  }
+  if (bootstrapUser) {
+    // The explicitly configured bootstrap account is the deployment-wide administrator.
+    await pool.query('UPDATE staff_users SET is_global_admin=true WHERE username=$1', [bootstrapUser.toLowerCase()]);
   }
   console.log('Malik POS API schema ready.');
 }
@@ -164,7 +168,7 @@ const server = http.createServer(async (req, res) => {
     }
     const claims = authFrom(req);
     if (!claims) return send(res, 401, { error: 'Authentication required or session expired.' });
-    const activeUserResult = await pool.query('SELECT id,username,display_name,role,location_id,active,session_version FROM staff_users WHERE id=$1', [claims.sub]);
+    const activeUserResult = await pool.query('SELECT id,username,display_name,role,location_id,active,session_version,is_global_admin FROM staff_users WHERE id=$1', [claims.sub]);
     const activeUser = activeUserResult.rows[0];
     if (!activeUser || !activeUser.active || activeUser.location_id !== claims.locationId) {
       return send(res, 401, { error: 'This staff account is inactive or no longer valid. Sign in again.' });
@@ -173,7 +177,7 @@ const server = http.createServer(async (req, res) => {
       return send(res, 401, { error: 'Your staff account or password changed. Sign in again.' });
     }
     // Always authorize with current database role, not the role captured in a long-lived token.
-    const user = { ...claims, username: activeUser.username, role: activeUser.role, locationId: activeUser.location_id };
+    const user = { ...claims, username: activeUser.username, role: activeUser.role, locationId: activeUser.location_id, isGlobalAdmin: activeUser.is_global_admin === true };
     if (req.method === 'GET' && url.pathname === '/api/me') return send(res, 200, { id: user.sub, username: user.username, name: activeUser.display_name, role: user.role, locationId: user.locationId });
     if (req.method === 'GET' && url.pathname === '/api/records') {
       const entity = String(url.searchParams.get('entity') || '').trim();
@@ -630,6 +634,7 @@ const server = http.createServer(async (req, res) => {
         const displayName = String(input.displayName || '').trim();
         const role = String(input.role || '');
         const targetLocationId = String(input.locationId || user.locationId);
+        if (targetLocationId !== user.locationId && !user.isGlobalAdmin) return send(res, 403, { error: 'Only a global administrator can create staff at another location.' });
         if (!/^[a-z0-9._-]{3,64}$/.test(username)) return send(res, 400, { error: 'Username must be 3–64 characters using letters, numbers, dots, underscores or hyphens.' });
         if (password.length < 12 || password.length > 1024) return send(res, 400, { error: 'Password must be at least 12 characters.' });
         if (!displayName || displayName.length > 100) return send(res, 400, { error: 'Display name is required (maximum 100 characters).' });
@@ -689,6 +694,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/admin/overview') {
       if (user.role !== 'admin') return send(res, 403, { error: 'Administrator role required.' });
       const requestedLocationId = url.searchParams.get('locationId');
+      if (requestedLocationId && requestedLocationId !== user.locationId && !user.isGlobalAdmin) return send(res, 403, { error: 'Only a global administrator can view another location.' });
       const overviewLocationId = requestedLocationId || user.locationId;
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(overviewLocationId)) return send(res, 400, { error: 'locationId must be a valid location UUID.' });
       const location = await pool.query('SELECT timezone FROM locations WHERE id=$1 AND active=true', [overviewLocationId]);
@@ -765,6 +771,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname === '/api/admin/locations') {
       if (user.role !== 'admin') return send(res, 403, { error: 'Administrator role required.' });
+      if (!user.isGlobalAdmin) return send(res, 403, { error: 'Global administrator role required to manage locations.' });
       if (req.method === 'GET') {
         const result = await pool.query('SELECT id,name,timezone,active,created_at FROM locations ORDER BY name');
         return send(res, 200, { locations: result.rows });
