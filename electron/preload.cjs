@@ -12,5 +12,9 @@ contextBridge.exposeInMainWorld('malikPOS', Object.freeze({
   selectBackupFile: () => ipcRenderer.invoke('malik-pos:select-backup-file'),
   connectGoogleDrive: (clientId) => ipcRenderer.invoke('malik-pos:connect-google-drive', clientId),
   googleDriveStatus: () => ipcRenderer.invoke('malik-pos:google-drive-status'),
-  disconnectGoogleDrive: () => ipcRenderer.invoke('malik-pos:disconnect-google-drive')
+  disconnectGoogleDrive: () => ipcRenderer.invoke('malik-pos:disconnect-google-drive'),
+  chooseCloudFolder: () => ipcRenderer.invoke('malik-pos:choose-cloud-folder'),
+  cloudFolderStatus: () => ipcRenderer.invoke('malik-pos:cloud-folder-status'),
+  openCloudFolder: () => ipcRenderer.invoke('malik-pos:open-cloud-folder'),
+  disconnectCloudFolder: () => ipcRenderer.invoke('malik-pos:disconnect-cloud-folder')
 }));
