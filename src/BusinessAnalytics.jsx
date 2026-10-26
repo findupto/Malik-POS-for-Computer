@@ -63,7 +63,7 @@ export default function BusinessAnalytics({ orders=[], products=[], customers=[]
   const [selectedBucket,setSelectedBucket] = useState('');
   const [selectedRecord,setSelectedRecord] = useState('');
   const inRange = value => { const date=dateOf(value); return (!from || (date && date>=from)) && (!to || (date && date<=to)); };
-  const rangeOrders = useMemo(()=>orders.filter(o=>inRange(timestampOf(o))),[orders,from,to]);
+  const rangeOrders = useMemo(()=>orders.filter(o=>inRange(eventTimestamp(o))),[orders,from,to]);
   const filteredOrders = useMemo(()=>statusFilter==='all'?rangeOrders:rangeOrders.filter(o=>orderStatus(o).toLowerCase()===statusFilter),[rangeOrders,statusFilter]);
   const sales = useMemo(()=>filteredOrders.filter(completed),[filteredOrders]);
   const visibleOrders = useMemo(()=>filteredOrders.filter(o=>!search||[o.id,o.customer,o.payment,o.status,(o.items||[]).map(i=>i.name+' '+i.sku).join(' ')].join(' ').toLowerCase().includes(search.toLowerCase())),[filteredOrders,search]);
@@ -116,7 +116,7 @@ export default function BusinessAnalytics({ orders=[], products=[], customers=[]
     return filteredEntities.slice(0,12).map(r=>({key:r.key,label:r.name,value:r.paid}));
   },[chartView,section,filteredEntities,entityId,sales,productRowsWithCatalog,customerRows,supplierRows,staffRows,stockPurchases,staffPayments,from,to]);
   const selectedTransactions = selected ? section==='Products' ? [...(selected.transactions||[]),...wasteRecords.filter(w=>String(w.productId??w.product_id??'')===String(selected.key)||(w.sku&&String(w.sku)===String(selected.sku))||safeName(w.productName??w.product_name??w.name)===safeName(selected.name)).map(w=>({...w,type:'Stock waste',status:'Waste',date:w.date||w.createdAt,cost:Number(w.cost)||null,amount:null})),...inventoryMovements.filter(m=>String(m.product_id??m.productId??'')===String(selected.key)||(m.sku&&String(m.sku)===String(selected.sku))||safeName(m.product_name??m.productName??m.name)===safeName(selected.name)).map(m=>({...m,type:m.reason||m.type||'Stock movement',date:m.occurred_at||m.date||m.createdAt,amount:m.cost??m.value??null,status:m.reason||m.type||'Stock movement'}))] : section==='Customers' ? [...(selected.transactions||[]),...(selected.payments||[])] : section==='Suppliers' ? [...(selected.transactions||[]),...(selected.payments||[])] : [...(selected.payments||[]),...(selected.attendance||[]).map(a=>({...a,type:'Attendance'}))] : [];
-  const selectedTxFiltered = selectedTransactions.filter(tx=>{const order=tx.order||tx;const date=timestampOf(order)||timestampOf(tx);const txDate=dateOf(date);return inRange(date)&&(!selectedBucket || String(order.id??tx.id??tx.date??'')===selectedBucket || txDate.startsWith(selectedBucket));});
+  const selectedTxFiltered = selectedTransactions.filter(tx=>{const order=tx.order||tx;const date=eventTimestamp(tx);const txDate=dateOf(date);return inRange(date)&&(!selectedBucket || String(order.id??tx.id??tx.date??'')===selectedBucket || txDate.startsWith(selectedBucket));});
   const metric = section==='Products' ? [
     ['Units sold',filteredEntities.reduce((n,r)=>n+r.qty,0)],
     ['Sales revenue',money(filteredEntities.reduce((n,r)=>n+r.revenue,0))],
