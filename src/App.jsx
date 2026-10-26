@@ -6,6 +6,7 @@ import { syncSnapshot } from './syncClient.mjs';
 import { recordSaleTransaction, reconcilePendingSaleTransactions, clearReconciledSaleTransactions, recordRefundTransaction, fetchServerInventory, fetchInventoryMovements, initializeServerInventory, recordInventoryAdjustment } from './transactionLedger.mjs';
 import { applySaleToCustomerAccounts, readStoredArray } from './saleRecovery.mjs';
 import { createOrderId } from './orderIds.mjs';
+import { isSafeBackupKey } from './backupKeys.mjs';
 import { Activity, Archive, ArrowDownLeft, ArrowUpRight, BarChart3, Bell, Boxes, BriefcaseBusiness, CalendarDays, Check, ChevronDown, CircleDollarSign, ClipboardList, CreditCard, Download, FileText, Grid2X2, Keyboard, LayoutDashboard, LogOut, Menu, Minus, Package, Plus, Printer, Search, Settings, ShieldCheck, ShoppingBag, ShoppingCart, SlidersHorizontal, Sparkles, Tag, Trash2, TrendingUp, Upload, Users, Wallet, X } from 'lucide-react';
 const csvCellSafe = value => { const raw = String(value ?? ''); const safe = typeof value === 'string' && /^[\t\r ]*[=+\-@]/.test(raw) ? "'" + raw : raw; return '"' + safe.replaceAll('"', '""') + '"'; };
 const csvRowsSafe = rows => '\uFEFF' + rows.map(row => row.map(csvCellSafe).join(',')).join('\r\n');
@@ -65,7 +66,7 @@ function matchesProductSearch(p,query){return productSearchScore(p,query)>0;}
 const BUSINESS_TYPES = ['Fastfood Store','Medical Store','Super Store','Restaurant','Showroom','General Store','Other'];
 const nav = [{label:'Overview',icon:LayoutDashboard},{label:'Point of Sale',icon:ShoppingCart},{label:'Orders',icon:ClipboardList},{label:'Time Charges',icon:Activity},{label:'Inventory',icon:Boxes},{label:'Kitchen Stock',icon:ClipboardList},{label:'Customers',icon:Users},{label:'Reports',icon:BarChart3}];
 function read(key,fallback){try{return JSON.parse(localStorage.getItem('malik-'+key)) ?? fallback}catch{return fallback}}
-function isSafeBackupKey(key){return typeof key==='string'&&key.startsWith('malik-')&&!/session|token|password|credential|secret/i.test(key)}
+
 export default function App(){
  useEffect(() => {
   if (!window.malikPOS?.saveBackupSnapshot) return;
