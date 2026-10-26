@@ -72,6 +72,9 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   adminToken = login.data.token;
   assert.ok(adminToken);
   assert.equal(login.data.user.isGlobalAdmin, true, 'configured bootstrap account must be identified as global admin');
+  const adminMe = await request('/api/me', { token: adminToken });
+  assert.equal(adminMe.status, 200);
+  assert.equal(adminMe.data.isGlobalAdmin, true, 'current-user endpoint must expose global-admin scope');
 
   const created = await request('/api/admin/users', {
     token: adminToken,
@@ -116,6 +119,7 @@ test('PostgreSQL API integration: auth, idempotency, concurrency and role checks
   const branchMe = await request('/api/me', { token: branchLogin.data.token });
   assert.equal(branchMe.status, 200);
   assert.equal(branchMe.data.locationId, branch.data.location.id, 'branch staff must be assigned to the created branch');
+  assert.equal(branchMe.data.isGlobalAdmin, false, 'branch current-user response must not grant global-admin scope');
   const branchCannotListAllLocations = await request('/api/admin/locations', { token: branchLogin.data.token });
   assert.equal(branchCannotListAllLocations.status, 403, 'branch admins must not enumerate every location');
   const branchCannotCreateLocation = await request('/api/admin/locations', {
