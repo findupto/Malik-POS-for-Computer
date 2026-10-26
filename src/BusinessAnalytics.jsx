@@ -45,13 +45,14 @@ function ClickChart({ data, mode, setMode, onSelect, selected }) {
   </div>;
 }
 
-export default function BusinessAnalytics({ orders=[], products=[], customers=[], suppliers=[], staff=[], staffPayments=[], attendance=[], ledgerPayments=[], expenses=[], stockPurchases=[] }) {
+export default function BusinessAnalytics({ orders=[], products=[], customers=[], suppliers=[], staff=[], staffPayments=[], attendance=[], ledgerPayments=[], expenses=[], stockPurchases=[], canManageStaff=false }) {
   const [section,setSection] = useState('Products');
   const [from,setFrom] = useState('');
   const [to,setTo] = useState('');
   const [search,setSearch] = useState('');
   const [entityId,setEntityId] = useState('all');
   const [chartMode,setChartMode] = useState('bar');
+  const [chartView,setChartView] = useState('compare');
   const [selectedBucket,setSelectedBucket] = useState('');
   const [selectedRecord,setSelectedRecord] = useState('');
   const inRange = value => { const date=dateOf(value); return (!from || (date && date>=from)) && (!to || (date && date<=to)); };
@@ -71,7 +72,7 @@ export default function BusinessAnalytics({ orders=[], products=[], customers=[]
   const productRowsWithCatalog = useMemo(()=>products.map(p=>{const row=productRows.find(x=>String(x.key)===String(p.id)||String(x.sku)===String(p.sku)||x.name===p.name);return row||{key:String(p.id),name:p.name,variant:p.variant||'',sku:p.sku||'',qty:0,revenue:0,cost:0,costKnown:false,profit:null,orders:0,days:new Set(),transactions:[]}}),[products,productRows]);
   const customerRows = useMemo(()=>customers.map(c=>{const tx=sales.filter(o=>safeName(o.customer)===safeName(c.name));const paid=tx.reduce((n,o)=>n+totalOf(o),0);const payments=ledgerPayments.filter(p=>String(p.customer||p.entityName||'')===String(c.name));return {...c,key:String(c.id??c.name),transactions:tx,total:paid,visits:tx.length,avg:tx.length?paid/tx.length:0,payments,due:Number(c.dueBalance||c.due||0)}}).sort((a,b)=>b.total-a.total),[customers,sales,ledgerPayments]);
   const supplierRows = useMemo(()=>suppliers.map(s=>{const name=safeName(s.name);const purchases=stockPurchases.filter(p=>safeName(p.supplier)===name&&inRange(p.date||p.createdAt));const paid=purchases.reduce((n,p)=>n+Math.max(0,Number(p.paid)||0),0);const spend=purchases.reduce((n,p)=>n+Math.max(0,Number(p.total)||0),0);const payments=ledgerPayments.filter(p=>String(p.supplier||p.entityName||'')===name&&inRange(p.date||p.createdAt));return {...s,key:String(s.id??name),transactions:purchases,total:spend,paid,due:purchases.reduce((n,p)=>n+Math.max(0,Number(p.total||0)-Number(p.paid||0)),0)+Math.max(0,Number(s.due)||0),payments}}).sort((a,b)=>b.total-a.total),[suppliers,stockPurchases,ledgerPayments,from,to]);
-  const staffRows = useMemo(()=>staff.map(person=>{const id=String(person.id??person.username??person.name);const payments=staffPayments.filter(p=>String(p.staffId??p.employeeId??p.staff_id??p.name??'')===id||String(p.staffName??p.employeeName??'')===String(person.name));const time=attendance.filter(a=>String(a.staffId??a.employeeId??a.staff_id??'')===id||String(a.staffName??a.name??'')===String(person.name)).filter(a=>inRange(a.date||a.checkIn||a.createdAt));const paid=payments.filter(p=>inRange(p.date||p.createdAt)).reduce((n,p)=>n+Math.max(0,Number(p.amount)||0),0);const bonuses=payments.filter(p=>/bonus/i.test(String(p.type||p.kind||p.category||''))).reduce((n,p)=>n+Math.max(0,Number(p.amount)||0),0);const advances=payments.filter(p=>/advance/i.test(String(p.type||p.kind||p.category||''))).reduce((n,p)=>n+Math.max(0,Number(p.amount)||0),0);return {...person,key:id,payments:payments.filter(p=>inRange(p.date||p.createdAt)),attendance:time,paid,bonuses,advances,due:Math.max(0,Number(person.salary||person.monthlySalary||0)-paid)}}).sort((a,b)=>b.paid-a.paid),[staff,staffPayments,attendance,from,to]);
+  const staffRows = useMemo(()=>staff.map(person=>{const id=String(person.id??person.username??person.name);const payments=staffPayments.filter(p=>String(p.staffId??p.employeeId??p.staff_id??p.name??'')===id||String(p.staffName??p.employeeName??'')===String(person.name));const time=attendance.filter(a=>String(a.staffId??a.employeeId??a.staff_id??'')===id||String(a.staffName??a.name??'')===String(person.name)).filter(a=>inRange(a.date||a.checkIn||a.createdAt));const paid=payments.filter(p=>inRange(p.date||p.createdAt)).reduce((n,p)=>n+Math.max(0,Number(p.amount)||0),0);const bonuses=payments.filter(p=>inRange(p.date||p.createdAt)&&/bonus/i.test(String(p.type||p.kind||p.category||''))).reduce((n,p)=>n+Math.max(0,Number(p.amount)||0),0);const advances=payments.filter(p=>inRange(p.date||p.createdAt)&&/advance/i.test(String(p.type||p.kind||p.category||''))).reduce((n,p)=>n+Math.max(0,Number(p.amount)||0),0);return {...person,key:id,payments:payments.filter(p=>inRange(p.date||p.createdAt)),attendance:time,paid,bonuses,advances,due:Math.max(0,Number(person.salary||person.monthlySalary||0)-paid)}}).sort((a,b)=>b.paid-a.paid),[staff,staffPayments,attendance,from,to]);
   const filteredEntities = useMemo(()=>{
     const list=section==='Products'?productRowsWithCatalog:section==='Customers'?customerRows:section==='Suppliers'?supplierRows:staffRows;
     return list.filter(row=>(entityId==='all'||String(row.key)===entityId)&&(!search||[row.name,row.sku,row.phone,row.username,row.role].join(' ').toLowerCase().includes(search.toLowerCase())));
@@ -84,7 +85,7 @@ export default function BusinessAnalytics({ orders=[], products=[], customers=[]
     return filteredEntities.slice(0,12).map(r=>({key:r.key,label:r.name,value:r.paid}));
   },[section,filteredEntities]);
   const selectedTransactions = selected ? section==='Products' ? selected.transactions||[] : section==='Customers' ? selected.transactions||[] : section==='Suppliers' ? selected.transactions||[] : [...(selected.payments||[]),...(selected.attendance||[]).map(a=>({...a,type:'Attendance'}))] : [];
-  const selectedTxFiltered = selectedTransactions.filter(tx=>{const order=tx.order||tx;return !selectedBucket || String(order.id??tx.id??tx.date??'')===selectedBucket || dateOf(order.date||tx.date||tx.createdAt)===selectedBucket;});
+  const selectedTxFiltered = selectedTransactions.filter(tx=>{const order=tx.order||tx;const txDate=dateOf(order.date||tx.date||tx.createdAt);return !selectedBucket || String(order.id??tx.id??tx.date??'')===selectedBucket || txDate.startsWith(selectedBucket);});
   const metric = section==='Products' ? [
     ['Units sold',filteredEntities.reduce((n,r)=>n+r.qty,0)],
     ['Sales revenue',money(filteredEntities.reduce((n,r)=>n+r.revenue,0))],
@@ -110,7 +111,12 @@ export default function BusinessAnalytics({ orders=[], products=[], customers=[]
     const rows=section==='Products'? [['Product','SKU','Units sold','Revenue','Estimated profit'],...filteredEntities.map(r=>[r.name,r.sku,r.qty,r.revenue,r.profit??'Cost data needed'])] : section==='Customers'?[['Customer','Phone','Transactions','Sales','Due'],...filteredEntities.map(r=>[r.name,r.phone,r.visits,r.total,r.due])] : section==='Suppliers'?[['Supplier','Phone','Purchases','Paid','Due'],...filteredEntities.map(r=>[r.name,r.phone,r.total,r.paid,r.due])] : [['Staff','Role','Payments','Bonus','Advance','Estimated remaining'],...filteredEntities.map(r=>[r.name,r.role,r.paid,r.bonuses,r.advances,r.due])];
     const csv='\\uFEFF'+rows.map(row=>row.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(',')).join('\\r\\n');const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));const a=document.createElement('a');a.href=url;a.download='malik-pos-'+section.toLowerCase()+'-analytics.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   };
-  const sectionButtons=['Products','Customers','Suppliers','Staff'];
+  const sectionButtons=['Products','Customers','Suppliers',...(canManageStaff?['Staff']:[])];
+  const overallSales=sales.reduce((n,o)=>n+totalOf(o),0);
+  const overallExpenses=expenses.filter(e=>inRange(e.date)).reduce((n,e)=>n+Math.max(0,Number(e.amount)||0),0);
+  const allItemCosts=sales.flatMap(o=>(o.items||[]).map(item=>({item,qty:Math.max(0,Number(item.qty)||0)})));
+  const costDataComplete=allItemCosts.length>0&&allItemCosts.every(x=>getItemCost(x.item)!==null);
+  const estimatedGrossProfit=costDataComplete?allItemCosts.reduce((n,x)=>n+((Number(x.item.price)||0)-getItemCost(x.item))*x.qty,0):null;
   return <div style={{display:'grid',gap:16}}>
     <div style={{...panel,background:'linear-gradient(135deg,var(--panel,#fff),var(--surface,#f8fafc))'}}>
       <div style={{display:'flex',gap:12,alignItems:'center',justifyContent:'space-between',flexWrap:'wrap'}}>
