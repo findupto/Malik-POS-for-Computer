@@ -128,7 +128,7 @@ export default function BusinessAnalytics({ orders=[], products=[], customers=[]
   ];
   const exportCsv = () => {
     const rows=section==='Products'? [['Product','SKU','Units sold','Revenue','Estimated profit'],...filteredEntities.map(r=>[r.name,r.sku,r.qty,r.revenue,r.profit??'Cost data needed'])] : section==='Customers'?[['Customer','Phone','Transactions','Sales','Due'],...filteredEntities.map(r=>[r.name,r.phone,r.visits,r.total,r.due])] : section==='Suppliers'?[['Supplier','Phone','Purchases','Paid','Due'],...filteredEntities.map(r=>[r.name,r.phone,r.total,r.paid,r.due])] : [['Staff','Role','Payments','Bonus','Advance','Estimated remaining'],...filteredEntities.map(r=>[r.name,r.role,r.paid,r.bonuses,r.advances,r.due])];
-    const csv='\\uFEFF'+rows.map(row=>row.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(',')).join('\\r\\n');const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));const a=document.createElement('a');a.href=url;a.download='malik-pos-'+section.toLowerCase()+'-analytics.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    const csv='\uFEFF'+rows.map(row=>row.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(',')).join('\r\n');const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));const a=document.createElement('a');a.href=url;a.download='malik-pos-'+section.toLowerCase()+'-analytics.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   };
   const sectionButtons=['Products','Customers','Suppliers',...(canManageStaff?['Staff']:[])];
   const overallSales=sales.reduce((n,o)=>n+totalOf(o),0);
