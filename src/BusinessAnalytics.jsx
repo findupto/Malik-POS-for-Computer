@@ -73,11 +73,11 @@ export default function BusinessAnalytics({ orders=[], products=[], customers=[]
   const productRows = useMemo(()=>{
     const map=new Map();
     const ensure=(item)=>{const key=String(item.productId??item.id??item.sku??(item.name+'|'+(item.variant||'')));const row=map.get(key)||{key,name:safeName(item.name),variant:item.variant||'',sku:item.sku||'',qty:0,revenue:0,cost:0,costKnown:true,orders:0,days:new Set(),transactions:[],cancelledQty:0,wasteQty:0,pendingQty:0};map.set(key,row);return row;};
-    for(const order of filteredOrders) { const items=order.items||[];const grossSubtotal=items.reduce((n,it)=>n+itemSale(it),0);const discount=Math.min(grossSubtotal,Math.max(0,Number(order.discount)||0));for(const item of items) {
-      const row=ensure(item);const qty=itemQuantity(item);const status=orderStatus(order);const grossSale=itemSale(item);const discountAllocated=grossSubtotal>0?discount*(grossSale/grossSubtotal):0;const sale=Math.max(0,grossSale-discountAllocated);const costUnit=catalogCost(item);const cost=costUnit===null?null:costUnit*qty;
+    for(const order of filteredOrders) { const items=order.items||[];const grossSubtotal=items.reduce((n,it)=>n+itemSale(it),0);const discount=Math.min(grossSubtotal,Math.max(0,Number(order.discount)||0));const postDiscount=Math.max(0,grossSubtotal-discount);const refund=Math.min(postDiscount,Math.max(0,Number(order.refundedTotal)||0));for(const item of items) {
+      const row=ensure(item);const qty=itemQuantity(item);const status=orderStatus(order);const grossSale=itemSale(item);const discountAllocated=grossSubtotal>0?discount*(grossSale/grossSubtotal):0;const refundAllocated=postDiscount>0?refund*(Math.max(0,grossSale-discountAllocated)/postDiscount):0;const sale=Math.max(0,grossSale-discountAllocated-refundAllocated);const costUnit=catalogCost(item);const cost=costUnit===null?null:costUnit*qty;
       if(status==='Completed'){row.qty+=qty;row.revenue+=sale;if(cost===null)row.costKnown=false;else row.cost+=cost;row.orders+=1;row.days.add(dateOf(timestampOf(order)));}
       if(status==='Cancelled')row.cancelledQty+=qty;if(status==='Waste')row.wasteQty+=qty;if(status==='Pending')row.pendingQty+=qty;
-      row.transactions.push({order,item,amount:sale,grossAmount:grossSale,discountAllocated,cost,status,profit:status==='Completed'&&cost!==null?sale-cost:null});
+      row.transactions.push({order,item,amount:sale,grossAmount:grossSale,discountAllocated,refundAllocated,cost,status,profit:status==='Completed'&&cost!==null?sale-cost:null});
     }}
     return [...map.values()].map(row=>({...row,profit:row.costKnown?row.revenue-row.cost:null})).sort((a,b)=>b.qty-a.qty);
   },[filteredOrders,products]);
