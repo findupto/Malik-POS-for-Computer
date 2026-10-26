@@ -347,3 +347,15 @@
 .command-alert-open{font-size:11px;font-weight:700;white-space:nowrap;color:var(--primary,#6366f1)}
 @media(max-width:760px){.quick-action-grid{grid-template-columns:repeat(2,minmax(0,1fr));padding:0 12px 12px}.command-alert-list{padding:12px}.command-alert-heading{align-items:flex-start;flex-direction:column;gap:4px}}
 @media(max-width:380px){.quick-action-grid{grid-template-columns:1fr}.command-alert-open{display:none}}
+
+/* Larger receipt text and safe, un-clipped footer in thermal print output. */
+@media print {
+  .receipt-modal .receipt-meta,.receipt-modal .receipt-meta span,.receipt-modal .receipt-meta b {font-size:10pt!important;line-height:1.3!important}
+  .receipt-modal .receipt-item-heading,.receipt-modal .receipt-item-heading b {font-size:10pt!important;line-height:1.25!important}
+  .receipt-modal .receipt-customer-row,.receipt-modal .receipt-customer-row span,.receipt-modal .receipt-customer-row b {font-size:10pt!important;line-height:1.25!important}
+  .receipt-modal .receipt-totals>div,.receipt-modal .receipt-totals>div span,.receipt-modal .receipt-totals>div b {font-size:10.5pt!important;line-height:1.3!important}
+  .receipt-modal .receipt-grand span,.receipt-modal .receipt-grand b {font-size:12pt!important;font-weight:900!important}
+  .receipt-modal .receipt-thanks {font-size:11pt!important;line-height:1.4!important;padding:3mm 0 6mm!important;margin-top:3mm!important;white-space:normal!important;overflow:visible!important;height:auto!important;min-height:0!important;break-inside:avoid!important;page-break-inside:avoid!important}
+  .receipt-modal .receipt-layout-footer {height:auto!important;min-height:0!important;overflow:visible!important;break-inside:avoid!important;page-break-inside:avoid!important}
+  .receipt-modal .receipt-layout-items .receipt-items>div {overflow:visible!important;white-space:normal!important}
+}
