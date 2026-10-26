@@ -4,6 +4,7 @@ const http = require('node:http');
 const { execFile } = require('node:child_process');
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { validateBackupEntries } = require('./backupValidation.cjs');
 const isDev = !app.isPackaged;
 function createWindow() {
   const win = new BrowserWindow({
@@ -269,9 +270,9 @@ async function writeDailyBackup(snapshot) {
 }
 ipcMain.handle('malik-pos:save-backup-snapshot', async (_event, snapshot) => {
   try {
-    if (!snapshot || !Array.isArray(snapshot.entries) || snapshot.entries.length > 500) return { success: false, error: 'Invalid backup snapshot.' };
-    const entries = snapshot.entries.filter(entry => entry && typeof entry.key === 'string' && entry.key.startsWith('malik-') && typeof entry.value === 'string' && !/session|token|password|credential|secret/i.test(entry.key));
-    const safeSnapshot = { snapshotAt: new Date().toISOString(), entries };
+    const validationError = validateBackupEntries(snapshot?.entries);
+    if (validationError) return { success: false, error: validationError };
+    const safeSnapshot = { snapshotAt: new Date().toISOString(), entries: snapshot.entries };
     if (Buffer.byteLength(JSON.stringify(safeSnapshot)) > 25 * 1024 * 1024) return { success: false, error: 'Backup snapshot exceeds the 25 MB safety limit.' };
     latestBackupSnapshot = safeSnapshot;
     showDriveReminderIfNeeded();
@@ -295,8 +296,8 @@ ipcMain.handle('malik-pos:select-backup-file', async () => {
     if (stat.size > 25 * 1024 * 1024) return { success: false, error: 'Backup exceeds the 25 MB safety limit.' };
     const backup = JSON.parse(await fs.readFile(file, 'utf8'));
     if (backup?.format !== 'malik-pos-local-backup-v1' || !Array.isArray(backup.entries) || !backup.entries.length || backup.entries.length > 500) return { success: false, error: 'This is not a valid Malik POS backup.' };
-    const valid = backup.entries.every(entry => entry && typeof entry.key === 'string' && entry.key.startsWith('malik-') && typeof entry.value === 'string' && !/session|token|password|credential|secret/i.test(entry.key));
-    if (!valid || Buffer.byteLength(JSON.stringify(backup)) > 25 * 1024 * 1024) return { success: false, error: 'Backup contains invalid or sensitive entries and cannot be restored.' };
+    const validationError = validateBackupEntries(backup.entries);
+    if (validationError || Buffer.byteLength(JSON.stringify(backup)) > 25 * 1024 * 1024) return { success: false, error: validationError || 'Backup exceeds the 25 MB safety limit.' };
     return { success: true, createdAt: backup.createdAt || backup.snapshotAt || '', entries: backup.entries };
   } catch (error) { return { success: false, error: String(error?.message || error).slice(0, 240) }; }
 });
