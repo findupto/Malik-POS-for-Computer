@@ -82,7 +82,7 @@ export default function BusinessAnalytics({ orders=[], products=[], customers=[]
   const chartData = useMemo(()=>{
     if(chartView==='monthly') {
       const map=new Map();
-      const add=(date,value)=>{const month=dateOf(date).slice(0,7);if(!/^\\d{4}-\\d{2}$/.test(month))return;const row=map.get(month)||{key:month,label:month,value:0};row.value+=Number(value)||0;map.set(month,row)};
+      const add=(date,value)=>{const month=dateOf(date).slice(0,7);if(!/^\d{4}-\d{2}$/.test(month))return;const row=map.get(month)||{key:month,label:month,value:0};row.value+=Number(value)||0;map.set(month,row)};
       if(section==='Products') {
         const chosen=entityId==='all'?null:productRowsWithCatalog.find(r=>String(r.key)===String(entityId));
         for(const order of sales)for(const item of order.items||[])if(!chosen||String(item.productId??item.id??item.sku??(item.name+'|'+(item.variant||'')))===String(chosen.key)||String(item.sku||'')===String(chosen.sku||'')||String(item.name||'')===String(chosen.name||''))add(order.date,Math.max(0,Number(item.qty)||0));
