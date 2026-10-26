@@ -797,3 +797,24 @@ test('records with conflicting id and uuid fields are rejected before syncing or
   assert.equal(remoteStorage.inspect('malik-orders'), remoteRecords);
   assert.equal(remoteStorage.inspect('malik-syncCursor'), '7');
 });
+
+
+test('syncSnapshot uses an exclusive browser lock to prevent overlapping window syncs', async () => {
+  const { syncSnapshot } = await import('../src/syncClient.mjs');
+  const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  const calls = [];
+  Object.defineProperty(globalThis, 'navigator', {
+    configurable: true,
+    value: { locks: { request: async (name, options, callback) => {
+      calls.push({ name, options });
+      return callback();
+    } } }
+  });
+  try {
+    await assert.rejects(() => syncSnapshot({ baseUrl: 'https://pos.example.test', storage: fakeStorage({}) }), /Sign in to the sync server first/i);
+    assert.deepEqual(calls, [{ name: 'malik-pos-sync', options: { mode: 'exclusive' } }]);
+  } finally {
+    if (originalNavigator) Object.defineProperty(globalThis, 'navigator', originalNavigator);
+    else delete globalThis.navigator;
+  }
+});
