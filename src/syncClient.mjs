@@ -333,7 +333,7 @@ export async function loginToSyncApi(baseUrl, username, password, fetchImpl = fe
   return { baseUrl: base, token: data.token, user: data.user };
 }
 
-export async function syncSnapshot({ baseUrl, token, storage, role = 'admin', fetchImpl = fetch }) {
+async function syncSnapshotUnlocked({ baseUrl, token, storage, role = 'admin', fetchImpl = fetch }) {
   const base = String(baseUrl || '').trim().replace(/\/+$/, '');
   if (!token) throw new Error('Sign in to the sync server first.');
   if (!/^https?:\/\//i.test(base)) throw new Error('Enter the API URL including http:// or https://.');
@@ -448,4 +448,13 @@ export async function syncSnapshot({ baseUrl, token, storage, role = 'admin', fe
   storage.setItem(OUTBOX_KEY, JSON.stringify(readOutbox(storage).filter(event => !sentIds.has(event.eventId) && !satisfiedEventIds.has(event.eventId))));
   captureBaseline(storage, DEFAULT_SYNC_ENTITIES, conflictKeys, role);
   return { uploaded, downloaded, cursor, conflicts: nextConflicts.length };
+}
+
+
+// Multiple windows on the same device share localStorage. Serialize sync runs so
+// one window cannot overwrite another window's cursor, baseline, or outbox mid-sync.
+export async function syncSnapshot(options) {
+  const locks = globalThis.navigator?.locks;
+  if (typeof locks?.request !== 'function') return syncSnapshotUnlocked(options);
+  return locks.request('malik-pos-sync', { mode: 'exclusive' }, () => syncSnapshotUnlocked(options));
 }
