@@ -109,6 +109,20 @@ export default function App(){
  const [cart,setCart]=useState([]); const [timeChargeSessions,setTimeChargeSessions]=useState(()=>read('timeChargeSessions',[])); const [timeChargeRate,setTimeChargeRate]=useState(()=>read('timeChargeRate',0)); const [timeChargeGrace,setTimeChargeGrace]=useState(()=>read('timeChargeGrace',60)); const [timeChargeSpot,setTimeChargeSpot]=useState(''); const [timeChargeCustomer,setTimeChargeCustomer]=useState('Walk-in Customer'); const [clockNow,setClockNow]=useState(Date.now());
  useEffect(()=>{const updateSession=()=>{try{setOwnerCloudSession(JSON.parse(localStorage.getItem('malik-syncSession')||'null'))}catch{setOwnerCloudSession(null)}};window.addEventListener('malik-sync-session-changed',updateSession);return()=>window.removeEventListener('malik-sync-session-changed',updateSession)},[]);
  useEffect(()=>{
+  if(!ownerCloudSession?.baseUrl||!ownerCloudSession?.token)return;
+  let active=true;
+  fetch(new URL('/api/me',ownerCloudSession.baseUrl).toString(),{headers:{authorization:'Bearer '+ownerCloudSession.token}}).then(async response=>{if(!response.ok)throw new Error('Session profile refresh failed');return response.json()}).then(user=>{
+   if(!active)return;
+   setOwnerCloudSession(current=>{
+    if(!current||current.token!==ownerCloudSession.token)return current;
+    const updated={...current,user:{...current.user,...user}};
+    try{localStorage.setItem('malik-syncSession',JSON.stringify(updated))}catch{}
+    return updated;
+   });
+  }).catch(()=>{});
+  return()=>{active=false};
+ },[ownerCloudSession?.baseUrl,ownerCloudSession?.token]);
+ useEffect(()=>{
    if(page!=='Overview'||ownerCloudSession?.user?.role!=='admin'||ownerCloudSession?.user?.isGlobalAdmin===false||!ownerCloudSession?.baseUrl||!ownerCloudSession?.token)return;
    let active=true;
    fetch(new URL('/api/admin/locations',ownerCloudSession.baseUrl).toString(),{headers:{authorization:'Bearer '+ownerCloudSession.token}}).then(async response=>{const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||'Locations could not be loaded');return data}).then(data=>{if(!active)return;setOwnerLocations(data.locations||[]);setOwnerOverviewLocationId(current=>current||ownerCloudSession.user?.locationId||data.locations?.[0]?.id||'')}).catch(error=>{if(active)setOwnerOverviewError(error?.message||'Locations could not be loaded')});
