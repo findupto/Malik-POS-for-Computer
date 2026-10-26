@@ -150,6 +150,7 @@ export default function BusinessAnalytics({ orders=[], products=[], customers=[]
   const costDataComplete=orderCosts.length>0&&orderCosts.every(x=>x.known);
   const estimatedGrossProfit=costDataComplete?orderCosts.reduce((n,x)=>n+x.sale-x.cost,0):null;
   const recordedWasteCost=wasteRecords.filter(w=>inRange(w.date||w.createdAt)).reduce((n,w)=>n+Math.max(0,Number(w.cost)||0),0);
+  const estimatedNetProfit=estimatedGrossProfit===null?null:estimatedGrossProfit-overallExpenses-recordedWasteCost;
   const lossMakingProducts=productRowsWithCatalog.filter(p=>p.profit!==null&&p.profit<0).length;
   return <div style={{display:'grid',gap:16}}>
     <div style={{...panel,background:'linear-gradient(135deg,var(--panel,#fff),var(--surface,#f8fafc))'}}>
@@ -171,6 +172,7 @@ export default function BusinessAnalytics({ orders=[], products=[], customers=[]
       <div style={panel}><div style={{display:'flex',alignItems:'center',gap:8,opacity:.72,fontSize:12}}><TrendingUp size={16}/> Recorded expenses</div><div style={{fontSize:22,fontWeight:800,marginTop:8}}>{money(overallExpenses)}</div><small>Selected date range</small></div>
       <div style={panel}><div style={{display:'flex',alignItems:'center',gap:8,opacity:.72,fontSize:12}}><BarChart3 size={16}/> Gross profit estimate</div><div style={{fontSize:22,fontWeight:800,marginTop:8}}>{estimatedGrossProfit===null?'Cost data needed':money(estimatedGrossProfit)}</div><small>{estimatedGrossProfit===null?'Record unit costs on sold items':'Before operating expenses'}</small></div>
       <div style={panel}><div style={{fontSize:12,opacity:.72}}>Recorded stock-waste cost</div><div style={{fontSize:22,fontWeight:800,marginTop:8}}>{money(recordedWasteCost)}</div><small>{wasteRecords.filter(w=>inRange(w.date||w.createdAt)).length} recorded waste entries</small></div>
+      <div style={panel}><div style={{fontSize:12,opacity:.72}}>Estimated net profit / loss</div><div style={{fontSize:22,fontWeight:800,marginTop:8,color:estimatedNetProfit!==null&&estimatedNetProfit<0?'#dc2626':'inherit'}}>{estimatedNetProfit===null?'Cost data needed':money(estimatedNetProfit)}</div><small>Gross profit minus recorded expenses and recorded stock waste</small></div>
       <div style={panel}><div style={{fontSize:12,opacity:.72}}>Loss-making products</div><div style={{fontSize:22,fontWeight:800,marginTop:8}}>{lossMakingProducts}</div><small>Only products with known costs</small></div>
       {metric.map(([label,value],i)=><div key={label} style={panel}><div style={{display:'flex',alignItems:'center',gap:8,opacity:.72,fontSize:12}}>{i===0?<TrendingUp size={16}/>:i===1?<CircleDollarSign size={16}/>:i===2?<Filter size={16}/>:<BarChart3 size={16}/>} {label}</div><div style={{fontSize:22,fontWeight:800,marginTop:8,overflowWrap:'anywhere'}}>{value}</div></div>)}
       {['Completed','Pending','Cancelled','Waste','Refunded'].map(status=><div key={status} style={panel}><div style={{fontSize:12,opacity:.72}}>{status} orders</div><div style={{fontSize:22,fontWeight:800,marginTop:8}}>{orderStatusTotals[status]||0}</div><small>{money(orderStatusTotals[status+'Value']||0)} order value</small></div>)}
