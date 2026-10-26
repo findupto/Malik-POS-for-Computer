@@ -15,7 +15,7 @@ test('accepts a non-empty backup with unique safe Malik POS keys', () => {
 test('rejects empty, missing, or oversized entry collections', () => {
   assert.match(validateBackupEntries([]), /between 1 and 500/i);
   assert.match(validateBackupEntries(null), /between 1 and 500/i);
-  assert.match(validateBackupEntries(Array.from({ length: 501 }, (_, i) => ({ key: 'malik-' + i, value: '[]' })), /between 1 and 500/i);
+  assert.match(validateBackupEntries(Array.from({ length: 501 }, (_, i) => ({ key: 'malik-' + i, value: '[]' }))), /between 1 and 500/i);
 });
 
 test('rejects malformed or sensitive entries rather than silently dropping them', () => {
