@@ -154,7 +154,7 @@ export default function BusinessAnalytics({ orders=[], products=[], customers=[]
   return <div style={{display:'grid',gap:16}}>
     <div style={{...panel,background:'linear-gradient(135deg,var(--panel,#fff),var(--surface,#f8fafc))'}}>
       <div style={{display:'flex',gap:12,alignItems:'center',justifyContent:'space-between',flexWrap:'wrap'}}>
-        <div><div style={{fontSize:11,fontWeight:800,letterSpacing:'.1em',opacity:.65}}>BUSINESS INTELLIGENCE</div><h2 style={{margin:'5px 0'}}>Detailed analytics</h2><p style={{margin:0,opacity:.72}}>Filter by date, search every record, click a chart to open a profile and transaction history.</p></div>
+        <div><div style={{fontSize:11,fontWeight:800,letterSpacing:'.1em',opacity:.65}}>BUSINESS INTELLIGENCE</div><h2 style={{margin:'5px 0'}}>Detailed analytics</h2><p style={{margin:0,opacity:.72}}>Filter by date, status, search every record, click charts to open a profile and transaction history.</p><small style={{display:'block',marginTop:6,opacity:.65}}>Profit is estimated only from recorded unit or recipe costs. Discount/refund allocations are proportional; returned-stock cost, labor, taxes, and unrecorded expenses may require reconciliation.</small></div>
         <button className="btn btn-secondary" onClick={exportCsv}>Export filtered CSV</button>
       </div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10,marginTop:16}}>
