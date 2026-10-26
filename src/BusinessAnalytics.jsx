@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { estimateOrderIngredientCost } from './FastFoodStock.jsx';
 import { BarChart3, Users, Package, BriefcaseBusiness, CalendarDays, Search, TrendingUp, CircleDollarSign, Filter, ChevronRight } from 'lucide-react';
 
 const money = n => 'Rs. ' + new Intl.NumberFormat('en-PK', { maximumFractionDigits: 0 }).format(Number(n) || 0);
@@ -67,7 +68,7 @@ export default function BusinessAnalytics({ orders=[], products=[], customers=[]
   const sales = useMemo(()=>filteredOrders.filter(completed),[filteredOrders]);
   const visibleOrders = useMemo(()=>filteredOrders.filter(o=>!search||[o.id,o.customer,o.payment,o.status,(o.items||[]).map(i=>i.name+' '+i.sku).join(' ')].join(' ').toLowerCase().includes(search.toLowerCase())),[filteredOrders,search]);
   const orderStatusTotals = useMemo(()=>rangeOrders.reduce((out,o)=>{const status=orderStatus(o);out[status]=(out[status]||0)+1;out[status+'Value']=(out[status+'Value']||0)+(Number(o.total)||0);return out;},{ }),[rangeOrders]);
-  const catalogCost = item => { const p=products.find(p=>String(p.id)===String(item?.productId??item?.id??'') || (item?.sku&&String(p.sku)===String(item.sku)) || (item?.name&&String(p.name)===String(item.name))); const cost=getItemCost(item); return cost===null&&p?getItemCost(p):cost; };
+  const catalogCost = item => { const p=products.find(p=>String(p.id)===String(item?.productId??item?.id??'') || (item?.sku&&String(p.sku)===String(item.sku)) || (item?.name&&String(p.name)===String(item.name))); const direct=getItemCost(item)??(p?getItemCost(p):null); if(direct!==null)return direct;try{const qty=itemQuantity(item);const estimate=estimateOrderIngredientCost([item]);if(qty>0&&Number(estimate?.coveredUnits)>=qty&&Number(estimate?.uncoveredUnits)===0&&Number.isFinite(Number(estimate?.cost)))return Number(estimate.cost)/qty;}catch{}return null; };
   const itemCostTotal = item => {const cost=catalogCost(item);return cost===null?null:cost*itemQuantity(item);};
   const productRows = useMemo(()=>{
     const map=new Map();
