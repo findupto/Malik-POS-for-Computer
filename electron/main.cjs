@@ -321,7 +321,7 @@ app.whenReady().then(() => {
       notice.show(); setTimeout(() => notice.close(), 1000);
     }
   };
-  backupScheduleTimer = setInterval(() => { runBackupSchedule().catch(error => console.error('Scheduled Malik POS backup failed:', error)); }, 60 * 60 * 1000);
+  backupScheduleTimer = setInterval(() => { runBackupSchedule().catch(error => console.error('Scheduled Malik POS backup failed:', error)); }, 15 * 60 * 1000);
 
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
