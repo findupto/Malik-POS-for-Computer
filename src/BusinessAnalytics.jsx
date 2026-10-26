@@ -94,13 +94,14 @@ export default function BusinessAnalytics({ orders=[], products=[], customers=[]
   const chartData = useMemo(()=>{
     if(chartView==='monthly') {
       const map=new Map();
+      const trendOrders=statusFilter==='all'?sales:filteredOrders;
       const add=(date,value)=>{const month=dateOf(date).slice(0,7);if(!/^\d{4}-\d{2}$/.test(month))return;const row=map.get(month)||{key:month,label:month,value:0};row.value+=Number(value)||0;map.set(month,row)};
       if(section==='Products') {
         const chosen=entityId==='all'?null:productRowsWithCatalog.find(r=>String(r.key)===String(entityId));
-        for(const order of sales)for(const item of order.items||[])if(!chosen||String(item.productId??item.id??item.sku??(item.name+'|'+(item.variant||'')))===String(chosen.key)||String(item.sku||'')===String(chosen.sku||'')||String(item.name||'')===String(chosen.name||''))add(order.date,Math.max(0,Number(item.qty)||0));
+        for(const order of trendOrders)for(const item of order.items||[])if(!chosen||String(item.productId??item.id??item.sku??(item.name+'|'+(item.variant||'')))===String(chosen.key)||String(item.sku||'')===String(chosen.sku||'')||String(item.name||'')===String(chosen.name||''))add(order.date,Math.max(0,Number(item.qty)||0));
       } else if(section==='Customers') {
         const chosen=entityId==='all'?null:customerRows.find(r=>String(r.key)===String(entityId));
-        for(const order of sales)if(!chosen||safeName(order.customer)===safeName(chosen.name))add(order.date,totalOf(order));
+        for(const order of trendOrders)if(!chosen||safeName(order.customer)===safeName(chosen.name))add(order.date,totalOf(order));
       } else if(section==='Suppliers') {
         const chosen=entityId==='all'?null:supplierRows.find(r=>String(r.key)===String(entityId));
         for(const purchase of stockPurchases)if(inRange(purchase.date||purchase.createdAt)&&(!chosen||safeName(purchase.supplier)===safeName(chosen.name)))add(purchase.date||purchase.createdAt,Number(purchase.total)||0);
@@ -114,7 +115,7 @@ export default function BusinessAnalytics({ orders=[], products=[], customers=[]
     if(section==='Customers') return filteredEntities.slice(0,12).map(r=>({key:r.key,label:r.name,value:r.total}));
     if(section==='Suppliers') return filteredEntities.slice(0,12).map(r=>({key:r.key,label:r.name,value:r.total}));
     return filteredEntities.slice(0,12).map(r=>({key:r.key,label:r.name,value:r.paid}));
-  },[chartView,section,filteredEntities,entityId,sales,productRowsWithCatalog,customerRows,supplierRows,staffRows,stockPurchases,staffPayments,from,to]);
+  },[chartView,section,filteredEntities,entityId,sales,filteredOrders,statusFilter,productRowsWithCatalog,customerRows,supplierRows,staffRows,stockPurchases,staffPayments,from,to]);
   const selectedTransactions = selected ? section==='Products' ? [...(selected.transactions||[]),...wasteRecords.filter(w=>String(w.productId??w.product_id??'')===String(selected.key)||(w.sku&&String(w.sku)===String(selected.sku))||safeName(w.productName??w.product_name??w.name)===safeName(selected.name)).map(w=>({...w,type:'Stock waste',status:'Waste',date:w.date||w.createdAt,cost:Number(w.cost)||null,amount:null})),...inventoryMovements.filter(m=>String(m.product_id??m.productId??'')===String(selected.key)||(m.sku&&String(m.sku)===String(selected.sku))||safeName(m.product_name??m.productName??m.name)===safeName(selected.name)).map(m=>({...m,type:m.reason||m.type||'Stock movement',date:m.occurred_at||m.date||m.createdAt,amount:m.cost??m.value??null,status:m.reason||m.type||'Stock movement'}))] : section==='Customers' ? [...(selected.transactions||[]),...(selected.payments||[])] : section==='Suppliers' ? [...(selected.transactions||[]),...(selected.payments||[])] : [...(selected.payments||[]),...(selected.attendance||[]).map(a=>({...a,type:'Attendance'}))] : [];
   const selectedTxFiltered = selectedTransactions.filter(tx=>{const order=tx.order||tx;const date=eventTimestamp(tx);const txDate=dateOf(date);const status=String(tx.status||orderStatus(order)).toLowerCase();const statusMatch=statusFilter==='all'||!['Products','Customers'].includes(section)||status===statusFilter||(statusFilter==='waste'&&/waste|damage|spoiled|write.?off/.test(status));return inRange(date)&&statusMatch&&(!selectedBucket || String(order.id??tx.id??tx.date??'')===selectedBucket || txDate.startsWith(selectedBucket));});
   const metric = section==='Products' ? [
