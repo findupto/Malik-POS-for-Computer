@@ -4,6 +4,7 @@ A desktop point-of-sale workspace built with React, Vite, and Electron.
 
 ## Included features
 - POS checkout, cart editing, discounts, configurable GST and service charges, cash/card/digital payments, printable receipts, and transaction history
+- Park/hold multiple unfinished carts with customer, order type, delivery details, notes, discount, payment selection, tax toggle, and items preserved; resume later without overwriting a non-empty active cart
 - Product catalog search with SKU/barcode matching, partial/fuzzy terms, and keyboard shortcuts for common counter workflows
 - Product/category sales reporting, date-range filters, CSV exports, and dashboard net-sales calculations that account for recorded refunds
 - Customer and supplier directories with search, filters, credit/payable visibility, and CSV exports
