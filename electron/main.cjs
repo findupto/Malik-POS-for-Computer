@@ -4,6 +4,7 @@ const http = require('node:http');
 const { execFile } = require('node:child_process');
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const os = require('node:os');
 const { validateBackupEntries } = require('./backupValidation.cjs');
 const isDev = !app.isPackaged;
 function createWindow() {
@@ -237,6 +238,44 @@ ipcMain.handle('malik-pos:disconnect-google-drive', async () => {
   catch (error) { return { success: false, error: String(error?.message || error).slice(0, 200) }; }
 });
 
+const cloudFolderConfigPath = () => path.join(app.getPath('userData'), 'cloud-folder.json');
+function readCloudFolderConfig() {
+  try {
+    const config = JSON.parse(require('node:fs').readFileSync(cloudFolderConfigPath(), 'utf8'));
+    return config && typeof config.folderPath === 'string' && config.folderPath ? config : null;
+  } catch { return null; }
+}
+ipcMain.handle('malik-pos:choose-cloud-folder', async () => {
+  try {
+    const picked = await dialog.showOpenDialog({ title: 'Choose a cloud-synced folder for Malik POS backups', properties: ['openDirectory', 'createDirectory'] });
+    if (picked.canceled || !picked.filePaths?.[0]) return { success: false, cancelled: true };
+    const folderPath = picked.filePaths[0];
+    await fs.access(folderPath);
+    const config = { folderPath, selectedAt: new Date().toISOString() };
+    const temp = cloudFolderConfigPath() + '.tmp';
+    await fs.writeFile(temp, JSON.stringify(config), { encoding: 'utf8', mode: 0o600 });
+    await fs.rename(temp, cloudFolderConfigPath());
+    await fs.mkdir(path.join(folderPath, 'Malik POS Backups'), { recursive: true });
+    return { success: true, folderPath };
+  } catch (error) { return { success: false, error: String(error?.message || error).slice(0, 240) }; }
+});
+ipcMain.handle('malik-pos:cloud-folder-status', async () => {
+  const config = readCloudFolderConfig();
+  return { connected: Boolean(config?.folderPath), folderPath: config?.folderPath || '', lastBackupAt: config?.lastBackupAt || '' };
+});
+ipcMain.handle('malik-pos:open-cloud-folder', async () => {
+  try {
+    const config = readCloudFolderConfig();
+    if (!config?.folderPath) return { success: false, error: 'Choose a cloud-synced folder first.' };
+    const error = await shell.openPath(config.folderPath);
+    return error ? { success: false, error } : { success: true };
+  } catch (error) { return { success: false, error: String(error?.message || error).slice(0, 240) }; }
+});
+ipcMain.handle('malik-pos:disconnect-cloud-folder', async () => {
+  try { await fs.unlink(cloudFolderConfigPath()).catch(() => {}); return { success: true }; }
+  catch (error) { return { success: false, error: String(error?.message || error).slice(0, 200) }; }
+});
+
 const BACKUP_RETENTION_DAYS = 30;
 let latestBackupSnapshot = null;
 let backupScheduleTimer = null;
@@ -244,9 +283,9 @@ let driveReminderDay = '';
 let driveFailureNoticeDay = '';
 function showDriveReminderIfNeeded() {
   const today = new Date().toISOString().slice(0, 10);
-  if (readDriveConfig()?.refreshToken || driveReminderDay === today || !Notification.isSupported()) return;
+  if (readDriveConfig()?.refreshToken || readCloudFolderConfig()?.folderPath || driveReminderDay === today || !Notification.isSupported()) return;
   driveReminderDay = today;
-  const notice = new Notification({ title: 'Malik POS backup reminder', body: 'Connect Google Drive in Settings to keep an off-device backup.' });
+  const notice = new Notification({ title: 'Malik POS backup reminder', body: 'Set up a cloud backup folder in Settings to keep an off-device backup.' });
   notice.show();
   setTimeout(() => notice.close(), 1000);
 }
@@ -266,7 +305,28 @@ async function writeDailyBackup(snapshot) {
   let cloud = { connected: false };
   try { cloud = await uploadBackupToDrive(file, day); }
   catch (error) { console.error('Malik POS Google Drive backup failed:', error); cloud = { success: false, connected: true, error: String(error?.message || error).slice(0, 240) }; }
-  return { success: true, file, day, bytes: Buffer.byteLength(payload), cloud };
+  let cloudFolder = { connected: false };
+  const folderConfig = readCloudFolderConfig();
+  if (folderConfig?.folderPath) {
+    try {
+      const safeDevice = os.hostname().replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80) || 'POS-Computer';
+      const deviceDir = path.join(folderConfig.folderPath, 'Malik POS Backups', safeDevice);
+      await fs.mkdir(deviceDir, { recursive: true });
+      await fs.copyFile(file, path.join(deviceDir, path.basename(file)));
+      const latestTemp = path.join(deviceDir, 'latest.json.tmp');
+      await fs.writeFile(latestTemp, payload, { encoding: 'utf8', mode: 0o600 });
+      await fs.rename(latestTemp, path.join(deviceDir, 'latest.json'));
+      const updated = { ...folderConfig, lastBackupAt: new Date().toISOString(), deviceName: safeDevice };
+      const configTemp = cloudFolderConfigPath() + '.tmp';
+      await fs.writeFile(configTemp, JSON.stringify(updated), { encoding: 'utf8', mode: 0o600 });
+      await fs.rename(configTemp, cloudFolderConfigPath());
+      cloudFolder = { success: true, connected: true, folderPath: folderConfig.folderPath, deviceName: safeDevice, lastBackupAt: updated.lastBackupAt };
+    } catch (error) {
+      console.error('Malik POS cloud-folder backup failed:', error);
+      cloudFolder = { success: false, connected: true, error: String(error?.message || error).slice(0, 240) };
+    }
+  }
+  return { success: true, file, day, bytes: Buffer.byteLength(payload), cloud, cloudFolder };
 }
 ipcMain.handle('malik-pos:save-backup-snapshot', async (_event, snapshot) => {
   try {
