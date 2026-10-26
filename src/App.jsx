@@ -394,7 +394,7 @@ async function makeReceiptRasterPayload(order,type='customer'){
   await new Promise((resolve,reject)=>{if(doc.readyState==='complete')resolve();else{frame.onload=resolve;setTimeout(()=>reject(new Error('Timed out rendering the receipt image.')),5000)}});
   await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
   const body=doc.body;
-  body.style.width=widthDots+'px';body.style.minWidth=widthDots+'px';body.style.maxWidth=widthDots+'px';body.style.margin='0';body.style.padding='8px';body.style.boxSizing='border-box';
+  body.style.width=widthDots+'px';body.style.minWidth=widthDots+'px';body.style.maxWidth=widthDots+'px';body.style.margin='0';body.style.padding='0';body.style.boxSizing='border-box';
   const height=Math.max(1,Math.min(12000,Math.ceil(body.scrollHeight+2)));
   const css=Array.from(doc.querySelectorAll('style')).map(node=>node.textContent).join('\n');
   const content=new XMLSerializer().serializeToString(body);
