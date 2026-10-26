@@ -453,8 +453,14 @@ async function syncSnapshotUnlocked({ baseUrl, token, storage, role = 'admin', f
 
 // Multiple windows on the same device share localStorage. Serialize sync runs so
 // one window cannot overwrite another window's cursor, baseline, or outbox mid-sync.
+let syncQueue = Promise.resolve();
 export async function syncSnapshot(options) {
   const locks = globalThis.navigator?.locks;
-  if (typeof locks?.request !== 'function') return syncSnapshotUnlocked(options);
-  return locks.request('malik-pos-sync', { mode: 'exclusive' }, () => syncSnapshotUnlocked(options));
+  if (typeof locks?.request === 'function') {
+    return locks.request('malik-pos-sync', { mode: 'exclusive' }, () => syncSnapshotUnlocked(options));
+  }
+  // Keep the single-renderer fallback safe on older browsers without Web Locks.
+  const run = syncQueue.then(() => syncSnapshotUnlocked(options), () => syncSnapshotUnlocked(options));
+  syncQueue = run.then(() => undefined, () => undefined);
+  return run;
 }
