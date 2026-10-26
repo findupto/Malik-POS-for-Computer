@@ -64,7 +64,7 @@ ipcMain.handle('malik-pos:print-escpos', async (_event, options = {}) => {
     if (raster.length !== widthBytes * height || raster.length > 1200000) return { success: false, error: 'Receipt image is too large or incomplete.' };
     const xL = widthBytes & 0xff, xH = (widthBytes >> 8) & 0xff, yL = height & 0xff, yH = (height >> 8) & 0xff;
     const header = Buffer.from([0x1b,0x40,0x1b,0x61,0x00,0x1d,0x76,0x30,0x00,xL,xH,yL,yH]);
-    const payload = Buffer.concat([header,raster,Buffer.from([0x0a,0x0a,0x0a,0x0a,0x0a,0x0a,0x1d,0x56,0x00])]);
+    const payload = Buffer.concat([header,raster,Buffer.from([0x0a,0x0a,0x1d,0x56,0x00])]);
     const payloadFile = path.join(app.getPath('temp'), 'malik-pos-print-' + process.pid + '-' + Date.now() + '.bin');
     try { await fs.writeFile(payloadFile, payload); } catch (error) { return { success:false, error:'Could not prepare receipt data: ' + String(error && error.message || error).slice(0,180) }; }
     const safeFile = payloadFile.replace(/'/g, "''");
@@ -106,7 +106,7 @@ ipcMain.handle('malik-pos:print-html', async (event, options = {}) => {
   const { BrowserWindow } = require('electron');
   if (typeof options.html !== 'string' || !options.html.includes('<body>')) return { success: false, error: 'Receipt HTML is missing' };
   const width = options.pageSize === '58mm' ? 58000 : 80000;
-  const height = Math.max(80000, Math.min(600000, Number(options.pageHeightMicrons) || 180000));
+  const height = Math.max(25000, Math.min(600000, Number(options.pageHeightMicrons) || 100000));
   const printWin = new BrowserWindow({ show: false, width: Math.round(width / 264.583), height: 1200, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false } });
   try {
     await printWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(options.html));
