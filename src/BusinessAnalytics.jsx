@@ -79,11 +79,29 @@ export default function BusinessAnalytics({ orders=[], products=[], customers=[]
   },[section,productRowsWithCatalog,customerRows,supplierRows,staffRows,entityId,search]);
   const selected = filteredEntities.find(row=>String(row.key)===String(selectedRecord)) || filteredEntities[0] || null;
   const chartData = useMemo(()=>{
+    if(chartView==='monthly') {
+      const map=new Map();
+      const add=(date,value)=>{const month=dateOf(date).slice(0,7);if(!/^\\d{4}-\\d{2}$/.test(month))return;const row=map.get(month)||{key:month,label:month,value:0};row.value+=Number(value)||0;map.set(month,row)};
+      if(section==='Products') {
+        const chosen=entityId==='all'?null:productRowsWithCatalog.find(r=>String(r.key)===String(entityId));
+        for(const order of sales)for(const item of order.items||[])if(!chosen||String(item.productId??item.id??item.sku??(item.name+'|'+(item.variant||'')))===String(chosen.key)||String(item.sku||'')===String(chosen.sku||'')||String(item.name||'')===String(chosen.name||''))add(order.date,Math.max(0,Number(item.qty)||0));
+      } else if(section==='Customers') {
+        const chosen=entityId==='all'?null:customerRows.find(r=>String(r.key)===String(entityId));
+        for(const order of sales)if(!chosen||safeName(order.customer)===safeName(chosen.name))add(order.date,totalOf(order));
+      } else if(section==='Suppliers') {
+        const chosen=entityId==='all'?null:supplierRows.find(r=>String(r.key)===String(entityId));
+        for(const purchase of stockPurchases)if(inRange(purchase.date||purchase.createdAt)&&(!chosen||safeName(purchase.supplier)===safeName(chosen.name)))add(purchase.date||purchase.createdAt,Number(purchase.total)||0);
+      } else {
+        const chosen=entityId==='all'?null:staffRows.find(r=>String(r.key)===String(entityId));
+        for(const payment of staffPayments)if(inRange(payment.date||payment.createdAt)&&(!chosen||String(payment.staffName??payment.employeeName??payment.name??'')===String(chosen.name)||String(payment.staffId??payment.employeeId??payment.staff_id??'')===String(chosen.key)))add(payment.date||payment.createdAt,Number(payment.amount)||0);
+      }
+      return [...map.values()].sort((a,b)=>a.key.localeCompare(b.key));
+    }
     if(section==='Products') return filteredEntities.slice(0,12).map(r=>({key:r.key,label:r.name,value:r.qty}));
     if(section==='Customers') return filteredEntities.slice(0,12).map(r=>({key:r.key,label:r.name,value:r.total}));
     if(section==='Suppliers') return filteredEntities.slice(0,12).map(r=>({key:r.key,label:r.name,value:r.total}));
     return filteredEntities.slice(0,12).map(r=>({key:r.key,label:r.name,value:r.paid}));
-  },[section,filteredEntities]);
+  },[chartView,section,filteredEntities,entityId,sales,productRowsWithCatalog,customerRows,supplierRows,staffRows,stockPurchases,staffPayments,from,to]);
   const selectedTransactions = selected ? section==='Products' ? selected.transactions||[] : section==='Customers' ? selected.transactions||[] : section==='Suppliers' ? selected.transactions||[] : [...(selected.payments||[]),...(selected.attendance||[]).map(a=>({...a,type:'Attendance'}))] : [];
   const selectedTxFiltered = selectedTransactions.filter(tx=>{const order=tx.order||tx;const txDate=dateOf(order.date||tx.date||tx.createdAt);return !selectedBucket || String(order.id??tx.id??tx.date??'')===selectedBucket || txDate.startsWith(selectedBucket);});
   const metric = section==='Products' ? [
