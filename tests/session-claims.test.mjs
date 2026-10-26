@@ -20,9 +20,13 @@ test('rejects missing or non-object claims', () => {
   }
 });
 
-test('rejects sessions without a subject or location scope', () => {
-  assert.equal(hasValidSessionClaims({ ...validClaims, sub: '' }, now), false);
-  assert.equal(hasValidSessionClaims({ ...validClaims, locationId: null }, now), false);
+test('rejects sessions without a valid string subject or location scope', () => {
+  for (const sub of ['', '  ', null, 42, {}, 'x'.repeat(201)]) {
+    assert.equal(hasValidSessionClaims({ ...validClaims, sub }, now), false);
+  }
+  for (const locationId of ['', '  ', null, 42, {}, 'x'.repeat(201)]) {
+    assert.equal(hasValidSessionClaims({ ...validClaims, locationId }, now), false);
+  }
 });
 
 test('rejects missing, malformed, or expired expiration timestamps', () => {
