@@ -158,7 +158,7 @@ const server = http.createServer(async (req, res) => {
         loginCleanupCounter = 0;
         await pool.query(`DELETE FROM login_rate_limits WHERE window_started_at <= now() - ($1 * interval '1 minute')`, [LOGIN_WINDOW_MINUTES]).catch(error => console.error('Login rate-limit cleanup failed:', error.message));
       }
-      const found = await pool.query('SELECT id,location_id,username,password_hash,display_name,role,active,session_version FROM staff_users WHERE username=$1', [username]);
+      const found = await pool.query('SELECT id,location_id,username,password_hash,display_name,role,active,session_version,is_global_admin FROM staff_users WHERE username=$1', [username]);
       const user = found.rows[0];
       if (!user || !user.active || !(await verifyPassword(password, user.password_hash))) {
         return send(res, 401, { error: 'Invalid username or password.' });
