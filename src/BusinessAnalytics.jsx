@@ -57,34 +57,36 @@ export default function BusinessAnalytics({ orders=[], products=[], customers=[]
   const [entityId,setEntityId] = useState('all');
   const [chartMode,setChartMode] = useState('bar');
   const [chartView,setChartView] = useState('compare');
+  const [statusFilter,setStatusFilter] = useState('all');
   const [selectedBucket,setSelectedBucket] = useState('');
   const [selectedRecord,setSelectedRecord] = useState('');
   const inRange = value => { const date=dateOf(value); return (!from || (date && date>=from)) && (!to || (date && date<=to)); };
   const rangeOrders = useMemo(()=>orders.filter(o=>inRange(timestampOf(o))),[orders,from,to]);
-  const sales = useMemo(()=>rangeOrders.filter(completed),[rangeOrders]);
-  const visibleOrders = useMemo(()=>rangeOrders.filter(o=>!search||[o.id,o.customer,o.payment,o.status,(o.items||[]).map(i=>i.name+' '+i.sku).join(' ')].join(' ').toLowerCase().includes(search.toLowerCase())),[rangeOrders,search]);
+  const filteredOrders = useMemo(()=>statusFilter==='all'?rangeOrders:rangeOrders.filter(o=>orderStatus(o).toLowerCase()===statusFilter),[rangeOrders,statusFilter]);
+  const sales = useMemo(()=>filteredOrders.filter(completed),[filteredOrders]);
+  const visibleOrders = useMemo(()=>filteredOrders.filter(o=>!search||[o.id,o.customer,o.payment,o.status,(o.items||[]).map(i=>i.name+' '+i.sku).join(' ')].join(' ').toLowerCase().includes(search.toLowerCase())),[filteredOrders,search]);
   const orderStatusTotals = useMemo(()=>rangeOrders.reduce((out,o)=>{const status=orderStatus(o);out[status]=(out[status]||0)+1;out[status+'Value']=(out[status+'Value']||0)+(Number(o.total)||0);return out;},{ }),[rangeOrders]);
   const catalogCost = item => { const p=products.find(p=>String(p.id)===String(item?.productId??item?.id??'') || (item?.sku&&String(p.sku)===String(item.sku)) || (item?.name&&String(p.name)===String(item.name))); const cost=getItemCost(item); return cost===null&&p?getItemCost(p):cost; };
   const itemCostTotal = item => {const cost=catalogCost(item);return cost===null?null:cost*itemQuantity(item);};
   const productRows = useMemo(()=>{
     const map=new Map();
     const ensure=(item)=>{const key=String(item.productId??item.id??item.sku??(item.name+'|'+(item.variant||'')));const row=map.get(key)||{key,name:safeName(item.name),variant:item.variant||'',sku:item.sku||'',qty:0,revenue:0,cost:0,costKnown:true,orders:0,days:new Set(),transactions:[],cancelledQty:0,wasteQty:0,pendingQty:0};map.set(key,row);return row;};
-    for(const order of rangeOrders) for(const item of order.items||[]) {
+    for(const order of filteredOrders) for(const item of order.items||[]) {
       const row=ensure(item);const qty=itemQuantity(item);const status=orderStatus(order);const sale=itemSale(item);const costUnit=catalogCost(item);const cost=costUnit===null?null:costUnit*qty;
       if(status==='Completed'){row.qty+=qty;row.revenue+=sale;if(cost===null)row.costKnown=false;else row.cost+=cost;row.orders+=1;row.days.add(dateOf(timestampOf(order)));}
       if(status==='Cancelled')row.cancelledQty+=qty;if(status==='Waste')row.wasteQty+=qty;if(status==='Pending')row.pendingQty+=qty;
       row.transactions.push({order,item,amount:sale,cost,status,profit:status==='Completed'&&cost!==null?sale-cost:null});
     }
     return [...map.values()].map(row=>({...row,profit:row.costKnown?row.revenue-row.cost:null})).sort((a,b)=>b.qty-a.qty);
-  },[rangeOrders,products]);
+  },[filteredOrders,products]);
   const productRowsWithCatalog = useMemo(()=>products.map(p=>{const row=productRows.find(x=>String(x.key)===String(p.id)||String(x.sku)===String(p.sku)||x.name===p.name);const currentCost=getItemCost(p);return {...(row||{key:String(p.id),name:p.name,variant:p.variant||'',sku:p.sku||'',qty:0,revenue:0,cost:0,costKnown:currentCost!==null,profit:0,orders:0,days:new Set(),transactions:[],cancelledQty:0,wasteQty:0,pendingQty:0}),key:String(p.id??row?.key),name:p.name||row?.name,sku:p.sku||row?.sku||'',stock:Number(p.stock??p.quantity??p.remainingStock)||0,unitCost:currentCost,minStock:Number(p.minStock??p.minimumStock??p.reorderLevel)||0,stockValue:currentCost===null?null:currentCost*Math.max(0,Number(p.stock??p.quantity??p.remainingStock)||0),profit:row?row.profit:null}}),[products,productRows]);
-  const customerRows = useMemo(()=>customers.map(c=>{const history=rangeOrders.filter(o=>safeName(o.customer)===safeName(c.name));const tx=history.filter(completed);const paid=tx.reduce((n,o)=>n+totalOf(o),0);const payments=ledgerPayments.filter(p=>String(p.customer||p.entityName||'')===String(c.name));return {...c,key:String(c.id??c.name),transactions:history,total:paid,visits:tx.length,avg:tx.length?paid/tx.length:0,payments,due:Number(c.dueBalance||c.due||0)}}).sort((a,b)=>b.total-a.total),[customers,sales,rangeOrders,ledgerPayments]);
+  const customerRows = useMemo(()=>customers.map(c=>{const history=filteredOrders.filter(o=>safeName(o.customer)===safeName(c.name));const tx=history.filter(completed);const paid=tx.reduce((n,o)=>n+totalOf(o),0);const payments=ledgerPayments.filter(p=>String(p.customer||p.entityName||'')===String(c.name));return {...c,key:String(c.id??c.name),transactions:history,total:paid,visits:tx.length,avg:tx.length?paid/tx.length:0,payments,due:Number(c.dueBalance||c.due||0)}}).sort((a,b)=>b.total-a.total),[customers,sales,filteredOrders,ledgerPayments]);
   const supplierRows = useMemo(()=>suppliers.map(s=>{const name=safeName(s.name);const allPurchases=stockPurchases.filter(p=>safeName(p.supplier)===name);const purchases=allPurchases.filter(p=>inRange(p.date||p.createdAt));const paid=purchases.reduce((n,p)=>n+Math.max(0,Number(p.paid)||0),0);const spend=purchases.reduce((n,p)=>n+Math.max(0,Number(p.total)||0),0);const payments=ledgerPayments.filter(p=>String(p.supplier||p.entityName||'')===name&&inRange(p.date||p.createdAt));return {...s,key:String(s.id??name),transactions:purchases,total:spend,paid,due:allPurchases.reduce((n,p)=>n+Math.max(0,Number(p.total||0)-Number(p.paid||0)),0)+Math.max(0,Number(s.due)||0),payments}}).sort((a,b)=>b.total-a.total),[suppliers,stockPurchases,ledgerPayments,from,to]);
   const staffRows = useMemo(()=>staff.map(person=>{const id=String(person.id??person.username??person.name);const payments=staffPayments.filter(p=>String(p.staffId??p.employeeId??p.staff_id??p.name??'')===id||String(p.staffName??p.employeeName??'')===String(person.name));const time=attendance.filter(a=>String(a.staffId??a.employeeId??a.staff_id??'')===id||String(a.staffName??a.name??'')===String(person.name)).filter(a=>inRange(a.date||a.checkIn||a.createdAt));const paid=payments.filter(p=>inRange(p.date||p.createdAt)).reduce((n,p)=>n+Math.max(0,Number(p.amount)||0),0);const bonuses=payments.filter(p=>inRange(p.date||p.createdAt)&&/bonus/i.test(String(p.type||p.kind||p.category||''))).reduce((n,p)=>n+Math.max(0,Number(p.amount)||0),0);const advances=payments.filter(p=>inRange(p.date||p.createdAt)&&/advance/i.test(String(p.type||p.kind||p.category||''))).reduce((n,p)=>n+Math.max(0,Number(p.amount)||0),0);return {...person,key:id,payments:payments.filter(p=>inRange(p.date||p.createdAt)),attendance:time,paid,bonuses,advances,due:Math.max(0,Number(person.salary||person.monthlySalary||0)-paid)}}).sort((a,b)=>b.paid-a.paid),[staff,staffPayments,attendance,from,to]);
   const filteredEntities = useMemo(()=>{
     const list=section==='Products'?productRowsWithCatalog:section==='Customers'?customerRows:section==='Suppliers'?supplierRows:staffRows;
     const inSelectedMonth=row=>{if(chartView!=='monthly'||!selectedBucket)return true;const events=section==='Staff'?[...(row.payments||[]),...(row.attendance||[])]:row.transactions||[];return events.some(tx=>dateOf(tx.order?.date||tx.date||tx.createdAt||tx.checkIn).startsWith(selectedBucket));};
-    return list.filter(row=>(entityId==='all'||String(row.key)===entityId)&&(!search||[row.name,row.sku,row.phone,row.username,row.role].join(' ').toLowerCase().includes(search.toLowerCase()))&&inSelectedMonth(row));
+    return list.filter(row=>(entityId==='all'||String(row.key)===entityId)&&(!search||[row.name,row.sku,row.phone,row.username,row.role,(row.transactions||[]).map(tx=>[tx.id,tx.order?.id,tx.status,tx.customer,tx.payment,tx.note,(tx.items||[]).map(i=>i.name+' '+i.sku).join(' ')].join(' ')).join(' ')].join(' ').toLowerCase().includes(search.toLowerCase()))&&inSelectedMonth(row));
   },[section,productRowsWithCatalog,customerRows,supplierRows,staffRows,entityId,search,chartView,selectedBucket]);
   const selected = filteredEntities.find(row=>String(row.key)===String(selectedRecord)) || filteredEntities[0] || null;
   const chartData = useMemo(()=>{
@@ -112,7 +114,7 @@ export default function BusinessAnalytics({ orders=[], products=[], customers=[]
     return filteredEntities.slice(0,12).map(r=>({key:r.key,label:r.name,value:r.paid}));
   },[chartView,section,filteredEntities,entityId,sales,productRowsWithCatalog,customerRows,supplierRows,staffRows,stockPurchases,staffPayments,from,to]);
   const selectedTransactions = selected ? section==='Products' ? selected.transactions||[] : section==='Customers' ? [...(selected.transactions||[]),...(selected.payments||[])] : section==='Suppliers' ? [...(selected.transactions||[]),...(selected.payments||[])] : [...(selected.payments||[]),...(selected.attendance||[]).map(a=>({...a,type:'Attendance'}))] : [];
-  const selectedTxFiltered = selectedTransactions.filter(tx=>{const order=tx.order||tx;const txDate=dateOf(order.date||tx.date||tx.createdAt);return !selectedBucket || String(order.id??tx.id??tx.date??'')===selectedBucket || txDate.startsWith(selectedBucket);});
+  const selectedTxFiltered = selectedTransactions.filter(tx=>{const order=tx.order||tx;const date=timestampOf(order)||timestampOf(tx);const txDate=dateOf(date);return inRange(date)&&(!selectedBucket || String(order.id??tx.id??tx.date??'')===selectedBucket || txDate.startsWith(selectedBucket));});
   const metric = section==='Products' ? [
     ['Units sold',filteredEntities.reduce((n,r)=>n+r.qty,0)],
     ['Sales revenue',money(filteredEntities.reduce((n,r)=>n+r.revenue,0))],
@@ -153,6 +155,7 @@ export default function BusinessAnalytics({ orders=[], products=[], customers=[]
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10,marginTop:16}}>
         <div><label style={smallLabel}>FROM DATE</label><input style={field} type="date" value={from} onChange={e=>{setFrom(e.target.value);setSelectedBucket('')}}/></div>
         <div><label style={smallLabel}>TO DATE</label><input style={field} type="date" value={to} onChange={e=>{setTo(e.target.value);setSelectedBucket('')}}/></div>
+        <div><label style={smallLabel}>TRANSACTION STATUS</label><select style={field} value={statusFilter} onChange={e=>{setStatusFilter(e.target.value);setSelectedBucket('')}}><option value="all">All statuses</option><option value="completed">Completed / sale</option><option value="pending">Pending</option><option value="cancelled">Cancelled</option><option value="waste">Waste</option><option value="refunded">Refunded / returned</option></select></div>
         <div><label style={smallLabel}>SEARCH ALL RECORDS</label><div style={{position:'relative'}}><Search size={15} style={{position:'absolute',left:10,top:12,opacity:.55}}/><input style={{...field,paddingLeft:32}} value={search} onChange={e=>{setSearch(e.target.value);setSelectedRecord('')}} placeholder="Name, SKU, transaction…"/></div></div>
         <div><label style={smallLabel}>SELECT RECORD</label><select style={field} value={entityId} onChange={e=>{setEntityId(e.target.value);setSelectedRecord('');setSelectedBucket('')}}><option value="all">All records</option>{(section==='Products'?productRowsWithCatalog:section==='Customers'?customerRows:section==='Suppliers'?supplierRows:staffRows).map(r=><option key={r.key} value={r.key}>{r.name}</option>)}</select></div>
       </div>
